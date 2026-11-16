@@ -39,3 +39,8 @@ w <- c(4, 4, 4, 4, 4, 4, 4, 4, 1, 4)  # the shock period (2.60) carries less wei
 panel2 <- loss_panel(M, weights = w, labels = 2015:2024)
 panel2$weights
 }
+\seealso{
+\code{\link[=report]{report()}} for the full staged diagnostic pipeline on a built panel; \code{\link[=mcs_size]{mcs_size()}}/
+\code{\link[=identified]{identified()}} and \code{\link[=mcs]{mcs()}}/\code{\link[=model_confidence_set]{model_confidence_set()}} for identification; \code{\link[=compare]{compare()}} for
+comparing two panels from consecutive runs.
+}

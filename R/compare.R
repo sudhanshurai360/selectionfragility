@@ -90,6 +90,8 @@ print.change_report <- function(x, ...) {
 #' @param n_perm Number of permutations for the churn base rate.
 #' @param seed RNG seed.
 #' @return An object of class `change_report`.
+#' @seealso [loss_panel()] to build the `previous`/`current` panels; [mcs()]/[model_confidence_set()]
+#'   for the Model Confidence Set check this uses to assess whether the old champion really left.
 #' @examples
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),

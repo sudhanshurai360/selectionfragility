@@ -162,6 +162,9 @@ NULL
 #' @param labels Optional vector of period labels, one per period. If omitted, inferred from
 #'   list names / data.frame row names (or positional integers if neither is available).
 #' @return An object of class `loss_panel`.
+#' @seealso [report()] for the full staged diagnostic pipeline on a built panel; [mcs_size()]/
+#'   [identified()] and [mcs()]/[model_confidence_set()] for identification; [compare()] for
+#'   comparing two panels from consecutive runs.
 #' @export
 #' @examples
 #' L <- list(

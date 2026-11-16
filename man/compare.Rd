@@ -46,3 +46,7 @@ cr$act
 # left the Model Confidence Set (not just lost the pooled mean by noise) -- that is the one
 # boolean a CI/pipeline promotion step should gate a real action on.
 }
+\seealso{
+\code{\link[=loss_panel]{loss_panel()}} to build the \code{previous}/\code{current} panels; \code{\link[=mcs]{mcs()}}/\code{\link[=model_confidence_set]{model_confidence_set()}}
+for the Model Confidence Set check this uses to assess whether the old champion really left.
+}

@@ -3,8 +3,9 @@ Title: Decision Breakdown Point and Selection-Fragility Diagnostics for Forecast
 Version: 0.1.0
 Authors@R: person("Sudhanshu", "Rai", email = "me@sudhanshurai.org", role = c("aut", "cre"), comment = c(ORCID = "0009-0001-2447-0336"))
 Description: Decision-oriented diagnostics for forecast model selection: the Model
-    Confidence Set (Hansen, Lunde and Nason 2011) for identification of the best
-    model, and the decision breakdown point (k*), the fewest evaluation periods
+    Confidence Set (Hansen, Lunde and Nason 2011) <doi:10.3982/ECTA5771> for
+    identification of the best model, and the decision breakdown point (k*), the
+    fewest evaluation periods
     whose deletion flips the pooled winner. Includes selection-as-election
     diagnostics (score vs plurality vs Condorcet winners, cycles vs ties, margin
     concentration) and a staged pipeline from a validated loss panel through
