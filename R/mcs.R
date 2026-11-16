@@ -31,8 +31,9 @@
 #'
 #' @examples
 #' # A 10-period, 3-model loss panel where models 1 and 2 are tied (identical losses) and
-#' # model 3 is clearly worse -- the MCS should retain the tied pair.
-#' set.seed(1)
+#' # model 3 is clearly worse -- the MCS should retain the tied pair. No set.seed() call is
+#' # needed here: mcs() saves/restores the caller's RNG state internally, so reproducibility
+#' # comes from the seed= argument below, not from the global RNG.
 #' L <- cbind(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
 #'   ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
@@ -187,7 +188,7 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
 #'
 #' @examples
 #' # Same tied panel as mcs(), but as a named list -- the surviving set comes back as names.
-#' set.seed(1)
+#' # No set.seed() call is needed: reproducibility comes from the seed= argument below.
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
 #'   ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),

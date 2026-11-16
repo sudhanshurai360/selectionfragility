@@ -13,6 +13,11 @@ mcb_bound(L, w = NULL, alpha = 0.05)
 
 \item{alpha}{One-sided significance level (< 0.5).}
 }
+\value{
+The upper confidence bound on the champion's true edge over its binding rival, as a
+fraction of the champion's loss level, corrected for the post-hoc rival-selection problem
+(unlike \verb{k*}, which is a descriptive fact about the observed data, not a corrected bound).
+}
 \description{
 MCB-style simultaneous upper confidence bound on the champion's edge
 }

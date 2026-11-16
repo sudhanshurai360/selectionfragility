@@ -120,6 +120,8 @@ minimum_detectable_edge <- function(L, w = NULL, power = 0.80, alpha = 0.05) {
 #' One-sided significance threshold against the binding rival
 #'
 #' @inheritParams minimum_detectable_edge
+#' @return The significance threshold, as a fraction of the champion's loss level. The observed
+#'   edge must clear this value to be called significant at the stated one-sided `alpha`.
 #' @examples
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
@@ -145,6 +147,9 @@ significance_boundary <- function(L, w = NULL, alpha = 0.05) {
 #' MCB-style simultaneous upper confidence bound on the champion's edge
 #'
 #' @inheritParams minimum_detectable_edge
+#' @return The upper confidence bound on the champion's true edge over its binding rival, as a
+#'   fraction of the champion's loss level, corrected for the post-hoc rival-selection problem
+#'   (unlike `k*`, which is a descriptive fact about the observed data, not a corrected bound).
 #' @examples
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),

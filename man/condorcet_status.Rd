@@ -9,6 +9,11 @@ condorcet_status(L)
 \arguments{
 \item{L}{A named list \code{{model: vector}} or a \code{loss_panel}.}
 }
+\value{
+One of \code{"winner"} (a Condorcet winner exists), \code{"cycle"} (no winner, and the
+pairwise-majority relation is intransitive -- e.g. rock/paper/scissors), or \code{"tie"} (no
+winner, but no cycle either -- a direct pairwise tie).
+}
 \description{
 Classify the pairwise-majority tournament ('winner' | 'cycle' | 'tie')
 }

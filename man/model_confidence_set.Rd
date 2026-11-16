@@ -36,7 +36,7 @@ and returns the surviving model NAMES rather than column indices.
 }
 \examples{
 # Same tied panel as mcs(), but as a named list -- the surviving set comes back as names.
-set.seed(1)
+# No set.seed() call is needed: reproducibility comes from the seed= argument below.
 L <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
   ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),

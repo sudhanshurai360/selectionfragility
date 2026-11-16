@@ -42,4 +42,8 @@ L <- list(
 )
 ws <- winner_stability(L, seed = 1)
 ws$stability  # fraction of bootstrap resamples where ar1 is still the pooled winner
+# This number is NOT interpretable in isolation -- a mid-range value like this can be exactly
+# what pure chance produces with only 3 models and 10 periods. Compare it to
+# exchangeable_benchmark(K = 3, T = 10)'s p05: only below that is the win unusually fragile
+# relative to chance, not just "looks uncertain."
 }

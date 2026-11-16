@@ -105,7 +105,12 @@ print.change_report <- function(x, ...) {
 #' current <- loss_panel(L_new_period, labels = c(years, 2025))
 #'
 #' cr <- compare(previous, current)
-#' cr$act   # the single boolean a CI/pipeline promotion step should gate on
+#' cr$act
+#' # FALSE here: cr$champion_changed is FALSE (ar1 is still the pooled champion after the new
+#' # period), so there is nothing actionable -- a promotion/alerting step should do nothing.
+#' # cr$act only becomes TRUE when the champion changed AND the old champion has demonstrably
+#' # left the Model Confidence Set (not just lost the pooled mean by noise) -- that is the one
+#' # boolean a CI/pipeline promotion step should gate a real action on.
 #' @export
 compare <- function(previous, current, alpha = 0.10, n_perm = 400, seed = 0) {
   for (p in list(previous = previous, current = current)) {

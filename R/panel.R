@@ -167,6 +167,13 @@ NULL
 #'   ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
 #' )
 #' panel <- loss_panel(L)
+#'
+#' # The same data also works as a matrix (rows = periods, columns = models) or a data.frame,
+#' # with optional weights (e.g. observation counts per period) and labels:
+#' M <- cbind(ar1 = L$ar1, nbeats = L$nbeats, ets = L$ets)
+#' w <- c(4, 4, 4, 4, 4, 4, 4, 4, 1, 4)  # the shock period (2.60) carries less weight
+#' panel2 <- loss_panel(M, weights = w, labels = 2015:2024)
+#' panel2$weights
 loss_panel <- function(data, weights = NULL, labels = NULL) {
   if (is.matrix(data)) {
     out <- .from_matrix(data)

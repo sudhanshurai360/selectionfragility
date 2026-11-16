@@ -23,7 +23,9 @@ identified(L, alpha = 0.1, reps = 500, block_size = 3, seed = 0, w = NULL)
 \code{TRUE} iff the MCS contains exactly one model.
 }
 \description{
-Is the Model Confidence Set at level alpha a singleton? (independent engine)
+A one-line convenience wrapper over \code{\link[=mcs_size]{mcs_size()}}: \code{isTRUE(mcs_size(...) == 1L)}. Takes the
+same arguments and uses the same \code{MCS::MCSprocedure()}-backed engine; call \code{mcs_size()}
+directly if you want the actual set size rather than just the yes/no identification question.
 }
 \examples{
 # Tied pair -> not identified (MCS size 2, not 1).
@@ -40,4 +42,8 @@ L_clear <- list(
   nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
 )
 identified(L_clear, reps = 200, seed = 1)  # TRUE
+}
+\seealso{
+\code{\link[=mcs_size]{mcs_size()}}, which this wraps; \code{\link[=mcs]{mcs()}}/\code{\link[=model_confidence_set]{model_confidence_set()}} for this package's
+own independent native MCS engine (a different bootstrap, see their own documentation).
 }

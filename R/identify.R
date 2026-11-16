@@ -164,8 +164,14 @@ mcs_size <- function(L, alpha = 0.10, reps = 500, block_size = 3, seed = 0, w = 
 
 #' Is the Model Confidence Set at level alpha a singleton? (independent engine)
 #'
+#' A one-line convenience wrapper over [mcs_size()]: `isTRUE(mcs_size(...) == 1L)`. Takes the
+#' same arguments and uses the same `MCS::MCSprocedure()`-backed engine; call `mcs_size()`
+#' directly if you want the actual set size rather than just the yes/no identification question.
+#'
 #' @inheritParams mcs_size
 #' @return `TRUE` iff the MCS contains exactly one model.
+#' @seealso [mcs_size()], which this wraps; [mcs()]/[model_confidence_set()] for this package's
+#'   own independent native MCS engine (a different bootstrap, see their own documentation).
 #'
 #' @examples
 #' # Tied pair -> not identified (MCS size 2, not 1).

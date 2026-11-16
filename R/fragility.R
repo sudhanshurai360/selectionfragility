@@ -142,7 +142,14 @@ pooled_winner <- function(L, w = NULL) {
 #'   ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
 #' )
 #' per_period_winner(L)  # "nbeats" -- it wins 9 of 10 periods despite losing on pooled mean
-#' per_period_winner(L, return_ties = TRUE)
+#'
+#' # return_ties = TRUE matters when two models tie for the per-period win count -- here ar1
+#' # and ets each win 2 of 4 periods, so the plain winner would arbitrarily pick one:
+#' L2 <- list(
+#'   ar1 = c(1.0, 1.0, 1.2, 1.2),
+#'   ets = c(1.1, 1.1, 1.0, 1.0)
+#' )
+#' per_period_winner(L2, return_ties = TRUE)  # $tied = c("ar1", "ets"); both won 2 of 4 periods
 per_period_winner <- function(L, return_ties = FALSE) {
   up <- .unwrap_panel(L, NULL); L <- up$L
   L <- .as_loss_dict(L)
@@ -191,6 +198,9 @@ condorcet_winner <- function(L) {
 
 #' Classify the pairwise-majority tournament ('winner' | 'cycle' | 'tie')
 #' @param L A named list `{model: vector}` or a `loss_panel`.
+#' @return One of `"winner"` (a Condorcet winner exists), `"cycle"` (no winner, and the
+#'   pairwise-majority relation is intransitive -- e.g. rock/paper/scissors), or `"tie"` (no
+#'   winner, but no cycle either -- a direct pairwise tie).
 #' @export
 #' @examples
 #' # Same rock/paper/scissors panel as condorcet_winner(): no model dominates, so the
@@ -394,6 +404,10 @@ decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
 #' )
 #' ws <- winner_stability(L, seed = 1)
 #' ws$stability  # fraction of bootstrap resamples where ar1 is still the pooled winner
+#' # This number is NOT interpretable in isolation -- a mid-range value like this can be exactly
+#' # what pure chance produces with only 3 models and 10 periods. Compare it to
+#' # exchangeable_benchmark(K = 3, T = 10)'s p05: only below that is the win unusually fragile
+#' # relative to chance, not just "looks uncertain."
 winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0, circular = TRUE) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
   L <- .as_loss_dict(L)

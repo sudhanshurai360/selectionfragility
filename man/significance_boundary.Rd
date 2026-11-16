@@ -13,6 +13,10 @@ significance_boundary(L, w = NULL, alpha = 0.05)
 
 \item{alpha}{One-sided significance level (< 0.5).}
 }
+\value{
+The significance threshold, as a fraction of the champion's loss level. The observed
+edge must clear this value to be called significant at the stated one-sided \code{alpha}.
+}
 \description{
 One-sided significance threshold against the binding rival
 }

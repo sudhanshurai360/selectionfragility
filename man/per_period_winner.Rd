@@ -24,5 +24,12 @@ L <- list(
   ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
 )
 per_period_winner(L)  # "nbeats" -- it wins 9 of 10 periods despite losing on pooled mean
-per_period_winner(L, return_ties = TRUE)
+
+# return_ties = TRUE matters when two models tie for the per-period win count -- here ar1
+# and ets each win 2 of 4 periods, so the plain winner would arbitrarily pick one:
+L2 <- list(
+  ar1 = c(1.0, 1.0, 1.2, 1.2),
+  ets = c(1.1, 1.1, 1.0, 1.0)
+)
+per_period_winner(L2, return_ties = TRUE)  # $tied = c("ar1", "ets"); both won 2 of 4 periods
 }
