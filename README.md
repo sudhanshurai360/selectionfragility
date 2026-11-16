@@ -21,8 +21,7 @@ against it. See that repo for the accompanying paper and the full evaluation car
 > getting-started vignette are complete and independently audited module-by-module against the
 > Python package's own test suite and live output, and pass `R CMD check --as-cran` cleanly
 > (0 errors, 0 warnings, 0 notes). CRAN submission is in progress; until then, install from
-> GitHub (below). Full development history (including the audit trail) lives in the companion
-> private repo `selectionfragility-dev`.
+> GitHub (below).
 
 ## Install
 
