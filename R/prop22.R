@@ -61,8 +61,10 @@ certified_tied_subset <- function(L, w = NULL, z = 1.96) {
     stop(paste0(
       "certified_tied_subset() only supports uniform weights (or w=NULL) -- Proposition 2.2's ",
       "bound is proved for the unweighted i.i.d. population-sd statistic, and applying it to a ",
-      "WEIGHTED breakdown point is unsound. For a weighted panel, use the Model Confidence Set ",
-      "(mcs()) instead, which supports weights correctly."
+      "WEIGHTED breakdown point is unsound. No MCS engine in this package (mcs()/",
+      "model_confidence_set(), or the independent mcs_size()/identified()) supports genuinely ",
+      "non-uniform weighting either. For a weighted panel, use winner_stability() or fragility(), ",
+      "which do accept arbitrary weights."
     ), call. = FALSE)
   }
   champ <- pooled_winner(L, w)

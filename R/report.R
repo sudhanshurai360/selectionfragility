@@ -25,7 +25,6 @@
   }, character(1))
   if (length(unique(finer)) == length(finer)) return(finer)
   counts <- table(finer)
-  seen <- stats::setNames(rep(0L, length(finer)), NULL)
   out <- character(length(finer))
   seen_map <- list()
   for (i in seq_along(finer)) {

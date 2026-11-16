@@ -55,7 +55,10 @@ NULL
           "column '%s' looks like a categorical/metadata column (an exact arithmetic sequence or ",
           "a short repeating pattern across %d periods), not a per-period loss -- a stray metadata ",
           "column must never be silently crowned a model. Drop it, or build the panel from an ",
-          "explicit named list of the real model columns only."
+          "explicit named list of the real model columns only. (If this is placeholder/toy data ",
+          "you typed by hand, e.g. 1:5 or 2:6, that's exactly the kind of exact arithmetic ",
+          "sequence this check exists to catch -- add a little noise, e.g. 1:5 + rnorm(5, 0, 0.01), ",
+          "to try the package with fake numbers.)"
         ), name, T
       ), call. = FALSE)
     }
@@ -337,7 +340,9 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
       stop(sprintf(
         paste0(
           "column '%s' looks like a categorical/metadata column (an exact arithmetic sequence or ",
-          "a short repeating pattern across %d periods), not a per-period loss."
+          "a short repeating pattern across %d periods), not a per-period loss. (If this is ",
+          "placeholder/toy data you typed by hand, e.g. 1:5 or 2:6, add a little noise, e.g. ",
+          "1:5 + rnorm(5, 0, 0.01), to try the package with fake numbers.)"
         ), col, T
       ), call. = FALSE)
     }

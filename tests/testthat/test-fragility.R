@@ -93,3 +93,41 @@ test_that("non-numeric weights raise a clear coercion error, not a misleading le
   # fix must not break legitimate numeric coercion.
   expect_equal(pooled_winner(L, w = c("1", "1", "1")), pooled_winner(L))
 })
+
+test_that("surprise_concentration reports concentrated difficulty on a single hard period", {
+  # One period (index 3, 0-based) is hard for every model at once; every other period is flat.
+  L <- list(
+    ar1    = c(1.0, 1.0, 1.0, 3.0, 1.0),
+    nbeats = c(0.9, 0.9, 0.9, 2.8, 0.9),
+    ets    = c(1.2, 1.2, 1.2, 3.2, 1.2)
+  )
+  sc <- surprise_concentration(L)
+  expect_equal(sc$sci, 1)
+  expect_equal(sc$hardest, 3)
+  expect_true(sc$eff_surprising_periods >= 1 && sc$eff_surprising_periods <= 1 + 1e-9)
+  expect_true(is.finite(sc$d_max_over_median) || sc$d_max_over_median == Inf)
+})
+
+test_that("surprise_concentration reports sci = 0 when difficulty is perfectly flat", {
+  L <- list(
+    ar1    = c(1.0, 1.0, 1.0, 1.0),
+    nbeats = c(0.9, 0.9, 0.9, 0.9),
+    ets    = c(1.2, 1.2, 1.2, 1.2)
+  )
+  sc <- surprise_concentration(L)
+  expect_equal(sc$sci, 0)
+  expect_equal(sc$eff_surprising_periods, 4)
+})
+
+test_that("exchangeable_benchmark returns a sane null distribution with p05 <= median <= p95", {
+  eb <- exchangeable_benchmark(K = 3, T = 15, n_rep = 15, n_boot = 40, seed = 1)
+  expect_true(eb$p05 <= eb$median)
+  expect_true(eb$median <= eb$p95)
+  expect_true(eb$p05 >= 0 && eb$p95 <= 1)
+})
+
+test_that("exchangeable_benchmark is reproducible given the same seed", {
+  eb1 <- exchangeable_benchmark(K = 3, T = 12, n_rep = 10, n_boot = 30, seed = 7)
+  eb2 <- exchangeable_benchmark(K = 3, T = 12, n_rep = 10, n_boot = 30, seed = 7)
+  expect_equal(eb1, eb2)
+})
