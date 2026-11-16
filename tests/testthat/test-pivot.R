@@ -49,10 +49,10 @@ test_that(".fsum is permutation-invariant (the opponent tie-break summation)", {
     m2 <- selectionfragility:::.fsum(c2 * scale)
     expect_identical(m1, m2, info = sprintf("scale=%g", scale))
   }
-  # Sanity: the naive sum this replaces really does break on the same fixture (proves the
-  # fixture is adversarial, not that the fix is a no-op).
-  naive_breaks <- any(vapply(c(1e-6, 1e-3, 1, 1e3, 1e9), function(scale) {
-    !identical(sum(c1 * scale), sum(c2 * scale))
-  }, logical(1)))
-  expect_true(naive_breaks)
+  # NOTE: an earlier version of this test also asserted that base R's naive `sum()` must
+  # disagree across permutations on this fixture, to prove the fixture was adversarial rather
+  # than the fix being a no-op. That assertion depends on an implementation detail of base R's
+  # floating-point summation (observed on R 4.6.2, but not reproduced on R-devel across linux/
+  # macOS/windows in CI) -- it is not a property of this package's code, so it is not safe to
+  # assert portably. The permutation-invariance check above is the actual regression test.
 })
