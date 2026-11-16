@@ -12,7 +12,12 @@ save_loss_panel(panel, path)
 \item{path}{Destination file path.}
 }
 \description{
-Save a loss_panel to a JSON file
+Labels are always written out as strings (JSON has no integer/Date type), so
+\code{load_loss_panel()} reads them back as character even if the original \code{labels} were integer
+years or Dates -- \code{identical(panel, reloaded)} is FALSE on round-trip for that reason, but
+\code{identical(panel$losses, reloaded$losses)} holds, and every function in this package treats
+labels as display-only (\code{as.character()}'d internally wherever they're compared), so this
+does not affect any computed result.
 }
 \examples{
 L <- list(

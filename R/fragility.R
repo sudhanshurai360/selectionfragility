@@ -39,6 +39,15 @@
   if (length(L) < 2) {
     stop(sprintf("need >=2 models to compare a selection decision; got %d.", length(L)), call. = FALSE)
   }
+  if (anyDuplicated(names(L))) {
+    stop(sprintf(
+      paste0(
+        "model names must be unique -- got duplicate name(s): %s. R's L[[name]] lookup silently ",
+        "returns only the FIRST match for a duplicated name, so a second model sharing a name ",
+        "would be dropped from the comparison without any error. Rename before calling."
+      ), paste(unique(names(L)[duplicated(names(L))]), collapse = ", ")
+    ), call. = FALSE)
+  }
   T <- NULL
   for (m in names(L)) {
     v <- L[[m]]

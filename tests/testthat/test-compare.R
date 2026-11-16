@@ -39,3 +39,18 @@ test_that("print.change_report() runs without error and mentions the champion ch
   out <- paste(capture.output(print(r)), collapse = " ")
   expect_match(out, "champion changed a -> b")
 })
+
+test_that("compare() rejects reversed arguments (current missing periods previous had)", {
+  # REGRESSION (found in round-4 user-adoption review): calling compare(current, previous) by
+  # mistake previously ran silently and produced a plausible-looking but wrong report, because
+  # n_new was clamped to 0 instead of flagging that `current` is missing periods `previous` had.
+  pc <- make_prev_curr()
+  err <- tryCatch(compare(pc$curr, pc$prev), error = function(e) conditionMessage(e))
+  expect_match(err, "missing period label|wrong order")
+})
+
+test_that("compare() rejects reversed arguments with positional labels too", {
+  prev <- loss_panel(list(a = c(1, 1, 1, 1, 1), b = c(2, 2, 2, 2, 2)))
+  curr <- loss_panel(list(a = c(1, 1, 1, 1, 1, 1), b = c(2, 2, 2, 2, 2, 2)))
+  expect_error(compare(curr, prev), "fewer periods|wrong order")
+})

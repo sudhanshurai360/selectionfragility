@@ -131,3 +131,13 @@ test_that("exchangeable_benchmark is reproducible given the same seed", {
   eb2 <- exchangeable_benchmark(K = 3, T = 12, n_rep = 10, n_boot = 30, seed = 7)
   expect_equal(eb1, eb2)
 })
+
+test_that("duplicate model names are rejected, not silently aliased to the first match", {
+  # REGRESSION (found in round-4 R-engineering review): R's L[[name]] lookup silently returns
+  # only the FIRST match for a duplicated name, so a second model sharing a name was previously
+  # dropped from the comparison without any error -- a silent-correctness footgun on the raw-list
+  # entry point (loss_panel() already guarded against this; the shared validators didn't).
+  L <- list(a = c(1, 1, 1, 1, 1), a = c(100, 100, 100, 100, 100), b = c(2, 2, 2, 2, 2))
+  expect_error(pooled_winner(L), "unique.*duplicate|duplicate.*unique")
+  expect_error(decision_breakdown(L), "unique.*duplicate|duplicate.*unique")
+})

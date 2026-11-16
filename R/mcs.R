@@ -204,6 +204,12 @@ model_confidence_set <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0,
   if (length(models) < 2) {
     stop(sprintf("model_confidence_set needs >=2 models; got %d.", length(models)), call. = FALSE)
   }
+  if (anyDuplicated(models)) {
+    stop(sprintf(
+      "model names must be unique -- got duplicate name(s): %s.",
+      paste(unique(models[duplicated(models)]), collapse = ", ")
+    ), call. = FALSE)
+  }
   lengths <- unique(sapply(models, function(m) length(as.numeric(L[[m]]))))
   if (length(lengths) != 1) {
     stop(sprintf("all models must share the same number of periods; got lengths %s.",

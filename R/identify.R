@@ -54,6 +54,12 @@
   if (length(L) < 2) {
     stop(sprintf("need at least 2 models to compute a Model Confidence Set; got %d.", length(L)), call. = FALSE)
   }
+  if (anyDuplicated(names(L))) {
+    stop(sprintf(
+      "model names must be unique -- got duplicate name(s): %s.",
+      paste(unique(names(L)[duplicated(names(L))]), collapse = ", ")
+    ), call. = FALSE)
+  }
   models <- sort(names(L))
   T <- NULL
   cols <- list()

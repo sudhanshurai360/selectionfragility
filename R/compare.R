@@ -142,6 +142,16 @@ compare <- function(previous, current, alpha = 0.10, n_perm = 400, seed = 0) {
 
   if (isTRUE(previous$labels_are_positional) || isTRUE(current$labels_are_positional)) {
     T_prev <- length(previous$labels)
+    if (T_curr < T_prev) {
+      stop(sprintf(
+        paste0(
+          "current has fewer periods (%d) than previous (%d) -- compare() expects current to be ",
+          "the LATER run, a superset of previous's periods plus any new ones. This usually means ",
+          "the two arguments were passed in the wrong order (try swapping them: ",
+          "compare(previous = current, current = previous))."
+        ), T_curr, T_prev
+      ), call. = FALSE)
+    }
     n_new <- max(0, T_curr - T_prev)
     if (n_new == 0) {
       champion_without_new_periods <- NULL
@@ -153,7 +163,19 @@ compare <- function(previous, current, alpha = 0.10, n_perm = 400, seed = 0) {
     }
   } else {
     prev_label_set <- as.character(previous$labels)
-    is_new <- !(as.character(curr_labels) %in% prev_label_set)
+    curr_label_set <- as.character(curr_labels)
+    missing_old <- setdiff(prev_label_set, curr_label_set)
+    if (length(missing_old) > 0) {
+      stop(sprintf(
+        paste0(
+          "current is missing period label(s) present in previous (%s) -- compare() expects ",
+          "current to be the LATER run, which should retain every period previous had (plus any ",
+          "new ones). This usually means the two arguments were passed in the wrong order (try ",
+          "swapping them: compare(previous = current, current = previous))."
+        ), paste(missing_old, collapse = ", ")
+      ), call. = FALSE)
+    }
+    is_new <- !(curr_label_set %in% prev_label_set)
     n_new <- sum(is_new)
     if (n_new == 0) {
       champion_without_new_periods <- curr_champ

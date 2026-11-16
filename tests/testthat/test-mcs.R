@@ -34,3 +34,8 @@ test_that("model_confidence_set() wraps mcs() and returns model names", {
   expect_error(model_confidence_set(list(a = 1:3)), "at least 2|>=2")
   expect_error(model_confidence_set(list(a = 1:3, b = 1:4)), "same number of periods")
 })
+
+test_that("model_confidence_set() rejects duplicate model names", {
+  L <- list(a = 1:4, a = 5:8, b = 2:5)
+  expect_error(model_confidence_set(L), "unique.*duplicate|duplicate.*unique")
+})

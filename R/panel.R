@@ -372,6 +372,13 @@ print.loss_panel <- function(x, ...) {
 
 #' Save a loss_panel to a JSON file
 #'
+#' Labels are always written out as strings (JSON has no integer/Date type), so
+#' `load_loss_panel()` reads them back as character even if the original `labels` were integer
+#' years or Dates -- `identical(panel, reloaded)` is FALSE on round-trip for that reason, but
+#' `identical(panel$losses, reloaded$losses)` holds, and every function in this package treats
+#' labels as display-only (`as.character()`'d internally wherever they're compared), so this
+#' does not affect any computed result.
+#'
 #' @param panel A `loss_panel` object.
 #' @param path Destination file path.
 #' @examples
