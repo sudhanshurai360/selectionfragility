@@ -1,0 +1,30 @@
+Package: selectionfragility
+Title: Decision Breakdown Point and Selection-Fragility Diagnostics for Forecast Model Comparison
+Version: 0.1.0
+Authors@R: person("Sudhanshu", "Rai", email = "me@sudhanshurai.org", role = c("aut", "cre"), comment = c(ORCID = "0009-0001-2447-0336"))
+Description: Decision-oriented diagnostics for forecast model selection: the Model
+    Confidence Set (Hansen, Lunde and Nason 2011) for identification of the best
+    model, and the decision breakdown point (k*), the fewest evaluation periods
+    whose deletion flips the pooled winner. Includes selection-as-election
+    diagnostics (score vs plurality vs Condorcet winners, cycles vs ties, margin
+    concentration) and a staged pipeline from a validated loss panel through
+    identification, resolution, significance certification, pivot analysis, and
+    run-over-run comparison.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+URL: https://github.com/sudhanshurai360/selectionfragility
+BugReports: https://github.com/sudhanshurai360/selectionfragility/issues
+Depends: R (>= 4.1)
+Imports:
+    MCS,
+    jsonlite,
+    stats
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+Config/roxygen2/version: 8.1.1

@@ -1,0 +1,246 @@
+---
+title: "Getting started with selectionfragility"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with selectionfragility}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Is your "best" model a real choice, or a fragile artifact of a few periods?
+
+`selectionfragility` gives you two complementary, decision-oriented diagnostics for forecast
+**model selection**:
+
+- **Model Confidence Set (MCS)** — which models are statistically *indistinguishable* from the
+  best (Hansen, Lunde & Nason 2011). A set of size 1 means the best model is **point-identified**;
+  a larger set means selection is **not identified** — the data cannot support crowning one model
+  over its rivals.
+- **Decision breakdown point (`k*`)** — the *fewest evaluation periods whose deletion flips the
+  pooled winner*. A small `k*` means the crowned model rests on a handful of periods (often a
+  single shock) and should not be trusted as a stable choice.
+
+This is the native R port of the Python package
+[`selection-fragility`](https://pypi.org/project/selection-fragility/) (same method, same
+validated numerics, independently verified against it). Function names and signatures are
+near-identical 1:1 across the two (`loss_panel()` ≈ `LossPanel.from_losses()`, `report()`,
+`decision_breakdown()`, `mcs_size()`, `identified()`, `compare()`, `pooled_winner(L, w)`, ...), and
+the VERDICT/LEADERBOARD/RESOLUTION/PIVOT report sections are structured identically in both
+languages. Cite either implementation; they compute the same quantities. If you work in Python
+instead of R, use `pip install selection-fragility`.
+
+**Two things do NOT carry over if you are switching from the Python package, or running both side
+by side during a migration:**
+
+- **`LossPanel.from_forecasts()` has no R equivalent yet.** Python's `from_forecasts(df, y_true=,
+  period=, group=)` ingests a wide forecast-vs-actual frame directly (e.g. from
+  `statsforecast`/`neuralforecast`'s `cross_validation()`) and computes the per-period loss for
+  you. This R port only takes an already-computed loss panel (`loss_panel()`, below) — compute
+  your per-period losses yourself first (e.g. `abs(actual - forecast)` per model per period,
+  pivoted to one column per model) before calling `loss_panel()`.
+- **Bootstrap-based numbers will NOT match the Python package bit-for-bit on "the same" seed.**
+  `winner_stability()`, the Model Confidence Set's bootstrap p-value, and `compare()`'s
+  permutation churn rate all depend on a random-number stream, and R's RNG and NumPy's RNG are
+  different generators — `seed = 0` in both languages draws different resamples. Compare
+  *conclusions* (is the champion identified, is `winner_stability` near the exchangeable
+  benchmark) across the two implementations, never exact decimals of a bootstrap statistic.
+
+## Installation
+
+```r
+# From CRAN, once released:
+install.packages("selectionfragility")
+
+# Right now, from GitHub:
+# remotes::install_github("sudhanshurai360/selectionfragility")
+```
+
+## Quick start
+
+The input is a **loss panel**: a per-period loss (lower is better — e.g. MASE, RMSE, absolute
+error) for each candidate model, over the same set of evaluation periods.
+
+```{r setup}
+library(selectionfragility)
+
+# Ten years of losses for three models: ar1 is steady, nbeats wins nine of the ten years
+# but one shock-year loss (2.60) is large enough that ar1 wins on the pooled mean anyway,
+# ets is uniformly worse.
+L <- list(
+  ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+  nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+  ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+)
+
+panel <- loss_panel(L)
+report(panel)   # auto-prints; print(report(panel)) and cat(report(panel)) both also work
+```
+
+This one-screen report has four sections:
+
+- **VERDICT** — is the best model point-identified (the Model Confidence Set)?
+- **LEADERBOARD** — mean loss, MCS membership, and how many periods each model actually won.
+- **RESOLUTION** — is the observed edge over the closest rival statistically significant at this
+  sample size, versus what sample size *would* resolve it (minimum detectable edge)?
+- **PIVOT** — `k*`, which specific periods are responsible, and how concentrated the champion's
+  win is in a single period.
+
+Read this example's own output carefully, because it is deliberately **not** a clean case, and
+that is the point. `ar1` is the pooled champion, but VERDICT says **not identified** (the Model
+Confidence Set has two members — `ar1` and `nbeats` are statistically tied), and PIVOT reports
+`k*=1`: deleting just the single responsible period would flip the pooled winner to `nbeats`.
+Because the champion is not identified, PIVOT's fragility read is explicitly **UNDETERMINED** — the
+package tells you the `k*=1` fact (that part is always shown, since it is a deterministic property
+of the data), but refuses to also certify it as "non-significant" or interpret `concentration_share`
+on top of an undetermined decision. **This refusal is the central design discipline of the whole
+package (its "R1/R2 rules" — see `?resolution_report`): never print a confident-looking
+interpretive number on a decision the data cannot actually support.** The headline "ar1 wins" is
+real on the full sample, but — as VERDICT, RESOLUTION, and PIVOT's own UNDETERMINED flag all
+agree — it is not a robust, well-separated decision.
+
+### Name your periods
+
+Without `labels=`, periods are reported by **position, 0-indexed** (`k*=1 of 10 periods (8)` for
+the 9th period) — matching the Python package's own default positional labels, not R's usual
+1-based counting. This is deliberate for cross-language consistency, but it means the bare number
+in an unlabeled report is one less than the period's 1-based position if you count by hand. Pass
+real labels and avoid the ambiguity entirely:
+
+```{r}
+years <- 2015:2024
+panel2 <- loss_panel(L, labels = years)
+report(panel2)
+```
+
+PIVOT now names the responsible year directly (`2023`) instead of a bare index.
+
+### Watch out: loss direction is not checked
+
+This package assumes **lower is better** throughout — it is built on loss panels (MASE, RMSE,
+absolute error, and similar). If you feed it *accuracy*-style data instead (anything where
+*higher* is better, e.g. classification accuracy or R²), nothing raises an error: you get a fully
+confident, silently **inverted** answer, because the worst model by your own metric gets crowned
+the winner. There is no way for the package to know your metric's direction, so it is entirely on
+you to pass loss, not accuracy.
+
+## Core functions, one stage at a time
+
+`report()` is the recommended entry point, but every statistic behind it is also a public
+function, in case you want just one number or to check a published result against the code
+directly.
+
+**Calling convention:** every function below accepts EITHER a plain named list `L` (as built
+above) OR a `loss_panel` object — except that **only a `loss_panel` carries labels and weights**.
+If you built `panel <- loss_panel(L, labels = years)`, call these on `panel`, not on the bare `L`
+— passing `labels = years` directly to a Stage 1+ function (e.g. `decision_breakdown(L, labels =
+years)`) is not supported and raises an "unused argument" error. `report()` is the one function
+that *requires* a `loss_panel` (it reads `panel$weights`/`panel$labels` directly) and is the only
+one that resolves `k*`'s responsible periods into real labels for display — see the note on
+`decision_breakdown()`'s `removed` field below.
+
+```{r}
+# Stage 0 — the validated panel itself (carries labels and weights; build it once, reuse it)
+panel <- loss_panel(L, labels = years)
+
+# Stage 1 — is the best model identified?
+mcs_size(panel)        # size of the Model Confidence Set; 1 = point-identified
+identified(panel)       # TRUE iff mcs_size(panel) == 1
+
+# Stage 2 — is the observed edge resolved at this sample size?
+resolution_report(panel)
+
+# Stage 3 — the decision breakdown point itself
+decision_breakdown(panel)
+```
+
+`decision_breakdown()$removed` above is a bare, 1-based **position** into the loss vectors, not a
+resolved label — even though `panel` was built with `labels = years`. Only `report()` resolves
+`k*`'s responsible periods into actual labels for display; if you need them from
+`decision_breakdown()` directly, index into the panel yourself: `panel$labels[decision_breakdown(panel)$removed]`.
+
+```{r}
+# Stage 4 — how concentrated is the champion's win in a single period?
+concentration_share(panel)
+```
+
+`pooled_winner()`, `per_period_winner()`, `condorcet_winner()`/`condorcet_status()`, and
+`fragility()` sit underneath these and are documented on their own help pages (`?fragility`) —
+reach for them when you want every diagnostic field in one call, or need the lower-level numbers a
+paper's results table was computed from. `surprise_concentration()` answers a related but distinct
+question — not "is the champion's win fragile" but "is the panel's own task difficulty
+concentrated in one period" — see `?surprise_concentration`.
+
+## Weights
+
+Pass `w=` to weight periods unequally (for example, by observation count):
+
+```{r}
+w <- c(4, 4, 4, 4, 4, 4, 4, 4, 1, 4)  # the shock year carries less weight
+pooled_winner(L, w)
+```
+
+Most functions accept `w=` directly; a `loss_panel` built with weights carries them automatically,
+so `report(panel)` picks them up without repeating them.
+
+## Gating a CI/pipeline promotion step
+
+If you re-run a model comparison on a schedule (e.g. a weekly retrain), `compare()` answers "the
+champion changed this week — is that signal or noise?":
+
+```{r}
+previous <- loss_panel(L, labels = years)
+
+# A new evaluation period (2025) arrives, and in it nbeats has a big edge -- add one new value
+# to EVERY model's vector, not just one, since all models in a panel must share the same periods.
+L_new_period <- list(ar1 = c(L$ar1, 1.00), nbeats = c(L$nbeats, 0.50), ets = c(L$ets, 1.20))
+current <- loss_panel(L_new_period, labels = c(years, 2025))
+
+compare(previous, current)
+```
+
+`compare(previous, current)` reports whether the pooled champion changed, whether that change is
+attributable to the newly-arrived period(s) specifically, whether the old champion has genuinely
+left the Model Confidence Set, and a permutation-based estimate of how often a champion "changes"
+out of pure noise alone at this panel's size. Its `$act` field is the single boolean a promotion
+step should gate on.
+
+## Honest reporting — what this package will not do for you
+
+- **`mcs_size(L) > 1` can reflect low statistical power, not just a genuine tie** — especially at
+  small `T`. Read it as *"cannot be distinguished at this sample size,"* never as *"these models
+  are equivalent."*
+- **`winner_stability()` is not interpretable on its own.** Compare it to
+  `exchangeable_benchmark(K, T)` — the distribution this same statistic takes when no model is
+  truly better. Values in the 0.4–0.6 range are often exactly what chance alone produces:
+
+  ```{r}
+  ws <- winner_stability(L)
+  ws$stability
+
+  bench <- exchangeable_benchmark(K = 3, T = 10, n_rep = 50, n_boot = 200)  # small n_rep/n_boot for a fast vignette build
+  bench   # median, p05, p95 of winner_stability under "no model is truly better"
+  ```
+
+  A `winner_stability` value is only unusually fragile *relative to chance* if it falls below
+  `bench$p05` for your own panel's actual `K` (model count) and `T` (period count).
+- **`k*` is a descriptive fact about the observed data, not a hypothesis test** — no
+  multiple-comparisons correction applies to it. `mcb_bound()` *is* a corrected confidence bound
+  for the same post-hoc rival-selection problem:
+
+  ```{r}
+  mcb_bound(L)   # "the champion's true edge over its binding rival may be as large as X%, at 95% confidence"
+  ```
+- This package was built for a trusted analyst diagnosing their own model comparison, not for an
+  adversarial setting where the models being evaluated were chosen knowing the methodology. See
+  `?mcs` (its "Adversarial use / competition settings" section) for the gaming vectors to guard
+  against before using an MCS "tie" claim in a competition or leaderboard context.
+
+See the companion paper for the full power/false-discovery tables and derivations behind these
+statistics.

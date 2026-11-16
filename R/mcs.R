@@ -1,0 +1,189 @@
+# mcs.R — the Model Confidence Set (Hansen, Lunde & Nason 2011), the identification companion to k*.
+#
+# Faithful port of mcs.py. The elimination/bootstrap arithmetic (studentized e_max rule, degenerate-se
+# floors, Monte-Carlo p-value) is ported exactly; the bootstrap draws themselves use R's own RNG
+# (via set.seed()), so results are NOT bit-for-bit identical to the Python package on the "same"
+# seed -- only statistically equivalent. Deterministic edge cases (an exact tie, a model that
+# dominates every period) are verified to agree exactly with the Python oracle since those paths
+# do not depend on the bootstrap draw at all.
+#
+# `elimination = NULL` (the default) reads `getOption("selectionfragility.elimination", "studentized")`
+# at call time -- the R analogue of Python's module-level `ELIMINATION` flag read at call time via
+# `elimination=None`. Override globally with `options(selectionfragility.elimination = "raw")`.
+
+.MIN_T_FOR_ZERO_SE <- 8
+.SE_REL_FLOOR <- 1e-12
+.MAX_BOOTSTRAP_B <- 100000
+
+#' @keywords internal
+.std0 <- function(x) sqrt(mean((x - mean(x))^2))  # population std (ddof=0), matching numpy's default
+
+#' Model Confidence Set on a T x K loss matrix
+#'
+#' @param L A numeric matrix (T periods x K models; lower loss = better).
+#' @param alpha Significance level (strictly between 0 and 1).
+#' @param B Number of bootstrap resamples.
+#' @param block Block length for the circular block bootstrap.
+#' @param seed RNG seed.
+#' @param elimination `"studentized"` (Hansen-Lunde-Nason's e_max, default) or `"raw"` (legacy
+#'   mean-based rule). `NULL` reads `getOption("selectionfragility.elimination", "studentized")`.
+#' @return A list `list(surviving = surviving_column_indices, p = p_at_stop)` (1-based indices).
+#'
+#' @section Adversarial use / competition settings:
+#' This diagnostic was built for a trusted analyst diagnosing their own model comparison, not for
+#' a setting where the models being evaluated were chosen knowing the methodology and have an
+#' incentive to beat it. Before using an MCS "co-champion" / "statistically tied" claim in a
+#' competitive setting (a forecasting leaderboard, a benchmark with prizes), two gaming vectors are
+#' real and confirmed, not hypothetical:
+#' \itemize{
+#'   \item \strong{Noise can hide genuine inferiority inside a tie claim.} A model with a real,
+#'     substantial mean-loss disadvantage can survive MCS elimination at a high rate if its
+#'     per-period losses carry high idiosyncratic variance, since noise suppresses the studentized
+#'     elimination statistic below threshold. This is correct arithmetic, not a bug, but it is a
+#'     deliberately-engineerable exploit: do not use MCS survival alone as a "co-champion"
+#'     criterion in an adversarial setting -- pair it with an independent accuracy floor.
+#'   \item \strong{Whoever controls the weight vector controls the result.} If `w` is
+#'     participant-supplied rather than fixed by the competition operator in advance, it can flip
+#'     both the pooled winner and k* entirely. Weights must always be operator-controlled and
+#'     fixed before results are known in any setting with an adversarial party.
+#' }
+#' Strategic period-withholding (submitting only "easy" periods to inflate an apparent record) is
+#' already closed at the input layer: `loss_panel()` requires equal period counts across all
+#' models and refuses otherwise.
+#' @export
+mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NULL) {
+  if (is.null(elimination)) elimination <- getOption("selectionfragility.elimination", "studentized")
+  if (!elimination %in% c("studentized", "raw")) {
+    stop(sprintf("elimination must be 'studentized' or 'raw'; got '%s'.", elimination), call. = FALSE)
+  }
+  L <- as.matrix(L)
+  storage.mode(L) <- "double"
+  if (!(alpha > 0.0 && alpha < 1.0)) {
+    stop(sprintf(
+      paste0(
+        "mcs(): alpha must be strictly between 0 and 1 (it is a significance level, e.g. 0.05 or ",
+        "0.10, not a percentage); got %s."
+      ), alpha
+    ), call. = FALSE)
+  }
+  if (length(dim(L)) != 2 || ncol(L) < 2) {
+    stop(sprintf("mcs() needs a 2-D T x K loss matrix with K>=2 models; got dim %s.",
+                  paste(dim(L), collapse = "x")), call. = FALSE)
+  }
+  if (!all(is.finite(L))) {
+    stop(paste0(
+      "mcs(): loss matrix has non-finite values (NA/NaN/Inf); drop or impute those periods first -- ",
+      "a NA silently poisons a model's mean and can crown a spurious point-identified winner."
+    ), call. = FALSE)
+  }
+  if (any(abs(L) > .MAX_ABS_LOSS)) {
+    bad <- max(abs(L))
+    stop(sprintf(
+      paste0(
+        "mcs(): loss magnitude %.3g exceeds %.0e; this is almost certainly a units/scale mistake, ",
+        "not a real per-period loss. Rescale first."
+      ), bad, .MAX_ABS_LOSS
+    ), call. = FALSE)
+  }
+  if (B > .MAX_BOOTSTRAP_B) {
+    stop(sprintf(
+      paste0(
+        "mcs(): B=%d exceeds the %d bootstrap-resample ceiling. Cost scales with T*B; if you have a ",
+        "genuine reason to exceed it, call the bootstrap loop directly rather than through this guard."
+      ), B, .MAX_BOOTSTRAP_B
+    ), call. = FALSE)
+  }
+  if (B < 1) stop(sprintf("mcs(): B must be a positive integer; got %d.", B), call. = FALSE)
+
+  T <- nrow(L); K <- ncol(L)
+  if (T * B > 20000000) {
+    warning(sprintf(
+      paste0(
+        "mcs(): T=%d periods x B=%d bootstrap resamples = %s -- boot-index construction cost scales ",
+        "with T*B. This is not an error -- large T is supported -- but expect it to be slow and ",
+        "memory-heavy; consider a smaller B if you don't need fine Monte-Carlo p-value resolution."
+      ), T, B, format(T * B, big.mark = ",")
+    ), call. = FALSE)
+  }
+  if (T <= block) {
+    block_eff <- max(1, T %/% 2)
+    warning(sprintf("mcs(): T=%d <= block=%d; shrinking block to %d so the bootstrap retains power.", T, block, block_eff), call. = FALSE)
+    block <- block_eff
+  }
+
+  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
+  set.seed(seed)
+  on.exit({
+    if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)
+  }, add = TRUE)
+  boot <- lapply(seq_len(B), function(i) .block_resample_idx(T, block, circular = TRUE))
+
+  surv <- seq_len(K)
+  p_stop <- 1.0
+  while (length(surv) > 1) {
+    sub <- L[, surv, drop = FALSE]
+    k <- length(surv)
+    dbar <- colMeans(sub)
+    bmeans <- do.call(rbind, lapply(boot, function(idx) colMeans(sub[idx, , drop = FALSE])))  # B x k
+
+    TR <- 0.0
+    TRb <- rep(0.0, B)
+    if (k >= 2) {
+      for (a in 1:(k - 1)) for (b in (a + 1):k) {
+        diff_ <- bmeans[, a] - bmeans[, b]
+        se <- .std0(diff_)
+        obs_diff <- dbar[a] - dbar[b]
+        scale <- max(abs(dbar[a]), abs(dbar[b]), abs(obs_diff))
+        if (se <= .SE_REL_FLOOR * scale) {
+          if (abs(obs_diff) > 0 && T >= .MIN_T_FOR_ZERO_SE) TR <- Inf
+          next
+        }
+        t_obs <- abs(obs_diff) / se
+        TR <- max(TR, t_obs)
+        TRb <- pmax(TRb, abs(diff_ - obs_diff) / se)
+      }
+    }
+    p <- if (is.finite(TR)) (sum(TRb >= TR) + 1) / (B + 1) else 0.0
+    if (p >= alpha) { p_stop <- p; break }
+
+    if (elimination == "studentized") {
+      d_dot <- dbar - mean(dbar)
+      b_dot <- bmeans - matrix(rowMeans(bmeans), nrow = B, ncol = k)
+      se_dot <- apply(b_dot, 2, .std0)
+      scale <- max(max(abs(dbar)), 1e-300)
+      safe <- se_dot > .SE_REL_FLOOR * scale
+      t_dot <- ifelse(safe, d_dot / ifelse(safe, se_dot, 1.0), ifelse(d_dot > 0, Inf, -Inf))
+      drop_pos <- which.max(t_dot)
+    } else {
+      drop_pos <- which.max(dbar)
+    }
+    surv <- surv[-drop_pos]
+    p_stop <- p
+  }
+  list(surviving = surv, p = p_stop)
+}
+
+#' Model Confidence Set on a named list of per-period losses
+#'
+#' Convenience wrapper over `mcs()` that takes a named list `{model: vector}` (or a `loss_panel`)
+#' and returns the surviving model NAMES rather than column indices.
+#'
+#' @param L A named list `{model: vector}` or a `loss_panel`.
+#' @inheritParams mcs
+#' @return A list `list(surviving = surviving_model_names, p = p_at_stop)`.
+#' @export
+model_confidence_set <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NULL) {
+  up <- .unwrap_panel(L, NULL); L <- up$L
+  models <- names(L)
+  if (length(models) < 2) {
+    stop(sprintf("model_confidence_set needs >=2 models; got %d.", length(models)), call. = FALSE)
+  }
+  lengths <- unique(sapply(models, function(m) length(as.numeric(L[[m]]))))
+  if (length(lengths) != 1) {
+    stop(sprintf("all models must share the same number of periods; got lengths %s.",
+                  paste(sort(lengths), collapse = ", ")), call. = FALSE)
+  }
+  M <- do.call(cbind, lapply(models, function(m) as.numeric(L[[m]])))
+  res <- mcs(M, alpha = alpha, B = B, block = block, seed = seed, elimination = elimination)
+  list(surviving = models[res$surviving], p = res$p)
+}

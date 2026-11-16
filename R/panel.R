@@ -1,0 +1,396 @@
+#' @importFrom stats setNames
+NULL
+
+# loss_panel — the single validated entry point for every public function in this package.
+#
+# Every other function in this package consumes a loss_panel (or its raw $losses/$weights,
+# which are the SAME validated data). The bare constructor is not exported -- go through
+# loss_panel() so a caller cannot skip validation by accident. This mirrors the Python
+# package's `LossPanel.from_losses()` contract (see panel.py); `from_forecasts()` (long
+# forecast-vs-actual frames with metric computation and auto-inference) is NOT ported in
+# this release -- build a wide loss matrix/data.frame/list yourself and pass it to
+# `loss_panel()`.
+
+.MAX_ABS_LOSS <- 1e100
+.LARGE_K_WARN_THRESHOLD <- 100
+
+#' @keywords internal
+.looks_like_metadata_column <- function(arr, T) {
+  arr <- as.numeric(arr)
+  if (T < 4) return(FALSE)
+  # NA/NaN/Inf short-circuit: Python's NaN == x is False (not NaN), so np.all(...) resolves
+  # cleanly to FALSE and the heuristic falls through harmlessly; R's NA == x is NA, which
+  # breaks all()/if() with a raw "missing value where TRUE/FALSE needed" error instead of
+  # letting the real, better-worded NaN/Inf check downstream report it. Match the Python
+  # behavior (never crash here) by deferring entirely to that downstream check.
+  if (anyNA(arr) || any(!is.finite(arr))) return(FALSE)
+  if (all(arr == arr[1])) return(FALSE)
+  diffs <- diff(arr)
+  if (length(diffs) > 0 && all(diffs == diffs[1]) && diffs[1] != 0) return(TRUE)
+  max_p <- min(10, T %/% 2)
+  if (max_p >= 2) {
+    for (p in 2:max_p) {
+      reps_needed <- ceiling(T / p)
+      tiled <- rep(arr[1:p], reps_needed)[1:T]
+      # EXACT equality, matching Python's np.array_equal -- NOT all.equal(). all.equal() allows a
+      # default relative tolerance (~1.5e-8), so a genuine, non-periodic loss column that merely
+      # comes CLOSE to tiling a short pattern (floating-point noise on an otherwise-periodic real
+      # signal, or plain coincidence) was being wrongly flagged as metadata and rejected -- a real
+      # loss column the Python oracle accepts outright, since array_equal requires bit-for-bit
+      # equality. Verified directly against the Python oracle: a period-3 pattern with one value
+      # perturbed by 1e-9 is accepted (False) in Python but was wrongly rejected (TRUE) here.
+      if (T %/% p >= 2 && length(arr) == length(tiled) && all(arr == tiled)) return(TRUE)
+    }
+  }
+  FALSE
+}
+
+#' @keywords internal
+.check_metadata_columns <- function(models, T) {
+  if (T <= 0) return(invisible(NULL))
+  for (name in names(models)) {
+    if (.looks_like_metadata_column(models[[name]], T)) {
+      stop(sprintf(
+        paste0(
+          "column '%s' looks like a categorical/metadata column (an exact arithmetic sequence or ",
+          "a short repeating pattern across %d periods), not a per-period loss -- a stray metadata ",
+          "column must never be silently crowned a model. Drop it, or build the panel from an ",
+          "explicit named list of the real model columns only."
+        ), name, T
+      ), call. = FALSE)
+    }
+  }
+  invisible(NULL)
+}
+
+#' @keywords internal
+.check_no_name_collision <- function(raw_names) {
+  dup <- unique(raw_names[duplicated(raw_names)])
+  if (length(dup) > 0) {
+    stop(sprintf(
+      "duplicate model/column name(s) %s -- rename before building a loss_panel.",
+      paste(sprintf("'%s'", dup), collapse = ", ")
+    ), call. = FALSE)
+  }
+  invisible(NULL)
+}
+
+#' @keywords internal
+.validate_weights <- function(w, T) {
+  if (is.character(w)) {
+    stop(sprintf(
+      "weights must be a numeric vector of %d values (one per period), not a string; got %s.",
+      T, paste(w, collapse = ", ")
+    ), call. = FALSE)
+  }
+  if (is.factor(w)) {
+    # A factor is not numeric (is.numeric(factor) is FALSE) and not character (is.character(factor)
+    # is also FALSE), so it slips past the string guard above and straight into as.numeric(), which
+    # on a factor returns the INTEGER LEVEL CODES, not the labels -- e.g. factor(c("10","20","30"))
+    # silently becomes c(1, 2, 3). This is the same class of silent-wrong-answer bug as `NA == x`:
+    # a value that looks numeric to a careless call but silently is not. Reject explicitly, by the
+    # same policy as the string guard above, rather than let it corrupt weights with no warning.
+    stop(sprintf(
+      "weights must be a numeric vector of %d values (one per period), not a factor; got levels %s. ",
+      T, paste(levels(w), collapse = ", ")
+    ), call. = FALSE)
+  }
+  w <- suppressWarnings(as.numeric(w))
+  if (length(w) != T) {
+    stop(sprintf("weights must have length %d (one per period); got length %d.", T, length(w)), call. = FALSE)
+  }
+  if (!all(is.finite(w))) {
+    stop("weights must not contain NA/NaN/Inf values.", call. = FALSE)
+  }
+  if (any(w < 0)) {
+    stop("weights must not contain negative values -- weights are observation counts, not signed contributions.", call. = FALSE)
+  }
+  if (all(w == 0)) {
+    stop("weights are all zero; at least one period must carry positive weight.", call. = FALSE)
+  }
+  w
+}
+
+#' @keywords internal
+.check_K_vs_T <- function(K, T) {
+  if (K > T) {
+    warning(sprintf(
+      paste0(
+        "K=%d models but T=%d periods (K > T) -- this looks like it might be a transposed frame ",
+        "(models and periods swapped); did you mean to pass the data transposed?"
+      ), K, T
+    ), call. = FALSE)
+  } else if (K > .LARGE_K_WARN_THRESHOLD) {
+    warning(sprintf(
+      paste0(
+        "K=%d models -- report()/identified()/mcs_size() cost grows steeply with model count. ",
+        "This is not an error -- large model sweeps are supported -- but expect it to be slow; ",
+        "if you don't need per-model MCS membership, consider narrowing to a candidate shortlist first."
+      ), K
+    ), call. = FALSE)
+  }
+  invisible(NULL)
+}
+
+#' @keywords internal
+.new_loss_panel <- function(losses, weights, labels, labels_are_positional) {
+  structure(
+    list(
+      losses = losses,
+      weights = weights,
+      labels = labels,
+      labels_are_positional = labels_are_positional,
+      models = names(losses)
+    ),
+    class = "loss_panel"
+  )
+}
+
+#' Build a validated loss panel
+#'
+#' The single validated entry point for every other function in this package. Accepts a named
+#' list of per-period loss vectors, a periods-by-models numeric matrix, or a wide data.frame
+#' (one column per model, row names or an explicit `labels=` giving the period labels).
+#'
+#' @param data A named list of numeric vectors (one per model, equal length), a numeric matrix
+#'   (rows = periods, columns = models), or a data.frame (wide, one column per model).
+#' @param weights Optional numeric vector of per-period weights (e.g. observation counts).
+#'   Defaults to equal weights.
+#' @param labels Optional vector of period labels, one per period. If omitted, inferred from
+#'   list names / data.frame row names (or positional integers if neither is available).
+#' @return An object of class `loss_panel`.
+#' @export
+#' @examples
+#' L <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+#'   ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' panel <- loss_panel(L)
+loss_panel <- function(data, weights = NULL, labels = NULL) {
+  if (is.matrix(data)) {
+    out <- .from_matrix(data)
+  } else if (is.data.frame(data)) {
+    out <- .from_data_frame(data)
+  } else if (is.list(data)) {
+    out <- .from_list(data)
+  } else {
+    stop(sprintf(
+      paste0(
+        "loss_panel() does not know how to read a %s; pass a named list of per-model vectors, ",
+        "a matrix (periods x models), or a wide data.frame."
+      ), class(data)[1]
+    ), call. = FALSE)
+  }
+  loss_dict <- out$losses
+  inferred_labels <- out$labels
+  labels_are_positional <- out$labels_are_positional
+
+  T <- length(loss_dict[[1]])
+  if (T == 0) stop("panel has zero periods.", call. = FALSE)
+  if (T == 1) stop("panel has only 1 period; need at least 2 periods to compare models.", call. = FALSE)
+  if (length(loss_dict) < 2) {
+    stop(sprintf("need at least 2 models to compare a selection decision; got %d.", length(loss_dict)), call. = FALSE)
+  }
+
+  for (m in names(loss_dict)) {
+    v <- loss_dict[[m]]
+    if (length(v) != T) {
+      stop(sprintf(
+        "all models must share the same number of periods; '%s' has %d, expected %d (from the first model).",
+        m, length(v), T
+      ), call. = FALSE)
+    }
+    if (!all(is.finite(v))) {
+      stop(sprintf(
+        paste0(
+          "model '%s' has NA/NaN/Inf loss values; drop or impute those periods before building a ",
+          "loss_panel -- a single NA silently poisons the pooled mean and can crown a spurious winner."
+        ), m
+      ), call. = FALSE)
+    }
+    if (any(abs(v) > .MAX_ABS_LOSS)) {
+      stop(sprintf(
+        paste0(
+          "model '%s' has a loss magnitude above %.0e, far beyond any real per-period loss metric -- ",
+          "arithmetic at this scale silently overflows double precision downstream and produces ",
+          "meaningless results rather than a clear error. Check for a units/scaling bug upstream."
+        ), m, .MAX_ABS_LOSS
+      ), call. = FALSE)
+    }
+  }
+
+  .check_K_vs_T(length(loss_dict), T)
+
+  if (!is.null(labels)) {
+    final_labels <- labels
+    if (length(final_labels) != T) {
+      stop(sprintf(
+        "labels has length %d, expected %d (one per period, matching the loss vectors).",
+        length(final_labels), T
+      ), call. = FALSE)
+    }
+    str_labels <- as.character(final_labels)
+    if (length(unique(str_labels)) != T) {
+      dupes <- sort(unique(str_labels[duplicated(str_labels)]))
+      stop(sprintf(
+        paste0(
+          "labels contains duplicate value(s) %s -- labels must uniquely identify each period, ",
+          "since compare() relies on label identity (as text) to tell a new period from an old one."
+        ), paste(utils::head(dupes, 5), collapse = ", ")
+      ), call. = FALSE)
+    }
+    labels_are_positional <- FALSE
+  } else {
+    final_labels <- inferred_labels
+  }
+
+  w <- if (!is.null(weights)) .validate_weights(weights, T) else rep(1, T)
+  .new_loss_panel(loss_dict, w, final_labels, labels_are_positional)
+}
+
+#' @keywords internal
+.from_list <- function(data) {
+  if (length(data) == 0) stop("empty list passed to loss_panel(); need at least 2 models.", call. = FALSE)
+  nm <- names(data)
+  if (is.null(nm) || any(nm == "")) {
+    stop("loss_panel() needs a NAMED list (one name per model); got an unnamed or partially-named list.", call. = FALSE)
+  }
+  .check_no_name_collision(nm)
+  for (k in nm) {
+    v <- data[[k]]
+    if (is.logical(v)) {
+      stop(sprintf(
+        "model '%s' is logical, not a per-period numeric loss -- looks like a flag/indicator column, not a model.",
+        k
+      ), call. = FALSE)
+    }
+    if (!is.numeric(v) || length(v) == 0) {
+      stop(sprintf("model '%s' must be a non-empty numeric vector of per-period losses.", k), call. = FALSE)
+    }
+  }
+  models <- stats::setNames(lapply(data, as.numeric), nm)
+  T <- length(models[[1]])
+  .check_metadata_columns(models, T)
+  list(losses = models, labels = seq_len(T) - 1L, labels_are_positional = TRUE)
+}
+
+#' @keywords internal
+.from_matrix <- function(arr) {
+  if (length(dim(arr)) != 2) stop("matrix input to loss_panel() must be 2-D (periods x models).", call. = FALSE)
+  T <- nrow(arr); K <- ncol(arr)
+  if (K == 0) {
+    stop(sprintf("matrix has zero model columns (dim %d x %d); need at least 2 models.", T, K), call. = FALSE)
+  }
+  cn <- colnames(arr)
+  nm <- if (!is.null(cn)) cn else paste0("m", seq_len(K) - 1L)
+  models <- stats::setNames(lapply(seq_len(K), function(i) as.numeric(arr[, i])), nm)
+  .check_metadata_columns(models, T)
+  list(losses = models, labels = seq_len(T) - 1L, labels_are_positional = TRUE)
+}
+
+#' @keywords internal
+.from_data_frame <- function(df) {
+  if (anyDuplicated(colnames(df))) {
+    stop("duplicate column names in the data.frame -- rename before building a loss_panel.", call. = FALSE)
+  }
+  rn <- rownames(df)
+  has_real_rownames <- !is.null(rn) && !identical(rn, as.character(seq_len(nrow(df))))
+  if (has_real_rownames && anyDuplicated(rn)) {
+    stop(paste0(
+      "duplicate row names -- cannot silently keep both rows as independent periods; ",
+      "deduplicate or aggregate first."
+    ), call. = FALSE)
+  }
+  .check_no_name_collision(colnames(df))
+  T <- nrow(df)
+  models <- list()
+  for (col in colnames(df)) {
+    s <- df[[col]]
+    if (is.logical(s)) {
+      stop(sprintf(
+        "column '%s' is logical, not a per-period numeric loss -- looks like a flag/indicator column, not a model.",
+        col
+      ), call. = FALSE)
+    }
+    if (!is.numeric(s)) {
+      stop(sprintf(
+        "column '%s' is not numeric (class %s); a loss_panel model column must be a per-period numeric loss.",
+        col, class(s)[1]
+      ), call. = FALSE)
+    }
+    arr <- as.numeric(s)
+    if (any(is.na(arr))) {
+      stop(sprintf(
+        "model '%s' has %d NA value(s) out of %d periods; drop or impute those periods before building a loss_panel.",
+        col, sum(is.na(arr)), T
+      ), call. = FALSE)
+    }
+    if (T > 0 && .looks_like_metadata_column(arr, T)) {
+      stop(sprintf(
+        paste0(
+          "column '%s' looks like a categorical/metadata column (an exact arithmetic sequence or ",
+          "a short repeating pattern across %d periods), not a per-period loss."
+        ), col, T
+      ), call. = FALSE)
+    }
+    models[[col]] <- arr
+  }
+  if (length(models) == 0) stop("zero model columns found in the data.frame after validation.", call. = FALSE)
+  labels <- if (has_real_rownames) rn else (seq_len(T) - 1L)
+  list(losses = models, labels = labels, labels_are_positional = !has_real_rownames)
+}
+
+#' @export
+print.loss_panel <- function(x, ...) {
+  rep_fn <- tryCatch(get("report", mode = "function"), error = function(e) NULL)
+  if (!is.null(rep_fn)) {
+    out <- tryCatch(rep_fn(x), error = function(e) NULL)
+    if (!is.null(out)) {
+      cat(out, "\n")
+      return(invisible(x))
+    }
+  }
+  cat(sprintf("<loss_panel> models=%s, T=%d\n", paste(x$models, collapse = ", "), length(x$labels)))
+  invisible(x)
+}
+
+#' Save a loss_panel to a JSON file
+#'
+#' @param panel A `loss_panel` object.
+#' @param path Destination file path.
+#' @export
+save_loss_panel <- function(panel, path) {
+  stopifnot(inherits(panel, "loss_panel"))
+  payload <- list(
+    losses = lapply(panel$losses, as.numeric),
+    weights = as.numeric(panel$weights),
+    labels = as.character(panel$labels),
+    labels_are_positional = isTRUE(panel$labels_are_positional)
+  )
+  dest_dir <- dirname(normalizePath(path, mustWork = FALSE))
+  tmp <- tempfile(pattern = ".losspanel-", tmpdir = dest_dir, fileext = ".tmp")
+  on.exit(if (file.exists(tmp)) unlink(tmp), add = TRUE)
+  jsonlite::write_json(payload, tmp, auto_unbox = TRUE, digits = NA)
+  file.rename(tmp, path)
+  invisible(NULL)
+}
+
+#' Load a loss_panel from a JSON file written by `save_loss_panel()`
+#'
+#' @param path Source file path.
+#' @return An object of class `loss_panel`.
+#' @export
+load_loss_panel <- function(path) {
+  payload <- jsonlite::read_json(path, simplifyVector = TRUE)
+  missing <- setdiff(c("losses", "weights", "labels"), names(payload))
+  if (length(missing) > 0) {
+    stop(sprintf(
+      "'%s' is not a valid loss_panel file: missing required key(s) %s.",
+      path, paste(missing, collapse = ", ")
+    ), call. = FALSE)
+  }
+  panel <- loss_panel(payload$losses, weights = payload$weights, labels = payload$labels)
+  panel$labels_are_positional <- isTRUE(payload$labels_are_positional)
+  panel
+}
