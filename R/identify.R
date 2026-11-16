@@ -145,6 +145,16 @@
 #' @return Integer size of the surviving Model Confidence Set.
 #' @seealso [mcs()]/[model_confidence_set()] for this package's own independent native MCS engine
 #'   (kept deliberately separate as a cross-check, not a second copy of the same algorithm).
+#'
+#' @examples
+#' # A 10-period, 3-model loss panel where ar1 and ets are tied and nbeats is clearly worse.
+#' L <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' # reps kept small here purely for example speed; use the reps=500 default for real analyses.
+#' mcs_size(L, reps = 200, seed = 1)  # 2 -- ar1 and ets both survive
 #' @export
 mcs_size <- function(L, alpha = 0.10, reps = 500, block_size = 3, seed = 0, w = NULL) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
@@ -156,6 +166,22 @@ mcs_size <- function(L, alpha = 0.10, reps = 500, block_size = 3, seed = 0, w = 
 #'
 #' @inheritParams mcs_size
 #' @return `TRUE` iff the MCS contains exactly one model.
+#'
+#' @examples
+#' # Tied pair -> not identified (MCS size 2, not 1).
+#' L_tied <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' identified(L_tied, reps = 200, seed = 1)  # FALSE
+#'
+#' # Only one clearly-better model left -> identified (MCS size 1).
+#' L_clear <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' identified(L_clear, reps = 200, seed = 1)  # TRUE
 #' @export
 identified <- function(L, alpha = 0.10, reps = 500, block_size = 3, seed = 0, w = NULL) {
   isTRUE(mcs_size(L, alpha = alpha, reps = reps, block_size = block_size, seed = seed, w = w) == 1L)

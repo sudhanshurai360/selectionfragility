@@ -15,6 +15,11 @@
 #' @param z Two-sided critical value (default 1.96, two-sided 5%).
 #' @return `TRUE`/`FALSE`, or `NA` when the certificate does not apply (`k <= 0` or `k >= T`).
 #' @export
+#' @examples
+#' prop22_certifies(2, T = 10)   # TRUE  -- k*=2 is certified non-significant at T=10
+#' prop22_certifies(5, T = 10)   # FALSE -- k*=5 is too large for Prop 2.2 to certify
+#' prop22_certifies(0, T = 10)   # NA -- sentinel: k <= 0 means no breakdown exists, out of scope
+#' prop22_certifies(10, T = 10)  # NA -- sentinel: k >= T is also out of scope
 prop22_certifies <- function(k, T, z = 1.96) {
   if (!(is.finite(k) && is.finite(T) && is.finite(z))) {
     stop(sprintf("prop22_certifies() requires finite k, T, z -- got k=%s, T=%s, z=%s", k, T, z), call. = FALSE)
@@ -34,6 +39,15 @@ prop22_certifies <- function(k, T, z = 1.96) {
 #' @param z Two-sided critical value (default 1.96, two-sided 5%).
 #' @return A sorted character vector of model names in the certified tied subset.
 #' @export
+#' @examples
+#' # ar1 and nbeats are a genuine near-tie; ets is clearly worse.
+#' L <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(1.01, 0.97, 1.03, 1.00, 0.98, 1.04, 0.96, 1.01, 1.01, 0.99),
+#'   ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' panel <- loss_panel(L)
+#' certified_tied_subset(panel)  # c("ar1", "nbeats") -- ets is not certified tied
 certified_tied_subset <- function(L, w = NULL, z = 1.96) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
   L <- .as_loss_dict(L)

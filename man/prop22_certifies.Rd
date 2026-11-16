@@ -19,3 +19,9 @@ prop22_certifies(k, T, z = 1.96)
 \description{
 Zero-simulation certificate of non-significance for a champion-vs-rival k*
 }
+\examples{
+prop22_certifies(2, T = 10)   # TRUE  -- k*=2 is certified non-significant at T=10
+prop22_certifies(5, T = 10)   # FALSE -- k*=5 is too large for Prop 2.2 to certify
+prop22_certifies(0, T = 10)   # NA -- sentinel: k <= 0 means no breakdown exists, out of scope
+prop22_certifies(10, T = 10)  # NA -- sentinel: k >= T is also out of scope
+}

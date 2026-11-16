@@ -94,6 +94,17 @@
 #' @param power Target power (> 0.5).
 #' @param alpha One-sided significance level (< 0.5).
 #' @return The minimum detectable edge, as a fraction of the champion's loss level.
+#' @examples
+#' L <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+#'   ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' panel <- loss_panel(L)
+#' # With only 10 periods of noisy loss, the champion's edge over its binding
+#' # rival would have to be at least this large (as a fraction of the champion's
+#' # own loss level) for an 80%-power test to have a chance of detecting it.
+#' minimum_detectable_edge(panel)
 #' @export
 minimum_detectable_edge <- function(L, w = NULL, power = 0.80, alpha = 0.05) {
   .validate_one_sided(alpha, power)
@@ -109,6 +120,16 @@ minimum_detectable_edge <- function(L, w = NULL, power = 0.80, alpha = 0.05) {
 #' One-sided significance threshold against the binding rival
 #'
 #' @inheritParams minimum_detectable_edge
+#' @examples
+#' L <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+#'   ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' panel <- loss_panel(L)
+#' # The champion's observed edge must clear this fraction to be called
+#' # significant at the one-sided alpha = 0.05 level against its binding rival.
+#' significance_boundary(panel)
 #' @export
 significance_boundary <- function(L, w = NULL, alpha = 0.05) {
   .validate_one_sided(alpha)
@@ -124,6 +145,17 @@ significance_boundary <- function(L, w = NULL, alpha = 0.05) {
 #' MCB-style simultaneous upper confidence bound on the champion's edge
 #'
 #' @inheritParams minimum_detectable_edge
+#' @examples
+#' L <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+#'   ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' panel <- loss_panel(L)
+#' # This corrects for having picked the champion as the best of several rivals
+#' # after the fact: read the result as "the champion's true edge may be as
+#' # large as this fraction of its own loss level, at the stated confidence."
+#' mcb_bound(panel)
 #' @export
 mcb_bound <- function(L, w = NULL, alpha = 0.05) {
   .validate_one_sided(alpha)
@@ -146,6 +178,18 @@ mcb_bound <- function(L, w = NULL, alpha = 0.05) {
 #' @param weights Optional numeric vector of per-period weights (primary name).
 #' @param w Optional alias for `weights` (keyword-only in the Python original; pass only one).
 #' @return The weighted-average realised regret of the picking rule.
+#' @examples
+#' L <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+#'   ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' panel <- loss_panel(L)
+#' # Re-picks the champion leaving one period out at a time, then measures how
+#' # much worse that re-picked model does, on average, than the best model
+#' # actually available in the left-out period -- the realised cost of trusting
+#' # the selection rule rather than having picked the true best model each time.
+#' selection_regret(panel)
 #' @export
 selection_regret <- function(L, weights = NULL, w = NULL) {
   if (!is.null(w)) {
@@ -187,6 +231,20 @@ selection_regret <- function(L, weights = NULL, w = NULL) {
 #' @seealso [minimum_detectable_edge()], [significance_boundary()], [mcb_bound()] for the
 #'   individual statistics this report assembles; [report()] for the one-screen view that reuses
 #'   this same R1/R2 logic.
+#' @examples
+#' # Only 4 periods, and nbeats narrowly beats ar1 on average -- but with this
+#' # little data, that edge is NOT resolved: it falls short of the significance
+#' # boundary (R1), and the champion isn't even uniquely identified by the MCS
+#' # (R2). The report's job is to say so honestly rather than overclaim.
+#' L <- list(
+#'   ar1    = c(1.00, 0.95, 1.05, 0.90),
+#'   nbeats = c(0.95, 0.97, 0.90, 0.99)
+#' )
+#' panel <- loss_panel(L)
+#' r <- resolution_report(panel)
+#' r$champion       # "nbeats" -- the pooled winner
+#' r$resolved       # FALSE -- observed edge doesn't clear the significance boundary
+#' r$fragility_read # "undetermined" -- too little data to certify this pick
 #' @export
 resolution_report <- function(L, w = NULL, alpha = 0.05, power = 0.80, mcs_alpha = 0.10) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w

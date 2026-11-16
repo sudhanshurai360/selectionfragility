@@ -29,6 +29,19 @@
 #'   mean-based rule). `NULL` reads `getOption("selectionfragility.elimination", "studentized")`.
 #' @return A list `list(surviving = surviving_column_indices, p = p_at_stop)` (1-based indices).
 #'
+#' @examples
+#' # A 10-period, 3-model loss panel where models 1 and 2 are tied (identical losses) and
+#' # model 3 is clearly worse -- the MCS should retain the tied pair.
+#' set.seed(1)
+#' L <- cbind(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' # B kept small here purely for example speed; use the B=2000 default for real analyses.
+#' res <- mcs(L, B = 200, seed = 1)
+#' res$surviving  # columns 1 and 2 (ar1, ets) survive; nbeats is eliminated
+#'
 #' @section Adversarial use / competition settings:
 #' This diagnostic was built for a trusted analyst diagnosing their own model comparison, not for
 #' a setting where the models being evaluated were chosen knowing the methodology and have an
@@ -171,6 +184,18 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @inheritParams mcs
 #' @return A list `list(surviving = surviving_model_names, p = p_at_stop)`.
+#'
+#' @examples
+#' # Same tied panel as mcs(), but as a named list -- the surviving set comes back as names.
+#' set.seed(1)
+#' L <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' # B kept small here purely for example speed; use the B=2000 default for real analyses.
+#' res <- model_confidence_set(L, B = 200, seed = 1)
+#' res$surviving  # c("ar1", "ets"); nbeats is eliminated
 #' @export
 model_confidence_set <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NULL) {
   up <- .unwrap_panel(L, NULL); L <- up$L

@@ -20,3 +20,13 @@ A sorted character vector of model names in the certified tied subset.
 The champion plus every rival whose pairwise k* is certified non-significant by Proposition 2.2.
 NOT a confidence set and NOT nested in the Model Confidence Set -- see this file's header.
 }
+\examples{
+# ar1 and nbeats are a genuine near-tie; ets is clearly worse.
+L <- list(
+  ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+  nbeats = c(1.01, 0.97, 1.03, 1.00, 0.98, 1.04, 0.96, 1.01, 1.01, 0.99),
+  ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+)
+panel <- loss_panel(L)
+certified_tied_subset(panel)  # c("ar1", "nbeats") -- ets is not certified tied
+}

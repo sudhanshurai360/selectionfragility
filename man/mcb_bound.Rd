@@ -16,3 +16,15 @@ mcb_bound(L, w = NULL, alpha = 0.05)
 \description{
 MCB-style simultaneous upper confidence bound on the champion's edge
 }
+\examples{
+L <- list(
+  ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+  nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+  ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+)
+panel <- loss_panel(L)
+# This corrects for having picked the champion as the best of several rivals
+# after the fact: read the result as "the champion's true edge may be as
+# large as this fraction of its own loss level, at the stated confidence."
+mcb_bound(panel)
+}

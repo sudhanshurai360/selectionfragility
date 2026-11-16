@@ -35,3 +35,9 @@ A list \code{list(median, p05, p95)}.
 \description{
 Null distribution of winner_stability under an exchangeable (no-true-winner) panel
 }
+\examples{
+# n_rep/n_boot are tiny here purely to keep the example fast; real usage should use the
+# defaults (n_rep = 200, n_boot = 500) or larger for a stable null distribution.
+eb <- exchangeable_benchmark(K = 3, T = 20, n_rep = 20, n_boot = 50, seed = 1)
+eb$median  # typical winner_stability() under "no model is really better"
+}

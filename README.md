@@ -17,11 +17,13 @@ This is the native R port of the Python package
 `pip install selection-fragility`) — same method, same validated numerics, independently verified
 against it. See that repo for the accompanying paper and the full evaluation card.
 
-> **Status: pre-CRAN release.** The core port (9 modules), its `testthat` suite (157 tests), and a
+> **Status: pre-CRAN release.** The core port (9 modules), its `testthat` suite (156 tests), and a
 > getting-started vignette are complete and independently audited module-by-module against the
-> Python package's own test suite and live output, and pass `R CMD check --as-cran` cleanly
-> (0 errors, 0 warnings, 0 notes). CRAN submission is in progress; until then, install from
-> GitHub (below).
+> Python package's own test suite and live output. `R CMD check --as-cran` passes with 0 errors
+> and 0 warnings (no notes beyond the standard "new submission" notice every first CRAN
+> submission gets), and the package also passes R-hub's cross-platform check (linux, macOS,
+> Windows, all on R-devel). CRAN submission is in progress; until then, install from GitHub
+> (below).
 
 ## Install
 

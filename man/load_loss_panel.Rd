@@ -15,3 +15,15 @@ An object of class \code{loss_panel}.
 \description{
 Load a loss_panel from a JSON file written by \code{save_loss_panel()}
 }
+\examples{
+L <- list(
+  ar1 = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97),
+  ets = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17)
+)
+panel <- loss_panel(L)
+tmp <- tempfile(fileext = ".json")
+save_loss_panel(panel, tmp)
+reloaded <- load_loss_panel(tmp)
+identical(panel$losses, reloaded$losses)
+unlink(tmp)
+}

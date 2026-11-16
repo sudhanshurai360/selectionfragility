@@ -16,3 +16,14 @@ significance_boundary(L, w = NULL, alpha = 0.05)
 \description{
 One-sided significance threshold against the binding rival
 }
+\examples{
+L <- list(
+  ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+  nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+  ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+)
+panel <- loss_panel(L)
+# The champion's observed edge must clear this fraction to be called
+# significant at the one-sided alpha = 0.05 level against its binding rival.
+significance_boundary(panel)
+}

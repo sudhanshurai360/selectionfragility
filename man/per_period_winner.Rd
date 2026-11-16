@@ -17,3 +17,12 @@ The winning model's name, or a list with the full tied set.
 \description{
 Per-period (plurality) winner — the model winning the most periods
 }
+\examples{
+L <- list(
+  ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+  nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+  ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+)
+per_period_winner(L)  # "nbeats" -- it wins 9 of 10 periods despite losing on pooled mean
+per_period_winner(L, return_ties = TRUE)
+}

@@ -17,3 +17,13 @@ The concentration share, or \code{NA} if there is no strict winner or the margin
 \description{
 Share of the champion's margin concentrated in the single most influential period
 }
+\examples{
+# ar1 wins steadily, but almost its whole margin over ets comes from one shock period
+# (period 10) where ets has a bad miss -- exactly the case this statistic flags.
+L <- list(
+  ar1 = c(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
+  ets = c(1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 5.0)
+)
+panel <- loss_panel(L)
+concentration_share(panel)  # ~0.82 -- the margin is highly concentrated in one period
+}

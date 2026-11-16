@@ -25,3 +25,19 @@ identified(L, alpha = 0.1, reps = 500, block_size = 3, seed = 0, w = NULL)
 \description{
 Is the Model Confidence Set at level alpha a singleton? (independent engine)
 }
+\examples{
+# Tied pair -> not identified (MCS size 2, not 1).
+L_tied <- list(
+  ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+  ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+  nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+)
+identified(L_tied, reps = 200, seed = 1)  # FALSE
+
+# Only one clearly-better model left -> identified (MCS size 1).
+L_clear <- list(
+  ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+  nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+)
+identified(L_clear, reps = 200, seed = 1)  # TRUE
+}

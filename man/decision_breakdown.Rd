@@ -24,3 +24,13 @@ period labels for display; call \code{panel$labels[removed]} yourself if you nee
 \description{
 Decision-level k* — fewest periods whose deletion flips the pooled winner to ANY opponent
 }
+\examples{
+# Same shock-period panel as breakdown_number(): on the full panel, ar1 is the pooled
+# winner (nbeats' one bad period pulls its mean above ar1's), but it only takes deleting
+# that single period to flip the decision to nbeats.
+L <- list(
+  ar1    = c(1.0, 1.0, 1.0, 1.0, 1.0),
+  nbeats = c(0.5, 0.5, 0.5, 0.5, 5.0)
+)
+decision_breakdown(L)  # k = 1, binding_opponent = "nbeats", removed = 5
+}

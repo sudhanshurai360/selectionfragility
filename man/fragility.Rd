@@ -36,6 +36,19 @@ A named list of diagnostic fields (see \code{vignette("selectionfragility")} for
 \description{
 Full ranking-fragility diagnostic for a selection decision
 }
+\examples{
+# Same shock-period panel as decision_breakdown(): ar1 is the pooled winner, but nbeats
+# wins 4 of 5 periods -- fragility() surfaces that reversal alongside k* and stability.
+L <- list(
+  ar1    = c(1.0, 1.0, 1.0, 1.0, 1.0),
+  nbeats = c(0.5, 0.5, 0.5, 0.5, 5.0)
+)
+f <- fragility(L)
+f$pooled_winner      # "ar1"
+f$per_period_winner   # "nbeats"
+f$reversal            # TRUE -- the pooled and per-period winners disagree
+f$k_star               # 1 -- deleting a single period flips the pooled decision
+}
 \seealso{
 \code{\link[=report]{report()}} for the recommended one-screen summary built on top of this function;
 \code{\link[=decision_breakdown]{decision_breakdown()}} for k* alone; \code{\link[=winner_stability]{winner_stability()}} and \code{\link[=exchangeable_benchmark]{exchangeable_benchmark()}} for

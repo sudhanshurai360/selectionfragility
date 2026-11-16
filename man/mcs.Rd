@@ -50,3 +50,17 @@ already closed at the input layer: \code{loss_panel()} requires equal period cou
 models and refuses otherwise.
 }
 
+\examples{
+# A 10-period, 3-model loss panel where models 1 and 2 are tied (identical losses) and
+# model 3 is clearly worse -- the MCS should retain the tied pair.
+set.seed(1)
+L <- cbind(
+  ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+  ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+  nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+)
+# B kept small here purely for example speed; use the B=2000 default for real analyses.
+res <- mcs(L, B = 200, seed = 1)
+res$surviving  # columns 1 and 2 (ar1, ets) survive; nbeats is eliminated
+
+}

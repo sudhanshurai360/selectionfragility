@@ -12,7 +12,6 @@ Description: Decision-oriented diagnostics for forecast model selection: the Mod
     run-over-run comparison.
 License: MIT + file LICENSE
 Encoding: UTF-8
-LazyData: true
 Roxygen: list(markdown = TRUE)
 URL: https://github.com/sudhanshurai360/selectionfragility
 BugReports: https://github.com/sudhanshurai360/selectionfragility/issues

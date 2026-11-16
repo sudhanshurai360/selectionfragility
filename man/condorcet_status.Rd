@@ -12,3 +12,13 @@ condorcet_status(L)
 \description{
 Classify the pairwise-majority tournament ('winner' | 'cycle' | 'tie')
 }
+\examples{
+# Same rock/paper/scissors panel as condorcet_winner(): no model dominates, so the
+# pairwise-majority tournament is a cycle rather than a clean winner or an outright tie.
+L <- list(
+  ar1    = c(1, 3, 2),
+  nbeats = c(2, 1, 3),
+  ets    = c(3, 2, 1)
+)
+condorcet_status(L)  # "cycle"
+}

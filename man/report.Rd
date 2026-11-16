@@ -23,6 +23,18 @@ VERDICT (identification), LEADERBOARD (mean loss / in-MCS / periods won), RESOLU
 edge vs MDE, MCB bound), PIVOT (k*, named periods or largest contributor, concentration_share,
 pivot_agreement).
 }
+\examples{
+# Ten years of losses for three models: ar1 is steady, nbeats wins nine of the ten years
+# but one shock-year loss (2.60) is large enough that ar1 wins on the pooled mean anyway,
+# ets is uniformly worse.
+L <- list(
+  ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+  nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+  ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+)
+panel <- loss_panel(L)
+report(panel)   # auto-prints; print(report(panel))/cat(report(panel)) also work
+}
 \seealso{
 \code{\link[=loss_panel]{loss_panel()}} to build \code{panel}; \code{\link[=fragility]{fragility()}} for the full set of diagnostic fields
 in list form rather than formatted text; \code{\link[=compare]{compare()}} for a run-over-run version of this check.

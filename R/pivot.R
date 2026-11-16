@@ -60,6 +60,15 @@
 #' @param w Optional numeric vector of per-period weights.
 #' @return The concentration share, or `NA` if there is no strict winner or the margin is degenerate.
 #' @export
+#' @examples
+#' # ar1 wins steadily, but almost its whole margin over ets comes from one shock period
+#' # (period 10) where ets has a bad miss -- exactly the case this statistic flags.
+#' L <- list(
+#'   ar1 = c(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
+#'   ets = c(1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 5.0)
+#' )
+#' panel <- loss_panel(L)
+#' concentration_share(panel)  # ~0.82 -- the margin is highly concentrated in one period
 concentration_share <- function(L, w = NULL) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
   L <- .as_loss_dict(L)
@@ -87,6 +96,16 @@ concentration_share <- function(L, w = NULL) {
 #' @return The agreement fraction, or `NA` if there is no strict winner, the subsample is too
 #'   small, or every subsample drawn had no strict winner.
 #' @export
+#' @examples
+#' # Same shock-year panel as concentration_share(): is the single-period pivot stable
+#' # under subsampling, or an artifact of that one period? This is a resampling-based
+#' # statistic -- fix `seed` for reproducibility, as done here.
+#' L <- list(
+#'   ar1 = c(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
+#'   ets = c(1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 5.0)
+#' )
+#' panel <- loss_panel(L)
+#' pivot_agreement(panel, seed = 42)  # ~0.78 -- the named pivot period is fairly stable
 pivot_agreement <- function(L, w = NULL, seed = 0, n_boot = 200, frac = 0.8) {
   if (as.integer(n_boot) <= 0) stop(sprintf("pivot_agreement(): n_boot must be a positive integer; got %s.", n_boot), call. = FALSE)
   if (!(frac > 0.0 && frac < 1.0)) {

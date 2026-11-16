@@ -18,3 +18,10 @@ A list \code{list(k = k_star, removed = removed_period_indices)} (1-based indice
 k* for a pair: the minimum number of periods to delete to flip "a beats b" on the pooled
 metric, where \code{la} is the current pooled winner's losses.
 }
+\examples{
+# nbeats is cheaper than ar1 in 4 of 5 periods, but one shock period (5.0) is bad enough
+# that ar1 wins on pooled mean (1.0 vs 1.4) -- removing just that one period flips it back.
+ar1    <- c(1.0, 1.0, 1.0, 1.0, 1.0)
+nbeats <- c(0.5, 0.5, 0.5, 0.5, 5.0)
+breakdown_number(la = ar1, lb = nbeats, w = rep(1, 5))  # k = 1, removed = 5
+}

@@ -24,6 +24,21 @@ A named list: \code{champion}, \code{resolved}, \code{observed_edge}, \code{mde}
 \description{
 R1/R2 resolution report with refusal rules
 }
+\examples{
+# Only 4 periods, and nbeats narrowly beats ar1 on average -- but with this
+# little data, that edge is NOT resolved: it falls short of the significance
+# boundary (R1), and the champion isn't even uniquely identified by the MCS
+# (R2). The report's job is to say so honestly rather than overclaim.
+L <- list(
+  ar1    = c(1.00, 0.95, 1.05, 0.90),
+  nbeats = c(0.95, 0.97, 0.90, 0.99)
+)
+panel <- loss_panel(L)
+r <- resolution_report(panel)
+r$champion       # "nbeats" -- the pooled winner
+r$resolved       # FALSE -- observed edge doesn't clear the significance boundary
+r$fragility_read # "undetermined" -- too little data to certify this pick
+}
 \seealso{
 \code{\link[=minimum_detectable_edge]{minimum_detectable_edge()}}, \code{\link[=significance_boundary]{significance_boundary()}}, \code{\link[=mcb_bound]{mcb_bound()}} for the
 individual statistics this report assembles; \code{\link[=report]{report()}} for the one-screen view that reuses

@@ -15,3 +15,13 @@ The winning model's name, or \code{NULL} if none exists.
 \description{
 Condorcet winner — beats every other model in pairwise per-period majority
 }
+\examples{
+# Each model is best in one period and worst in another -- a rock/paper/scissors cycle,
+# so no model beats both others in pairwise per-period majority.
+L <- list(
+  ar1    = c(1, 3, 2),
+  nbeats = c(2, 1, 3),
+  ets    = c(3, 2, 1)
+)
+condorcet_winner(L)  # NULL -- no model beats every other model pairwise
+}

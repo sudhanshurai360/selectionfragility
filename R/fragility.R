@@ -109,6 +109,13 @@
 #' @param w Optional numeric vector of per-period weights.
 #' @return The winning model's name.
 #' @export
+#' @examples
+#' L <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+#'   ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' pooled_winner(L)  # "ar1" -- nbeats' one bad period (2.60) drags its mean above ar1's
 pooled_winner <- function(L, w = NULL) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
   L <- .as_loss_dict(L)
@@ -128,6 +135,14 @@ pooled_winner <- function(L, w = NULL) {
 #' @param return_ties If TRUE, return `list(winner, tied)` instead of just the winner.
 #' @return The winning model's name, or a list with the full tied set.
 #' @export
+#' @examples
+#' L <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+#'   ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' per_period_winner(L)  # "nbeats" -- it wins 9 of 10 periods despite losing on pooled mean
+#' per_period_winner(L, return_ties = TRUE)
 per_period_winner <- function(L, return_ties = FALSE) {
   up <- .unwrap_panel(L, NULL); L <- up$L
   L <- .as_loss_dict(L)
@@ -148,6 +163,15 @@ per_period_winner <- function(L, return_ties = FALSE) {
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @return The winning model's name, or `NULL` if none exists.
 #' @export
+#' @examples
+#' # Each model is best in one period and worst in another -- a rock/paper/scissors cycle,
+#' # so no model beats both others in pairwise per-period majority.
+#' L <- list(
+#'   ar1    = c(1, 3, 2),
+#'   nbeats = c(2, 1, 3),
+#'   ets    = c(3, 2, 1)
+#' )
+#' condorcet_winner(L)  # NULL -- no model beats every other model pairwise
 condorcet_winner <- function(L) {
   up <- .unwrap_panel(L, NULL); L <- up$L
   L <- .as_loss_dict(L)
@@ -168,6 +192,15 @@ condorcet_winner <- function(L) {
 #' Classify the pairwise-majority tournament ('winner' | 'cycle' | 'tie')
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @export
+#' @examples
+#' # Same rock/paper/scissors panel as condorcet_winner(): no model dominates, so the
+#' # pairwise-majority tournament is a cycle rather than a clean winner or an outright tie.
+#' L <- list(
+#'   ar1    = c(1, 3, 2),
+#'   nbeats = c(2, 1, 3),
+#'   ets    = c(3, 2, 1)
+#' )
+#' condorcet_status(L)  # "cycle"
 condorcet_status <- function(L) {
   up <- .unwrap_panel(L, NULL); L <- up$L
   L <- .as_loss_dict(L)
@@ -231,6 +264,12 @@ condorcet_status <- function(L) {
 #' @param w Numeric vector of per-period weights.
 #' @return A list `list(k = k_star, removed = removed_period_indices)` (1-based indices).
 #' @export
+#' @examples
+#' # nbeats is cheaper than ar1 in 4 of 5 periods, but one shock period (5.0) is bad enough
+#' # that ar1 wins on pooled mean (1.0 vs 1.4) -- removing just that one period flips it back.
+#' ar1    <- c(1.0, 1.0, 1.0, 1.0, 1.0)
+#' nbeats <- c(0.5, 0.5, 0.5, 0.5, 5.0)
+#' breakdown_number(la = ar1, lb = nbeats, w = rep(1, 5))  # k = 1, removed = 5
 breakdown_number <- function(la, lb, w) {
   w <- .validate_weights(as.numeric(w), length(w))
   la <- as.numeric(la); lb <- as.numeric(lb); w <- as.numeric(w)
@@ -271,6 +310,15 @@ breakdown_number <- function(la, lb, w) {
 #'   `L` is a `loss_panel` built with `labels=`. Only [report()] resolves `removed` into actual
 #'   period labels for display; call `panel$labels[removed]` yourself if you need them here.
 #' @export
+#' @examples
+#' # Same shock-period panel as breakdown_number(): on the full panel, ar1 is the pooled
+#' # winner (nbeats' one bad period pulls its mean above ar1's), but it only takes deleting
+#' # that single period to flip the decision to nbeats.
+#' L <- list(
+#'   ar1    = c(1.0, 1.0, 1.0, 1.0, 1.0),
+#'   nbeats = c(0.5, 0.5, 0.5, 0.5, 5.0)
+#' )
+#' decision_breakdown(L)  # k = 1, binding_opponent = "nbeats", removed = 5
 decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
   for (m in names(L)) {
@@ -338,6 +386,14 @@ decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
 #' @param circular Use the circular (wrap-around) block bootstrap (default) or moving-block.
 #' @return A list `list(stability, freq)`.
 #' @export
+#' @examples
+#' L <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+#'   ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' ws <- winner_stability(L, seed = 1)
+#' ws$stability  # fraction of bootstrap resamples where ar1 is still the pooled winner
 winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0, circular = TRUE) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
   L <- .as_loss_dict(L)
@@ -390,6 +446,11 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
 #' @param circular Use the circular (wrap-around) block bootstrap (default) or moving-block.
 #' @return A list `list(median, p05, p95)`.
 #' @export
+#' @examples
+#' # n_rep/n_boot are tiny here purely to keep the example fast; real usage should use the
+#' # defaults (n_rep = 200, n_boot = 500) or larger for a stable null distribution.
+#' eb <- exchangeable_benchmark(K = 3, T = 20, n_rep = 20, n_boot = 50, seed = 1)
+#' eb$median  # typical winner_stability() under "no model is really better"
 exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL, seed = 0, circular = TRUE) {
   w <- rep(1, T)
   out <- numeric(n_rep)
@@ -413,6 +474,16 @@ exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL
 #' @param labels Optional vector of period labels (used only to report `hardest`).
 #' @return A list `list(sci, eff_surprising_periods, hardest, d_max_over_median)`.
 #' @export
+#' @examples
+#' # Irreducible difficulty (the best ANY model can do each period) is flat except period 4,
+#' # which is hard for every model at once -- the panel's difficulty is concentrated there,
+#' # regardless of which model wins the overall decision.
+#' L <- list(
+#'   ar1    = c(1.0, 1.0, 1.0, 3.0, 1.0),
+#'   nbeats = c(0.9, 0.9, 0.9, 2.8, 0.9),
+#'   ets    = c(1.2, 1.2, 1.2, 3.2, 1.2)
+#' )
+#' surprise_concentration(L)  # sci = 1 -- all of the surprise is in one period (hardest = 3)
 surprise_concentration <- function(L, labels = NULL) {
   up <- .unwrap_panel(L, NULL); L <- up$L
   L <- .as_loss_dict(L)
@@ -457,6 +528,18 @@ surprise_concentration <- function(L, labels = NULL) {
 #'   the calibrated bootstrap companion to k*; [mcs_size()]/[identified()] for the independent
 #'   Model Confidence Set engine.
 #' @export
+#' @examples
+#' # Same shock-period panel as decision_breakdown(): ar1 is the pooled winner, but nbeats
+#' # wins 4 of 5 periods -- fragility() surfaces that reversal alongside k* and stability.
+#' L <- list(
+#'   ar1    = c(1.0, 1.0, 1.0, 1.0, 1.0),
+#'   nbeats = c(0.5, 0.5, 0.5, 0.5, 5.0)
+#' )
+#' f <- fragility(L)
+#' f$pooled_winner      # "ar1"
+#' f$per_period_winner   # "nbeats"
+#' f$reversal            # TRUE -- the pooled and per-period winners disagree
+#' f$k_star               # 1 -- deleting a single period flips the pooled decision
 fragility <- function(L, w = NULL, shock_periods = NULL, labels = NULL, n_boot = 2000, seed = 0,
                        stability_block = NULL, benchmark = NULL) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w

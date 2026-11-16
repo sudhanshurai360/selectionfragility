@@ -17,3 +17,14 @@ A list \code{list(sci, eff_surprising_periods, hardest, d_max_over_median)}.
 \description{
 Surprise concentration — how lopsided is irreducible task difficulty across periods?
 }
+\examples{
+# Irreducible difficulty (the best ANY model can do each period) is flat except period 4,
+# which is hard for every model at once -- the panel's difficulty is concentrated there,
+# regardless of which model wins the overall decision.
+L <- list(
+  ar1    = c(1.0, 1.0, 1.0, 3.0, 1.0),
+  nbeats = c(0.9, 0.9, 0.9, 2.8, 0.9),
+  ets    = c(1.2, 1.2, 1.2, 3.2, 1.2)
+)
+surprise_concentration(L)  # sci = 1 -- all of the surprise is in one period (hardest = 3)
+}

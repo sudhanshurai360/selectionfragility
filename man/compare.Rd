@@ -24,3 +24,20 @@ An object of class \code{change_report}.
 Reports whether the pooled champion changed between two consecutive evaluation runs, and
 whether that change looks like signal or noise.
 }
+\examples{
+L <- list(
+  ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+  nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+  ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+)
+years <- 2015:2024
+previous <- loss_panel(L, labels = years)
+
+# A new evaluation period (2025) arrives -- add one new value to EVERY model's
+# vector, since all models in a panel must share the same periods.
+L_new_period <- list(ar1 = c(L$ar1, 1.00), nbeats = c(L$nbeats, 0.50), ets = c(L$ets, 1.20))
+current <- loss_panel(L_new_period, labels = c(years, 2025))
+
+cr <- compare(previous, current)
+cr$act   # the single boolean a CI/pipeline promotion step should gate on
+}

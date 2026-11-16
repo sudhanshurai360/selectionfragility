@@ -26,3 +26,14 @@ Fraction of \code{frac}*T-sized subsamples of periods (without replacement) that
 pivotal period as the full sample. NOTE: uses R's own RNG, so results are not bit-for-bit
 identical to the Python package's numpy-based subsampling on the same seed.
 }
+\examples{
+# Same shock-year panel as concentration_share(): is the single-period pivot stable
+# under subsampling, or an artifact of that one period? This is a resampling-based
+# statistic -- fix `seed` for reproducibility, as done here.
+L <- list(
+  ar1 = c(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
+  ets = c(1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 5.0)
+)
+panel <- loss_panel(L)
+pivot_agreement(panel, seed = 42)  # ~0.78 -- the named pivot period is fairly stable
+}
