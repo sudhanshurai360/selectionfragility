@@ -116,12 +116,24 @@ test_that(".res_scale()'s champion-only normalization stays finite under an extr
 test_that("resolution_report() warns on a 'resolved' verdict driven by weight/volatility correlation (strict-regression round, 2026-11-18)", {
   # REGRESSION: a dedicated verification agent measured a 15-39% false-confidence rate among
   # "resolved" verdicts under realistic (non-adversarial) weight/volatility correlation -- not a
-  # rare edge case. resolution_report() now warn()s when weights are non-uniform AND correlate
-  # with the differential's volatility AND it is about to report "resolved". Gated on `resolved`
-  # (the R1-only field report()'s RESOLUTION line actually prints), NOT `fragility_read` -- MCS
-  # already rejects non-uniform weights, forcing fragility_read to "undetermined" regardless, which
-  # would make a fragility_read-gated guard unreachable dead code (the exact bug class already
+  # rare edge case. resolution_report() now warn()s when weights are non-uniform AND POSITIVELY
+  # correlate with the differential's volatility AND it is about to report "resolved". Gated on
+  # `resolved` (the R1-only field report()'s RESOLUTION line actually prints), NOT `fragility_read`
+  # -- MCS already rejects non-uniform weights, forcing fragility_read to "undetermined" regardless,
+  # which would make a fragility_read-gated guard unreachable dead code (the exact bug class already
   # found once in report.R's own Prop 2.2 branch).
+  #
+  # STRICT-AUDIT FIX (2026-11-18, found by a later round): the guard originally fired on
+  # abs(cor) > 0.2, but a NEGATIVE correlation (high weight on the CALM periods) makes
+  # .weighted_se() OVERSTATE the true SE -- conservative, not the false-confidence risk this guard
+  # exists to catch. Fixed to a one-sided cor > 0.2 test. The same audit also found the shipped
+  # "Control 2" below (seed=5, unrelated w/d3) was not a real invariant -- it passed only because
+  # that seed happens to land outside the ~22-77%-at-small-T false-fire rate the noisy cor()-on-
+  # one-realization proxy has even when the assumption genuinely holds; scanning seeds 1-30 found
+  # 15/30 fired under the old abs() rule. Control 2 is now a DETERMINISTIC negative-correlation
+  # construction (large weight on the definitely-small-diff periods, small weight on the
+  # definitely-large-diff periods) that can never fire under the new one-sided rule, by
+  # construction, not by seed luck.
   set.seed(123)
   T <- 20
   w <- c(rep(1, 18), rep(100, 2))
@@ -138,10 +150,22 @@ test_that("resolution_report() warns on a 'resolved' verdict driven by weight/vo
   L2 <- list(a = rnorm(20, 1, 0.05), b = rnorm(20, 1.3, 0.05))
   expect_no_warning(resolution_report(L2))
 
-  # Control 2: non-uniform weights that do NOT correlate with volatility -- no warning.
-  set.seed(5)
-  w3 <- c(rep(1, 10), rep(50, 10))
-  d3 <- rnorm(20, mean = 0.5, sd = 0.05)
-  A3 <- rep(1, 20); B3 <- A3 + d3
-  expect_no_warning(resolution_report(list(a = A3, b = B3), w3))
+  # Control 2: non-uniform weights NEGATIVELY correlated with volatility, by construction, while
+  # still exercising a TRUE `resolved` (unlike naively reusing the panel above with inverted
+  # weights, which flips observed_edge below the significance boundary and short-circuits the
+  # guard's `isTRUE(resolved)` gate before the correlation check is ever reached -- a real mistake
+  # caught while writing this test). All periods share a solid positive base so the weighted mean
+  # (dominated by the 18 calm, high-weight periods) stays clearly significant, while volatility is
+  # concentrated on the 2 LOW-weight periods -- cor(w, resid2) must be negative regardless of seed.
+  set.seed(7)
+  w5 <- rep(100, 18); w5 <- c(w5, 1, 1)
+  base <- 1.0
+  diff_calm <- base + rnorm(18, 0, 0.01)
+  diff_volatile <- c(base + 4, base - 4)
+  diffs5 <- c(diff_calm, diff_volatile)
+  A5 <- rep(1.0, T); B5 <- A5 + diffs5
+  L5 <- list(a = A5, b = B5)
+  r5 <- resolution_report(L5, w5)
+  expect_true(r5$resolved)  # confirms this control genuinely exercises the gated branch
+  expect_no_warning(resolution_report(L5, w5))
 })

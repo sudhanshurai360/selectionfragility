@@ -43,8 +43,11 @@ autocorrelated losses. The R1 gate also assumes per-period variance doesn't depe
 a false-confidence rate of 15-39\% was measured across mild-to-strong, realistic weight/
 volatility correlations (as low as rho=0.1), and 8\% even on an unremarkable seasonal
 observation-count pattern. This function now \code{warning()}s when \code{w} is non-uniform AND
-correlates with the differential's volatility AND it is about to report "resolved" -- treat
-that warning as a real signal to sanity-check the result, not noise.
+POSITIVELY correlates with the differential's volatility AND it is about to report "resolved".
+The warning is a cheap, single-realization screening heuristic, not a precise diagnosis -- it
+also fires on a non-trivial fraction of panels where the assumption genuinely holds (~13-38\%
+depending on T, purely from sampling noise in the correlation estimate); treat it as a prompt
+to sanity-check the result yourself, not as proof the result is wrong.
 }
 
 \section{Seed sensitivity}{

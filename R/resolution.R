@@ -325,8 +325,11 @@ selection_regret <- function(L, weights = NULL, w = NULL) {
 #'   a false-confidence rate of 15-39% was measured across mild-to-strong, realistic weight/
 #'   volatility correlations (as low as rho=0.1), and 8% even on an unremarkable seasonal
 #'   observation-count pattern. This function now `warning()`s when `w` is non-uniform AND
-#'   correlates with the differential's volatility AND it is about to report "resolved" -- treat
-#'   that warning as a real signal to sanity-check the result, not noise.
+#'   POSITIVELY correlates with the differential's volatility AND it is about to report "resolved".
+#'   The warning is a cheap, single-realization screening heuristic, not a precise diagnosis -- it
+#'   also fires on a non-trivial fraction of panels where the assumption genuinely holds (~13-38%
+#'   depending on T, purely from sampling noise in the correlation estimate); treat it as a prompt
+#'   to sanity-check the result yourself, not as proof the result is wrong.
 #' @section Seed sensitivity: `mcs_seed` -- `fragility_read`'s `identified` check is a
 #'   bootstrap-based MCS call, and on a genuinely
 #'   borderline panel the verdict can be seed-sensitive (see `?mcs`'s "Adversarial use" section
@@ -394,19 +397,45 @@ resolution_report <- function(L, w = NULL, alpha = 0.05, power = 0.80, mcs_alpha
   # in report.R's Prop 2.2 branch). report()'s own RESOLUTION line prints "-- resolved" from
   # `resolved` directly (R/report.R line 158), independent of fragility_read/VERDICT, which is
   # exactly the risk this guard is meant to catch.
+  # STRICT-AUDIT FIX (2026-11-18): the guard originally fired on abs(wv_cor) > 0.2 -- but a NEGATIVE
+  # correlation (high weight on the CALM periods) makes .weighted_se() OVERSTATE the true SE, which
+  # is conservative, not the false-confidence risk this guard exists to catch. Only POSITIVE
+  # correlation is the documented risk; fixed to wv_cor > 0.2 (one-sided), not abs(). A SEPARATE,
+  # self-found bug in this same pass: the residual baseline was weighted.mean(diff, w), which
+  # creates a mechanical sign artifact (wherever the weight concentrates, the weighted mean gets
+  # pulled there, making THOSE points' own residual artificially small) -- on the test suite's own
+  # real-risk panel this flipped the sign (cor=-0.9998 instead of the true +0.98), silently making
+  # the guard NEVER fire on the exact case it's supposed to catch. Fixed to use the UNWEIGHTED mean
+  # as the residual baseline. Separately, a dedicated re-verification found this single-realization
+  # cor() proxy fires on pure sampling noise at a non-trivial rate even when the homogeneity
+  # assumption genuinely holds (freshly re-measured against the corrected unweighted-mean proxy:
+  # ~38% at T=6, ~28% at T=10, ~22% at T=20, ~13% at T=40, with NO real weight/volatility
+  # relationship) -- it is a cheap screening heuristic, not a precise diagnosis, and the warning
+  # text below says so explicitly rather than implying a confirmed problem.
   if (isTRUE(resolved) && length(ww) >= 4 && !.weights_are_uniform(ww)) {
     cv_w <- stats::sd(ww) / mean(ww)
     if (is.finite(cv_w) && cv_w > 0.3) {
-      resid2 <- (ec$diff - stats::weighted.mean(ec$diff, ww))^2
+      # SELF-FOUND FIX (same pass): the residual baseline MUST be the UNWEIGHTED mean, not
+      # weighted.mean(diff, ww). Using the weighted mean creates a mechanical sign artifact --
+      # wherever the weight concentrates, the weighted mean gets pulled there, making THOSE
+      # points' own residual artificially small, which flips the correlation's sign relative to
+      # the real relationship between weight and underlying volatility. Confirmed directly: on
+      # the test suite's own real-risk panel (heavy weight on the 2 genuinely volatile periods),
+      # the weighted-mean version gave cor=-0.9998 (wrongly negative, guard silently never fired)
+      # while the unweighted-mean version correctly gives cor=+0.98.
+      resid2 <- (ec$diff - mean(ec$diff))^2
       wv_cor <- suppressWarnings(stats::cor(ww, resid2))
-      if (is.finite(wv_cor) && abs(wv_cor) > 0.2) {
+      if (is.finite(wv_cor) && wv_cor > 0.2) {
         warning(sprintf(paste0(
-          "resolution_report(): weights are non-uniform (CV=%.2f) and correlate with the ",
-          "per-period differential's volatility (r=%.2f) -- .weighted_se() uses the RAW, ",
+          "resolution_report(): weights are non-uniform (CV=%.2f) and POSITIVELY correlate with ",
+          "the per-period differential's volatility (r=%.2f) -- .weighted_se() uses the RAW, ",
           "UNWEIGHTED variance (only the effective-sample-size denominator uses the weights), ",
-          "which can understate the true SE when weight correlates with volatility this way. ",
-          "This 'resolved' read should be treated with extra caution; see resolution_report()'s ",
-          "@section Assumption for the confirmed scope of this issue."
+          "which can understate the true SE when high-weight periods are also the volatile ones. ",
+          "This is a CHEAP SCREENING HEURISTIC on one realization of the data, not a confirmed ",
+          "diagnosis -- it can and does fire on panels where the understatement isn't actually ",
+          "severe, especially at small T. Treat it as a prompt to sanity-check this 'resolved' ",
+          "read yourself, not as proof the read is wrong; see resolution_report()'s @section ",
+          "Assumption for the confirmed scope of this issue."
         ), cv_w, wv_cor), call. = FALSE)
       }
     }

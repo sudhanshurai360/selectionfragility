@@ -582,6 +582,17 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
 #' eb$median  # typical winner_stability() under "no model is really better"
 exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL, seed = 0, circular = TRUE) {
   if (K < 2) stop(sprintf("exchangeable_benchmark(): need at least 2 models; got K=%s.", K), call. = FALSE)
+  # n_rep never got the same as.integer()+is.na() coercion/guard n_boot (two lines below, and in
+  # winner_stability()) already has -- a sibling gap found by a strict full-history audit. Without
+  # it, n_rep=0 or a fractional 0<n_rep<1 silently returned list(median=NA, p05=NA, p95=NA) (empty
+  # loop, no error); n_rep=NA/negative/character crashed inside numeric(n_rep) with a raw,
+  # unworded R-internal error ("invalid 'length' argument" / "vector size cannot be NA/NaN").
+  n_rep_in <- n_rep
+  n_rep <- suppressWarnings(as.integer(n_rep))
+  if (length(n_rep) != 1 || is.na(n_rep) || n_rep <= 0) {
+    stop(sprintf("exchangeable_benchmark(): n_rep must be a single positive integer; got %s.",
+                  paste(format(n_rep_in), collapse = ", ")), call. = FALSE)
+  }
   w <- rep(1, T)
   out <- numeric(n_rep)
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL

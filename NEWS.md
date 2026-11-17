@@ -11,9 +11,11 @@ Initial release: a native R port of the Python package
   refusal rules), `prop22` (zero-simulation Proposition 2.2 certificate), `pivot` (concentration
   share, pivot agreement), `report` (one-screen summary), `compare` (run-over-run champion-change
   diagnostic).
-* 995 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds),
-  including a dedicated cross-language oracle-comparison suite verified against the Python
-  package's live behavior, not just its documented contract.
+* 1012 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
+  this count will keep moving as hardening continues; check `devtools::test()`'s own output rather
+  than treating this number as authoritative), including a dedicated cross-language
+  oracle-comparison suite verified against the Python package's live behavior, not just its
+  documented contract.
 * `R CMD check --as-cran`: 0 errors, 0 warnings given a complete LaTeX toolchain and a current
   HTML Tidy on the checking machine (both independently confirmed); a machine missing either
   reports environment-only PDF/HTML-manual ERROR/WARNING/NOTE lines that are not package defects.

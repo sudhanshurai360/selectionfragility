@@ -353,3 +353,15 @@ test_that("winner_stability()'s block= is coerced/validated like n_boot=, not cr
   expect_error(exchangeable_benchmark(K = 2, T = 10, n_rep = 2, block = NA), "block must be a single integer")
   expect_error(fragility(L, stability_block = NA), "block must be a single integer")
 })
+
+test_that("exchangeable_benchmark()'s n_rep is coerced/validated like n_boot=, not silently wrong or crashed on (strict full-history audit, 2026-11-18)", {
+  # REGRESSION: n_boot (two lines below n_rep in this same function, and in winner_stability())
+  # already got the as.integer()+is.na() guard; n_rep had none. n_rep=0 or fractional 0<n_rep<1
+  # silently returned list(median=NA, p05=NA, p95=NA) with NO error (empty loop); n_rep=NA/
+  # negative/character crashed inside numeric(n_rep) with a raw, unworded R-internal error.
+  expect_error(exchangeable_benchmark(K = 3, T = 10, n_rep = 0, n_boot = 5), "n_rep must be a single positive integer")
+  expect_error(exchangeable_benchmark(K = 3, T = 10, n_rep = -1, n_boot = 5), "n_rep must be a single positive integer")
+  expect_error(exchangeable_benchmark(K = 3, T = 10, n_rep = "abc", n_boot = 5), "n_rep must be a single positive integer")
+  expect_error(exchangeable_benchmark(K = 3, T = 10, n_rep = NA, n_boot = 5), "n_rep must be a single positive integer")
+  expect_no_error(exchangeable_benchmark(K = 3, T = 10, n_rep = 20, n_boot = 20, seed = 1))
+})
