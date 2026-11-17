@@ -11,7 +11,7 @@ Initial release: a native R port of the Python package
   refusal rules), `prop22` (zero-simulation Proposition 2.2 certificate), `pivot` (concentration
   share, pivot agreement), `report` (one-screen summary), `compare` (run-over-run champion-change
   diagnostic).
-* 184 tests (`testthat`, edition 3), including a dedicated cross-language oracle-comparison suite
+* 187 tests (`testthat`, edition 3), including a dedicated cross-language oracle-comparison suite
   verified against the Python package's live behavior, not just its documented contract.
 * `R CMD check --as-cran`: 0 errors, 0 warnings; passes R-hub's cross-platform check (Linux, macOS,
   Windows, R-devel).
