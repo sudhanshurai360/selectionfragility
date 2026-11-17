@@ -174,7 +174,7 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
         "mcs(): T=%d periods x B=%d bootstrap resamples = %s -- boot-index construction cost scales ",
         "with T*B. This is not an error -- large T is supported -- but expect it to be slow and ",
         "memory-heavy; consider a smaller B if you don't need fine Monte-Carlo p-value resolution."
-      ), T, B, format(T * B, big.mark = ",")
+      ), T, B, format(as.double(T) * B, big.mark = ",")  # as.double here too -- plain T*B still overflows to NA
     ), call. = FALSE)
   }
   if (T <= block) {

@@ -350,14 +350,22 @@ breakdown_number <- function(la, lb, w) {
   }
   order_idx <- order(-c_)  # R's order() is stable: ties keep earliest original index
   s <- M
-  removed <- integer(0)
+  # Preallocate at the loop's own upper bound (length(order_idx) == T) and track a running count,
+  # instead of `removed <- c(removed, i)` -- that reallocates and copies the whole vector every
+  # iteration, making a long elimination scan (large k* relative to T, i.e. exactly the closely-
+  # tied/fragile panels this package is built to flag) cost O(k*^2) instead of O(k*). Trim to the
+  # real count at the end.
+  removed_buf <- integer(length(order_idx))
+  n_removed <- 0L
   for (i in order_idx) {
     if (c_[i] <= 0) break
     s <- s - c_[i]
-    removed <- c(removed, i)
+    n_removed <- n_removed + 1L
+    removed_buf[n_removed] <- i
     if (s <= 0 || s <= .MARGIN_REL_FLOOR * scale * T * wscale) break
   }
-  list(k = length(removed), removed = removed)
+  removed <- removed_buf[seq_len(n_removed)]
+  list(k = n_removed, removed = removed)
 }
 
 #' Decision-level k* — fewest periods whose deletion flips the pooled winner to ANY opponent

@@ -267,3 +267,42 @@ test_that("pivot_agreement() rejects an out-of-int32 n_boot with a worded error,
   L <- list(a = c(1.0, 1.0, 1.0, 1.0, 1.0, 1.0), b = c(0.5, 0.5, 0.5, 0.5, 0.5, 5.0))
   expect_error(pivot_agreement(L, n_boot = 3e9), "single positive integer")
 })
+
+test_that("breakdown_number() scans in O(T), not O(T^2), and matches the old c()-growth reference exactly (24-agent round, 2026-11-18)", {
+  # REGRESSION: the elimination loop built `removed` via `removed <- c(removed, i)`, which
+  # reallocates and copies the whole vector every iteration -- O(k*^2) instead of O(k*) whenever
+  # many periods must be removed to flip the decision (large k* relative to T, i.e. exactly the
+  # closely-tied/fragile panels this package exists to flag). Now preallocates at the loop's own
+  # upper bound and trims at the end. Correctness re-checked against the literal old c()-growth
+  # logic across 300 random panels.
+  set.seed(123)
+  for (i in 1:300) {
+    Tn <- sample(2:25, 1)
+    la <- rnorm(Tn); lb <- rnorm(Tn, mean = 0.3); w <- rep(1, Tn)
+    r <- breakdown_number(la, lb, w)
+    c_ <- w * (lb - la); M <- sum(c_)
+    scale <- (mean(abs(la)) + mean(abs(lb))) / 2; wscale <- mean(w)
+    if (M <= 0 || (M / Tn) <= 1e-9 * scale * wscale) {
+      ref <- list(k = 0L, removed = integer(0))
+    } else {
+      order_idx <- order(-c_); s <- M; removed_ref <- integer(0)
+      for (j in order_idx) {
+        if (c_[j] <= 0) break
+        s <- s - c_[j]; removed_ref <- c(removed_ref, j)
+        if (s <= 0 || s <= 1e-9 * scale * Tn * wscale) break
+      }
+      ref <- list(k = length(removed_ref), removed = removed_ref)
+    }
+    expect_identical(r$k, ref$k)
+    expect_identical(r$removed, ref$removed)
+  }
+  # Performance sanity: a long, fully-tied panel (k* proportional to T) must stay fast (would be
+  # several seconds under the old O(T^2) growth at this size).
+  Tn <- 20000
+  la <- rep(1.0, Tn); lb <- rep(1.0, Tn); lb[1:12000] <- 1.0001
+  t0 <- Sys.time()
+  r <- breakdown_number(la, lb, rep(1, Tn))
+  elapsed <- as.numeric(Sys.time() - t0)
+  expect_equal(r$k, 12000L)
+  expect_lt(elapsed, 2.0)
+})

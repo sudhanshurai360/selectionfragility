@@ -457,6 +457,15 @@ summary.loss_panel <- function(object, ...) {
   # Live names(object$losses), not the cached object$models -- see as.data.frame.loss_panel()'s
   # note; keeps this method consistent with the rest of the pipeline on a mutated object.
   models <- names(object$losses)
+  T <- length(object$labels)
+  if (length(object$weights) != T) {
+    stop(sprintf("loss_panel is inconsistent: %d weights but %d periods.", length(object$weights), T), call. = FALSE)
+  }
+  lens <- vapply(models, function(m) length(object$losses[[m]]), integer(1))
+  if (any(lens != T)) {
+    stop(sprintf("loss_panel is inconsistent: model(s) %s do not have %d periods.",
+                  paste(models[lens != T], collapse = ", "), T), call. = FALSE)
+  }
   mean_loss <- stats::setNames(
     sapply(models, function(m) stats::weighted.mean(as.numeric(object$losses[[m]]), object$weights)),
     models
@@ -519,7 +528,17 @@ save_loss_panel <- function(panel, path) {
   dest_dir <- dirname(normalizePath(path, mustWork = FALSE))
   tmp <- tempfile(pattern = ".losspanel-", tmpdir = dest_dir, fileext = ".tmp")
   on.exit(if (file.exists(tmp)) unlink(tmp), add = TRUE)
-  jsonlite::write_json(payload, tmp, auto_unbox = TRUE, digits = NA)
+  # jsonlite::write_json() formats numbers via R's own locale-sensitive formatting: under a
+  # comma-decimal LC_NUMERIC locale (de_DE, fr_FR, and many others) it emits "1,23" instead of
+  # "1.23", which collides with JSON's own field separator and writes syntactically invalid JSON
+  # with no error. Force the C locale for the duration of this write so the file is valid JSON
+  # regardless of the caller's locale. digits=17 (not the default-disabling digits=NA, which only
+  # gets 15 significant digits) is needed for a genuinely bit-identical round-trip, matching this
+  # function's own documented identical(panel$losses, reloaded$losses) contract.
+  old_numeric <- Sys.getlocale("LC_NUMERIC")
+  Sys.setlocale("LC_NUMERIC", "C")
+  on.exit(suppressWarnings(Sys.setlocale("LC_NUMERIC", old_numeric)), add = TRUE)
+  jsonlite::write_json(payload, tmp, auto_unbox = TRUE, digits = 17)
   if (!file.rename(tmp, path)) {
     stop(sprintf(paste0(
       "save_loss_panel(): failed to rename the temp file to '%s' -- check that the destination ",
@@ -550,6 +569,9 @@ load_loss_panel <- function(path) {
   if (!file.exists(path)) {
     stop(sprintf("load_loss_panel(): file '%s' does not exist.", path), call. = FALSE)
   }
+  old_numeric <- Sys.getlocale("LC_NUMERIC")
+  Sys.setlocale("LC_NUMERIC", "C")
+  on.exit(suppressWarnings(Sys.setlocale("LC_NUMERIC", old_numeric)), add = TRUE)
   payload <- jsonlite::read_json(path, simplifyVector = TRUE)
   missing <- setdiff(c("losses", "weights", "labels"), names(payload))
   if (length(missing) > 0) {

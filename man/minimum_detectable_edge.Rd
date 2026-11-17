@@ -28,7 +28,16 @@ what to do instead (prefer \code{mcs()}/\code{model_confidence_set()}'s block bo
 and its binding rival sit at a comparable loss scale -- an extreme scale mismatch between
 them can produce a nonsensical, unbounded percentage (normalization is by the champion's
 own mean only); sanity-check this fraction yourself if your models' loss magnitudes differ
-by many orders of magnitude. In that same pathological regime (loss magnitudes differing by~15 orders of magnitude) this value can also differ numerically from the Python original bya small constant factor: the paired standard error is a var() of near-equal huge numbers,and R's and NumPy's variance routines are not bit-identical under that catastrophiccancellation. Both answers are meaningless in this regime; well-scaled losses agree tofloating-point.
+by many orders of magnitude. In that same pathological regime this value can -- for specific
+inputs, not as a general rule of the scale mismatch alone -- also differ numerically from the
+Python original by a small constant factor: confirmed reproducible, e.g. champion losses
+\code{c(1e-8, 3e-8, 3e-8)} against a rival \code{c(1e8, 1e8, 1e8)} gives R 1.0378 vs Python 2.5421 (a
+factor of sqrt(6)), because the paired standard error is a \code{var()} of near-equal huge numbers
+and R's and NumPy's variance routines round that catastrophic cancellation differently bit for
+bit. Other extreme-scale panels have been observed to agree to floating-point instead -- this
+is a rare, input-dependent rounding artifact, not a threshold you can rely on crossing at a
+fixed number of orders of magnitude. Both answers are meaningless in this regime regardless;
+well-scaled losses agree to floating-point.
 }
 
 \examples{

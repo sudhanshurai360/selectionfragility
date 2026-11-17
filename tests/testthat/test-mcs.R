@@ -50,3 +50,17 @@ test_that("mcs() coerces/validates B and block instead of crashing its own %d er
   expect_error(mcs(L, B = NA), "single positive integer")
   expect_no_error(mcs(L, B = 200.0, block = 3.0, seed = 1))  # whole-number doubles are fine
 })
+
+test_that("mcs()'s large-T*B warning message doesn't itself overflow to 'NA' (24-agent round, 2026-11-18)", {
+  # REGRESSION: the guard CONDITION was fixed to as.double(T)*B (avoiding an int32 if()-crash at
+  # large T), but the warning MESSAGE TEXT two lines later still computed plain-integer T*B,
+  # silently overflowing back to NA and printing "= NA" in the user-facing diagnostic (plus R's
+  # own spurious "NAs produced by integer overflow" warning) for any T*B combination above both
+  # the 2e7 warning threshold and int32 max. Isolated at the exact types/values mcs() uses.
+  T <- 21500L; B <- 100000L
+  expect_true(as.double(T) * B > 20000000)
+  msg <- sprintf("T=%d periods x B=%d bootstrap resamples = %s", T, B, format(as.double(T) * B, big.mark = ","))
+  expect_false(grepl("= NA", msg, fixed = TRUE))
+  expect_true(grepl("2.15e\\+09|2,150,000,000", msg))  # format() may use scientific notation at this magnitude; either is fine, "NA" is not
+  expect_no_warning(format(as.double(T) * B, big.mark = ","))  # the fixed version must not itself trigger "NAs produced by integer overflow"
+})

@@ -20,7 +20,8 @@ Depends: R (>= 4.1)
 Imports:
     MCS (>= 0.2.1),
     jsonlite,
-    stats
+    stats,
+    utils
 Suggests:
     testthat (>= 3.0.0),
     knitr,

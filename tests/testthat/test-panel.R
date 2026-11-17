@@ -185,3 +185,54 @@ test_that("as.data.frame/summary read live model names and fail loudly on an inc
   p$weights <- c(1, 2)  # deliberately inconsistent
   expect_error(as.data.frame(p), "inconsistent")
 })
+
+test_that("save_loss_panel()/load_loss_panel() round-trip bit-exactly under a comma-decimal numeric locale (24-agent round, 2026-11-18)", {
+  # REGRESSION: jsonlite::write_json() formats numbers via R's own LC_NUMERIC-sensitive
+  # formatting. Under a comma-decimal locale (de_DE, fr_FR, and many others) this silently wrote
+  # e.g. "1,23" for 1.23, colliding with JSON's own field separator -- the file was syntactically
+  # invalid with NO error at write time, and load_loss_panel() on that same file then failed with
+  # a raw jsonlite parse error. save_loss_panel()/load_loss_panel() now force LC_NUMERIC="C" for
+  # the duration of the write/read (restored via on.exit either way).
+  avail <- tryCatch(Sys.setlocale("LC_NUMERIC", "de_DE.UTF-8"), warning = function(w) NA, error = function(e) NA)
+  skip_if(is.na(avail) || identical(avail, ""), "de_DE.UTF-8 locale not available on this machine")
+  old <- Sys.getlocale("LC_NUMERIC")
+  on.exit(suppressWarnings(Sys.setlocale("LC_NUMERIC", old)), add = TRUE)
+  set.seed(42)
+  L <- list(a = 1 + stats::rnorm(20)^2, b = 1 + (stats::rnorm(20) + 1)^2)
+  p <- loss_panel(L)
+  tmp <- tempfile(fileext = ".json")
+  on.exit(unlink(tmp), add = TRUE)
+  expect_no_error(save_loss_panel(p, tmp))
+  raw <- readLines(tmp, warn = FALSE)
+  expect_false(grepl(",0\\.|,-?[0-9]+,", raw))  # no comma-decimal digits leaked into the JSON
+  p2 <- expect_no_error(load_loss_panel(tmp))
+  expect_identical(p$losses, p2$losses)
+})
+
+test_that("save_loss_panel()/load_loss_panel() round-trip BIT-IDENTICALLY (not just all.equal-close) on realistic, non-hand-rounded losses", {
+  # REGRESSION: digits=NA only gets jsonlite 15 significant digits, not the 17 a double needs for
+  # an exact round-trip -- the package's own documented contract is identical(panel$losses,
+  # reloaded$losses), which digits=NA silently violated (~1e-15 relative error) on any loss panel
+  # computed from real floating-point arithmetic rather than hand-typed 1-2 decimal values. Fixed
+  # via digits=17.
+  set.seed(7)
+  L <- list(a = stats::rnorm(15)^2, b = (stats::rnorm(15) + 1)^2, c = stats::rnorm(15)^2 * pi)
+  p <- loss_panel(L)
+  tmp <- tempfile(fileext = ".json")
+  on.exit(unlink(tmp), add = TRUE)
+  save_loss_panel(p, tmp)
+  p2 <- load_loss_panel(tmp)
+  expect_identical(p$losses, p2$losses)
+})
+
+test_that("summary.loss_panel() fails loudly, not with a raw base-R error, on a mutated/inconsistent object (24-agent round, 2026-11-18)", {
+  # REGRESSION: as.data.frame.loss_panel() validates length(x$weights)==length(x$labels) and
+  # per-model lengths before use and raises a clear package error; summary.loss_panel() claimed
+  # (in a code comment) the same consistency but had no such guard, so stats::weighted.mean()
+  # threw a raw, unhelpful "'x' and 'w' must have the same length" with no indication the real
+  # cause was a malformed/mutated loss_panel. Now mirrors as.data.frame.loss_panel()'s guard.
+  L <- list(a = c(1.1, 2.2, 3.3, 0.9, 5.5), b = c(1.0, 2.0, 3.5, 4.0, 5.0))
+  p <- loss_panel(L, labels = 2020:2024)
+  p$weights <- c(1, 2)  # deliberately inconsistent (same mutation as the as.data.frame test above)
+  expect_error(summary(p), "inconsistent")
+})
