@@ -13,6 +13,16 @@ test_that("prop22_certifies validates finiteness and z > 0", {
   expect_error(prop22_certifies(3, 30, z = -1), "z > 0")
 })
 
+test_that("prop22_certifies rejects non-scalar and non-integer k/T with a clean error", {
+  # REGRESSION (found by an adversarial-fuzz review, 2026-11-17): prop22_certifies(c(1,2), 10)
+  # previously fell through to is.finite(k) && ... on a length-2 k, which errors with an
+  # unhelpful raw R coercion message ("'length = 2' in coercion to 'logical(1)'") instead of this
+  # package's usual clean, worded validation; prop22_certifies(2, 10.7) silently accepted a
+  # fractional period count and returned a confident TRUE/FALSE from fractional loop arithmetic.
+  expect_error(prop22_certifies(c(1, 2), 10), "single value")
+  expect_error(prop22_certifies(2, 10.7), "whole number")
+})
+
 test_that("certified_tied_subset matches the Python oracle", {
   L <- list(
     champ        = c(1.0, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98, 1.0, 0.99, 1.01, 1.0),

@@ -77,7 +77,7 @@
   best_dist <- min(dists)
   tol <- .MARGIN_REL_FLOOR * (abs(means[rivals]) + abs(means[champ])) / 2.0
   tied <- rivals[(dists - best_dist) <= tol]
-  sort(tied)[1]
+  sort(tied, method = "radix")[1]
 }
 
 #' @keywords internal
@@ -94,6 +94,17 @@
 }
 
 #' @keywords internal
+# KNOWN LIMITATION, NOT FIXED HERE: normalizing by the champion's own mean alone (rather than
+# some combination of champion and rival scale) can produce a nonsensical, unbounded "percentage"
+# when the champion and rival sit at very different loss scales (both individually valid,
+# unflagged loss magnitudes -- e.g. champion mean ~1e-8, rival mean ~1e8 can print an "observed
+# edge" over 9,999,999,650%, straight into report()'s RESOLUTION line with no guard). This formula
+# is shared, oracle-pinned behavior with the Python original's `_scale(mean_champ)` (identify.py's
+# sibling module resolution.py) -- changing it here alone would create exactly the cross-language
+# divergence this package's review discipline exists to prevent, and changing it in both
+# languages is a statistical-methodology decision outside the scope of a CRAN-submission pass.
+# Left as a documented caveat (see minimum_detectable_edge()/significance_boundary()/mcb_bound()'s
+# @section Assumption) rather than silently redefining the statistic right before submission.
 .res_scale <- function(mean_champ) {
   if (abs(mean_champ) > 1e-12) abs(mean_champ) else 1.0
 }
@@ -107,7 +118,11 @@
 #' @return The minimum detectable edge, as a fraction of the champion's loss level.
 #' @section Assumption: assumes no autocorrelation in the per-period (rival - champion) loss
 #'   differential -- see `.weighted_se`'s comment in resolution.R for why this can matter and
-#'   what to do instead (prefer `mcs()`/`model_confidence_set()`'s block bootstrap) when it does.
+#'   what to do instead (prefer `mcs()`/`model_confidence_set()`'s block bootstrap) when it does. Also assumes the champion
+#'   and its binding rival sit at a comparable loss scale -- an extreme scale mismatch between
+#'   them can produce a nonsensical, unbounded percentage (normalization is by the champion's
+#'   own mean only); sanity-check this fraction yourself if your models' loss magnitudes differ
+#'   by many orders of magnitude.
 #' @seealso [significance_boundary()], [mcb_bound()], [resolution_report()] (combines all three
 #'   into the full R1/R2 refusal-gated workflow).
 #' @examples
@@ -139,7 +154,9 @@ minimum_detectable_edge <- function(L, w = NULL, power = 0.80, alpha = 0.05) {
 #' @return The significance threshold, as a fraction of the champion's loss level. The observed
 #'   edge must clear this value to be called significant at the stated one-sided `alpha`.
 #' @section Assumption: assumes no autocorrelation in the per-period (rival - champion) loss
-#'   differential -- see `.weighted_se`'s comment in resolution.R.
+#'   differential -- see `.weighted_se`'s comment in resolution.R. Also assumes the champion and
+#'   its binding rival sit at a comparable loss scale -- see [minimum_detectable_edge()]'s
+#'   Assumption section for why an extreme scale mismatch can produce a nonsensical percentage.
 #' @seealso [minimum_detectable_edge()], [mcb_bound()], [resolution_report()].
 #' @examples
 #' L <- list(
@@ -170,7 +187,9 @@ significance_boundary <- function(L, w = NULL, alpha = 0.05) {
 #'   fraction of the champion's loss level, corrected for the post-hoc rival-selection problem
 #'   (unlike `k*`, which is a descriptive fact about the observed data, not a corrected bound).
 #' @section Assumption: assumes no autocorrelation in the per-period (rival - champion) loss
-#'   differential -- see `.weighted_se`'s comment in resolution.R.
+#'   differential -- see `.weighted_se`'s comment in resolution.R. Also assumes the champion and
+#'   its binding rival sit at a comparable loss scale -- see [minimum_detectable_edge()]'s
+#'   Assumption section for why an extreme scale mismatch can produce a nonsensical percentage.
 #' @seealso [minimum_detectable_edge()], [significance_boundary()], [resolution_report()],
 #'   [prop22_certifies()] (contrast: NOT multiple-comparisons-corrected, for a single
 #'   pre-specified rival rather than an adaptively-searched one).

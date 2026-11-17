@@ -132,6 +132,20 @@ test_that("exchangeable_benchmark is reproducible given the same seed", {
   expect_equal(eb1, eb2)
 })
 
+test_that("tie-breaks on mixed-case model names match Python's codepoint sort, not locale collation", {
+  # REGRESSION (found by a cross-language parity audit, 2026-11-17): R's sort()/order() on
+  # character vectors defaults to LC_COLLATE locale collation, which disagrees with Python's
+  # codepoint-based sorted()/min() for mixed-case names -- e.g. under en_US.UTF-8, R's sort()
+  # orders "alpha" < "Zeta" (dictionary order) while Python's sorted() orders "Zeta" < "alpha"
+  # (codepoint order, uppercase sorts first). On a genuinely tied panel this silently picked a
+  # DIFFERENT model as the per-period/pooled winner depending on which language (or even which
+  # locale) ran the comparison. Fixed by sorting with method="radix" everywhere model names are
+  # tie-broken, which is always byte/codepoint order regardless of locale.
+  L <- list(Zeta = c(1, 2, 1, 2), alpha = c(1, 2, 1, 2))
+  expect_equal(per_period_winner(L), "Zeta")
+  expect_equal(pooled_winner(L), "Zeta")
+})
+
 test_that("duplicate model names are rejected, not silently aliased to the first match", {
   # REGRESSION (found in round-4 R-engineering review): R's L[[name]] lookup silently returns
   # only the FIRST match for a duplicated name, so a second model sharing a name was previously
@@ -140,4 +154,25 @@ test_that("duplicate model names are rejected, not silently aliased to the first
   L <- list(a = c(1, 1, 1, 1, 1), a = c(100, 100, 100, 100, 100), b = c(2, 2, 2, 2, 2))
   expect_error(pooled_winner(L), "unique.*duplicate|duplicate.*unique")
   expect_error(decision_breakdown(L), "unique.*duplicate|duplicate.*unique")
+})
+
+test_that("breakdown_number() rejects mismatched la/lb/w lengths instead of silently recycling", {
+  # REGRESSION (found by an adversarial-fuzz review, 2026-11-17): the length check was
+  # `.validate_weights(as.numeric(w), length(w))` -- a self-referential no-op that never actually
+  # compared against length(la)/length(lb). When length(w) happened to be an exact divisor of
+  # length(la)/length(lb), R's silent vector recycling activated with NO warning at all and
+  # returned a confident, wrong k*.
+  la <- c(1, 1, 1, 1, 1, 1)
+  lb <- c(0.9, 0.9, 0.9, 0.9, 0.9, 1.3)
+  expect_error(breakdown_number(la, lb, c(1, 50)), "same length")
+  # The correctly-sized call still works.
+  res <- breakdown_number(la, lb, rep(1, 6))
+  expect_equal(res$k, 0L)
+})
+
+test_that("exchangeable_benchmark() rejects K < 2 with a clean error, not a raw R internal error", {
+  # REGRESSION (found by an adversarial-fuzz review, 2026-11-17): K=0 previously reached a raw
+  # "'names' attribute [1] must be the same length as the vector [0]" internal error instead of
+  # a clean, worded validation message matching the rest of this package's discipline.
+  expect_error(exchangeable_benchmark(K = 0, T = 10), "at least 2 models")
 })

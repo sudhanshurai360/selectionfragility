@@ -34,10 +34,22 @@
 #' prop22_certifies(0, T = 10)   # NA -- sentinel: k <= 0 means no breakdown exists, out of scope
 #' prop22_certifies(10, T = 10)  # NA -- sentinel: k >= T is also out of scope
 prop22_certifies <- function(k, T, z = 1.96) {
+  if (!(length(k) == 1 && length(T) == 1 && length(z) == 1)) {
+    stop(sprintf(
+      "prop22_certifies() requires k, T, z to each be a single value -- got length(k)=%d, length(T)=%d, length(z)=%d.",
+      length(k), length(T), length(z)
+    ), call. = FALSE)
+  }
   if (!(is.finite(k) && is.finite(T) && is.finite(z))) {
     stop(sprintf("prop22_certifies() requires finite k, T, z -- got k=%s, T=%s, z=%s", k, T, z), call. = FALSE)
   }
   if (z <= 0) stop(sprintf("prop22_certifies() requires z > 0 (a critical value) -- got z=%s", z), call. = FALSE)
+  if (k != round(k) || T != round(T)) {
+    stop(sprintf(
+      "prop22_certifies() requires k and T to be whole numbers (a count of periods) -- got k=%s, T=%s.",
+      k, T
+    ), call. = FALSE)
+  }
   if (k <= 0 || k >= T) return(NA)
   isTRUE(k <= .prop22_threshold(T, z = z))
 }
@@ -92,11 +104,11 @@ certified_tied_subset <- function(L, w = NULL, z = 1.96) {
   champ <- pooled_winner(L, w)
   la <- as.numeric(L[[champ]])
   subset <- champ
-  for (m in sort(setdiff(names(L), champ))) {
+  for (m in sort(setdiff(names(L), champ), method = "radix")) {
     res <- breakdown_number(la, as.numeric(L[[m]]), w)
     k <- res$k
     cert <- prop22_certifies(k, T, z = z)
     if (k == 0 || isTRUE(cert)) subset <- c(subset, m)
   }
-  sort(unique(subset))
+  sort(unique(subset), method = "radix")
 }

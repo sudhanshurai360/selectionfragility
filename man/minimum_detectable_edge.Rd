@@ -24,7 +24,11 @@ Minimum detectable edge against the binding rival
 \section{Assumption}{
  assumes no autocorrelation in the per-period (rival - champion) loss
 differential -- see \code{.weighted_se}'s comment in resolution.R for why this can matter and
-what to do instead (prefer \code{mcs()}/\code{model_confidence_set()}'s block bootstrap) when it does.
+what to do instead (prefer \code{mcs()}/\code{model_confidence_set()}'s block bootstrap) when it does. Also assumes the champion
+and its binding rival sit at a comparable loss scale -- an extreme scale mismatch between
+them can produce a nonsensical, unbounded percentage (normalization is by the champion's
+own mean only); sanity-check this fraction yourself if your models' loss magnitudes differ
+by many orders of magnitude.
 }
 
 \examples{

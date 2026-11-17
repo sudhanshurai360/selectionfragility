@@ -93,3 +93,22 @@ test_that("R2 refusal on non-uniform weights preserves the already-computed reso
   expect_null(rr$identified)
   expect_equal(rr$fragility_read, "undetermined")
 })
+
+test_that(".res_scale()'s champion-only normalization stays finite under an extreme cross-model scale mismatch (known limitation, documented, not fixed)", {
+  # Found by an extreme-input stability review, 2026-11-17: normalizing by the champion's own
+  # mean alone produces a nonsensical, unbounded "percentage" when the champion and rival sit at
+  # very different loss scales (both individually valid, unflagged loss magnitudes) -- e.g. a
+  # champion mean ~1e-8 and a rival mean ~1e8 prints an "observed edge" over 9,999,999,650% into
+  # report()'s RESOLUTION line. This is SHARED, oracle-pinned behavior with the Python original's
+  # identical `_scale(mean_champ)` formula (resolution.py) -- deliberately left unfixed here to
+  # avoid creating a cross-language divergence; see the @section Assumption on
+  # minimum_detectable_edge()/significance_boundary()/mcb_bound() for the documented caveat. This
+  # test only pins that the result stays a finite (if uninterpretable) number rather than
+  # NaN/Inf/erroring, so a future change to this formula is a deliberate, reviewed decision.
+  a <- rep(1e-8, 10)
+  b <- rep(1e8, 10)
+  L <- list(a = a, b = b)
+  expect_true(is.finite(minimum_detectable_edge(L)))
+  expect_true(is.finite(significance_boundary(L)))
+  expect_true(is.finite(mcb_bound(L)))
+})

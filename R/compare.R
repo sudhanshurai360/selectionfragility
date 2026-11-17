@@ -54,7 +54,7 @@ print.change_report <- function(x, ...) {
 #' @keywords internal
 .churn_base_rate <- function(L, w, n_perm = 400, seed = 0) {
   if (n_perm <= 0) stop(sprintf("n_perm must be a positive integer; got %s.", n_perm), call. = FALSE)
-  models <- sort(names(L))
+  models <- sort(names(L), method = "radix")
   M <- do.call(cbind, lapply(models, function(m) as.numeric(L[[m]])))  # T x K
   colnames(M) <- models
   obs_champ <- pooled_winner(stats::setNames(lapply(models, function(m) M[, m]), models), w)

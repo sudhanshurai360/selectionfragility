@@ -151,3 +151,15 @@ test_that("summary.loss_panel()'s ... goes to the MCS check, not to fragility() 
   s_w <- summary(panel_w)
   expect_true(all(is.na(s_w$in_mcs)))
 })
+
+test_that("loss_panel() from a matrix rejects duplicate column names, matching the list/data.frame constructors", {
+  # REGRESSION (found by an adversarial-fuzz review, 2026-11-17): .from_list() and
+  # .from_data_frame() both called .check_no_name_collision(), but .from_matrix() did not --
+  # a duplicate-named column passed construction silently, and R's `[[` on a duplicated name
+  # always returns the FIRST match, so as.data.frame.loss_panel()/summary.loss_panel() (which
+  # index losses by name directly, unlike pooled_winner()/decision_breakdown() which re-validate)
+  # silently dropped the second column's real data with zero error.
+  M <- matrix(c(1, 1, 1, 1, 1, 1, 5, 5, 5, 5, 5, 5), ncol = 2)
+  colnames(M) <- c("a", "a")
+  expect_error(loss_panel(M), "duplicate")
+})

@@ -60,7 +60,7 @@
       paste(unique(names(L)[duplicated(names(L))]), collapse = ", ")
     ), call. = FALSE)
   }
-  models <- sort(names(L))
+  models <- sort(names(L), method = "radix")
   T <- NULL
   cols <- list()
   for (m in models) {

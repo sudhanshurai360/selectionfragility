@@ -137,7 +137,7 @@ pooled_winner <- function(L, w = NULL) {
   best_m <- names(sort(means))[1]
   scale <- (abs(means[best_m]) + means) / 2.0
   tied <- names(L)[(means - best) <= .MARGIN_REL_FLOOR * scale]
-  sort(tied)[1]
+  sort(tied, method = "radix")[1]
 }
 
 #' Per-period (plurality) winner — the model winning the most periods
@@ -167,7 +167,13 @@ per_period_winner <- function(L, return_ties = FALSE) {
   up <- .unwrap_panel(L, NULL); L <- up$L
   L <- .as_loss_dict(L)
   .validate_losses(L)
-  models <- sort(names(L))
+  # method="radix" throughout this package (every sort()/order() on model names, not just here):
+  # R's default sort() on character vectors uses LC_COLLATE locale collation, which disagrees
+  # with Python's codepoint-based sorted()/min() for mixed-case names (e.g. en_US.UTF-8 orders
+  # "alpha" < "Zeta", Python orders "Zeta" < "alpha") -- silently changing which model wins a
+  # tie-break between the two language ports. radix sort is always byte/codepoint order,
+  # locale-independent, and matches Python's convention.
+  models <- sort(names(L), method = "radix")
   M <- do.call(rbind, lapply(models, function(m) as.numeric(L[[m]])))  # models x T
   per_period_min <- apply(M, 2, min)
   is_min <- sweep(M, 2, per_period_min, `==`)
@@ -302,8 +308,18 @@ condorcet_status <- function(L) {
 #' nbeats <- c(0.5, 0.5, 0.5, 0.5, 5.0)
 #' breakdown_number(la = ar1, lb = nbeats, w = rep(1, 5))  # k = 1, removed = 5
 breakdown_number <- function(la, lb, w) {
-  w <- .validate_weights(as.numeric(w), length(w))
   la <- as.numeric(la); lb <- as.numeric(lb); w <- as.numeric(w)
+  if (!(length(la) == length(lb) && length(la) == length(w))) {
+    stop(sprintf(
+      paste0(
+        "breakdown_number(): la, lb, and w must all have the same length (one entry per period); ",
+        "got length(la)=%d, length(lb)=%d, length(w)=%d. R's vector recycling would otherwise ",
+        "silently reuse a mismatched w/la/lb against itself -- most dangerously when one length ",
+        "happens to be an exact multiple of another, which recycles with NO warning at all."
+      ), length(la), length(lb), length(w)
+    ), call. = FALSE)
+  }
+  w <- .validate_weights(w, length(w))
   if (!(all(is.finite(la)) && all(is.finite(lb)))) {
     stop(paste0(
       "breakdown_number requires finite (non-NA/NaN/Inf) losses for both models; a single NA ",
@@ -376,7 +392,7 @@ decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
   la <- as.numeric(L[[a]])
   best <- NULL  # list(k, opponent, removed)
   ties <- character(0)
-  for (m in sort(setdiff(names(L), a))) {
+  for (m in sort(setdiff(names(L), a), method = "radix")) {
     res <- breakdown_number(la, as.numeric(L[[m]]), w)
     k <- res$k
     if (is.null(best) || k < best$k) {
@@ -496,6 +512,7 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
 #' eb <- exchangeable_benchmark(K = 3, T = 20, n_rep = 20, n_boot = 50, seed = 1)
 #' eb$median  # typical winner_stability() under "no model is really better"
 exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL, seed = 0, circular = TRUE) {
+  if (K < 2) stop(sprintf("exchangeable_benchmark(): need at least 2 models; got K=%s.", K), call. = FALSE)
   w <- rep(1, T)
   out <- numeric(n_rep)
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL

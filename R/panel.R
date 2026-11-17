@@ -304,6 +304,7 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
   }
   cn <- colnames(arr)
   nm <- if (!is.null(cn)) cn else paste0("m", seq_len(K) - 1L)
+  if (!is.null(cn)) .check_no_name_collision(nm)
   models <- stats::setNames(lapply(seq_len(K), function(i) as.numeric(arr[, i])), nm)
   .check_metadata_columns(models, T)
   list(losses = models, labels = seq_len(T) - 1L, labels_are_positional = TRUE)

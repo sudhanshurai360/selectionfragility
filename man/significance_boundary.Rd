@@ -22,7 +22,9 @@ One-sided significance threshold against the binding rival
 }
 \section{Assumption}{
  assumes no autocorrelation in the per-period (rival - champion) loss
-differential -- see \code{.weighted_se}'s comment in resolution.R.
+differential -- see \code{.weighted_se}'s comment in resolution.R. Also assumes the champion and
+its binding rival sit at a comparable loss scale -- see \code{\link[=minimum_detectable_edge]{minimum_detectable_edge()}}'s
+Assumption section for why an extreme scale mismatch can produce a nonsensical percentage.
 }
 
 \examples{

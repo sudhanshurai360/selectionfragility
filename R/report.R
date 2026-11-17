@@ -45,7 +45,7 @@
 
 #' @keywords internal
 .strict_win_counts <- function(L) {
-  models <- sort(names(L))
+  models <- sort(names(L), method = "radix")
   M <- do.call(rbind, lapply(models, function(m) as.numeric(L[[m]])))
   pmin <- apply(M, 2, min)
   is_min <- sweep(M, 2, pmin, `==`)
