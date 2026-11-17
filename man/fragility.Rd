@@ -22,7 +22,11 @@ fragility(
 
 \item{shock_periods}{Optional vector of known shock-period labels.}
 
-\item{labels}{Optional vector of period labels.}
+\item{labels}{Optional vector of period labels. If \code{L} is a \code{loss_panel} built with
+\verb{labels=}, those labels are used automatically; pass \code{labels} here only to override them.
+The \code{responsible} field reports the k* periods by these labels when supplied, otherwise as
+0-based positional indices (matching the Python original; note \code{decision_breakdown()$removed}
+is 1-based instead).}
 
 \item{n_boot, seed}{Bootstrap settings for \code{winner_stability()}.}
 

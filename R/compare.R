@@ -62,7 +62,7 @@ print.change_report <- function(x, ...) {
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
   set.seed(seed)
   on.exit({
-    if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    if (is.null(old_seed)) { if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv) } else assign(".Random.seed", old_seed, envir = .GlobalEnv)
   }, add = TRUE)
 
   T <- nrow(M)

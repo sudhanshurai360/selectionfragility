@@ -53,5 +53,5 @@ res <- model_confidence_set(L, B = 200, seed = 1)
 res$surviving  # c("ar1", "ets"); nbeats is eliminated
 }
 \seealso{
-\code{\link[=mcs]{mcs()}} (character-vector return, same engine), \code{\link[=identified]{identified()}}/\code{\link[=mcs_size]{mcs_size()}}.
+\code{\link[=mcs]{mcs()}} (column-index return, same engine), \code{\link[=identified]{identified()}}/\code{\link[=mcs_size]{mcs_size()}}.
 }

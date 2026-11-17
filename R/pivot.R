@@ -111,7 +111,9 @@ concentration_share <- function(L, w = NULL) {
 #' panel <- loss_panel(L)
 #' pivot_agreement(panel, seed = 42)  # ~0.78 -- the named pivot period is fairly stable
 pivot_agreement <- function(L, w = NULL, seed = 0, n_boot = 200, frac = 0.8) {
-  if (as.integer(n_boot) <= 0) stop(sprintf("pivot_agreement(): n_boot must be a positive integer; got %s.", n_boot), call. = FALSE)
+  n_boot_in <- n_boot
+  n_boot <- suppressWarnings(as.integer(n_boot))  # as.integer guards int32 overflow (NA -> if() crash)
+  if (length(n_boot) != 1 || is.na(n_boot) || n_boot <= 0) stop(sprintf("pivot_agreement(): n_boot must be a single positive integer; got %s.", paste(format(n_boot_in), collapse = ", ")), call. = FALSE)
   if (!(frac > 0.0 && frac < 1.0)) {
     stop(sprintf(
       paste0(
@@ -133,7 +135,7 @@ pivot_agreement <- function(L, w = NULL, seed = 0, n_boot = 200, frac = 0.8) {
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
   set.seed(seed)
   on.exit({
-    if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    if (is.null(old_seed)) { if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv) } else assign(".Random.seed", old_seed, envir = .GlobalEnv)
   }, add = TRUE)
   agree <- 0L; valid <- 0L
   for (b in seq_len(n_boot)) {

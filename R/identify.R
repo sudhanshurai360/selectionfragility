@@ -112,16 +112,18 @@
 .run_mcs_arch <- function(L, alpha = 0.10, reps = 500, block_size = 3, seed = 0, w = NULL) {
   .validate_alpha(alpha)
   .validate_mcs_weights2(w)
-  if (as.integer(reps) < 2) {
+  reps_in <- reps; reps <- suppressWarnings(as.integer(reps))  # as.integer guards int32 overflow (NA -> if() crash)
+  if (length(reps) != 1 || is.na(reps) || reps < 2) {
     stop(sprintf(
       paste0(
-        "identified()/mcs_size(): reps must be >= 2 (MCS::MCSprocedure()'s own bootstrap-replication ",
-        "floor); got %s."
-      ), reps
+        "identified()/mcs_size(): reps must be a single integer >= 2 (MCS::MCSprocedure()'s own ",
+        "bootstrap-replication floor); got %s."
+      ), paste(format(reps_in), collapse = ", ")
     ), call. = FALSE)
   }
-  if (as.integer(block_size) < 0) {
-    stop(sprintf("identified()/mcs_size(): block_size must be a non-negative integer; got %s.", block_size), call. = FALSE)
+  block_size_in <- block_size; block_size <- suppressWarnings(as.integer(block_size))
+  if (length(block_size) != 1 || is.na(block_size) || block_size < 0) {
+    stop(sprintf("identified()/mcs_size(): block_size must be a single non-negative integer; got %s.", paste(format(block_size_in), collapse = ", ")), call. = FALSE)
   }
   M <- .to_matrix_sorted(L)
   models <- colnames(M)
@@ -152,9 +154,10 @@
   # RNG HYGIENE: MCS::MCSprocedure() calls set.seed() internally and consumes the RNG stream.
   # Without this save/restore, every public function that routes through here --
   # identified()/mcs_size()/resolution_report()/compare()/report() -- would silently corrupt the
-  # caller's global .Random.seed, unlike this package's native bootstrap functions (mcs.R, pivot.R,
-  # fragility.R, compare.R's .churn_base_rate) which all already save/restore. This path was the
-  # one that omitted the wrapper. On a fresh session (.Random.seed not yet created), restore to
+  # caller's global .Random.seed. The native bootstrap functions (mcs.R, pivot.R, fragility.R,
+  # compare.R's .churn_base_rate) use this same save/restore idiom, including the fresh-session
+  # NULL branch that removes the seed set.seed() leaves behind. On a fresh session (.Random.seed
+  # not yet created), restore to
   # the pristine "no seed" state by removing the seed MCSprocedure's set.seed() leaves behind.
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
   on.exit({

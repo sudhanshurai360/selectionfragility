@@ -168,7 +168,7 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
       ), K
     ), call. = FALSE)
   }
-  if (T * B > 20000000) {
+  if (as.double(T) * B > 20000000) {  # as.double guards int32 overflow (NA -> if() crash) at large T
     warning(sprintf(
       paste0(
         "mcs(): T=%d periods x B=%d bootstrap resamples = %s -- boot-index construction cost scales ",
@@ -186,7 +186,7 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
   set.seed(seed)
   on.exit({
-    if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    if (is.null(old_seed)) { if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv) } else assign(".Random.seed", old_seed, envir = .GlobalEnv)
   }, add = TRUE)
   boot <- lapply(seq_len(B), function(i) .block_resample_idx(T, block, circular = TRUE))
 
@@ -255,7 +255,7 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
 #' # B kept small here purely for example speed; use the B=2000 default for real analyses.
 #' res <- model_confidence_set(L, B = 200, seed = 1)
 #' res$surviving  # c("ar1", "ets"); nbeats is eliminated
-#' @seealso [mcs()] (character-vector return, same engine), [identified()]/[mcs_size()].
+#' @seealso [mcs()] (column-index return, same engine), [identified()]/[mcs_size()].
 #' @export
 model_confidence_set <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NULL) {
   up <- .unwrap_panel(L, NULL); L <- up$L

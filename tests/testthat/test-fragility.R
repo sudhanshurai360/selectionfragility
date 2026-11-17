@@ -213,3 +213,57 @@ test_that("a non-integer block does not inject NA into the bootstrap resample in
             b = c(1.2, 1.1, 1.3, 1.1, 1.4, 1.0, 1.2, 1.1, 1.25, 1.15))
   expect_no_error(winner_stability(L, block = 3.7, seed = 1))
 })
+
+test_that("fragility()/surprise_concentration() honor a loss_panel's user-supplied labels (8-reviewer round, 2026-11-17)", {
+  # REGRESSION: .unwrap_panel() dropped the panel's $labels, so fragility(panel)$responsible and
+  # surprise_concentration(panel)$hardest fell back to 0-based positional indices even when the
+  # user had attached real labels -- unlike report(panel), which resolved them. A forecaster who
+  # built loss_panel(L, labels=years) and read $responsible got the WRONG (positional) period id.
+  # Passing labels= explicitly already worked and matched the Python oracle; only the panel path
+  # dropped them. Fix flows user-supplied labels (labels_are_positional == FALSE) through.
+  L <- list(
+    ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+    nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+    ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18))
+  p <- loss_panel(L, labels = 2015:2024)
+  # The shock is at period 9 (1-based); label 2023. Panel path must resolve to the label now.
+  expect_equal(fragility(p)$responsible[[1]], 2023)
+  expect_equal(fragility(L, labels = 2015:2024)$responsible[[1]], 2023)  # explicit still works
+  # An explicit labels= argument still overrides the panel's labels.
+  expect_equal(fragility(p, labels = 2100:2109)$responsible[[1]], 2108)
+  # A panel WITHOUT user labels keeps the documented 0-based positional fallback (unchanged).
+  expect_equal(fragility(loss_panel(L))$responsible[[1]], 8)
+  # surprise_concentration()'s hardest field has the identical path.
+  sp <- loss_panel(list(a = c(1, 1, 1, 1, 5), b = c(0.5, 0.5, 0.5, 0.5, 0.6)), labels = 2020:2024)
+  expect_equal(surprise_concentration(sp)$hardest, 2024)
+  expect_equal(surprise_concentration(loss_panel(list(a = c(1, 1, 1, 1, 5), b = c(0.5, 0.5, 0.5, 0.5, 0.6))))$hardest, 4)
+})
+
+test_that("winner_stability()/exchangeable_benchmark() do NOT leave a .Random.seed on a fresh session (8-reviewer round, 2026-11-17)", {
+  # REGRESSION: the native bootstrap wrappers saved/restored .Random.seed only when one already
+  # existed; on a fresh session (no prior set.seed) old_seed was NULL and the on.exit did nothing,
+  # leaving the set.seed()-created seed in .GlobalEnv -- silently pinning the caller's later
+  # "random" draws to the package's seed. We simulate the fresh-session state by removing
+  # .Random.seed first, then assert each wrapper leaves it absent again (mirrors .run_mcs_arch).
+  L <- list(a = c(1.0, 1.0, 1.0, 1.0, 1.0, 1.0), b = c(0.5, 0.5, 0.5, 0.5, 0.5, 5.0))
+  fresh <- function(f) {
+    if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
+    f()
+    exists(".Random.seed", envir = .GlobalEnv)
+  }
+  expect_false(fresh(function() winner_stability(L, n_boot = 10, seed = 1)))
+  expect_false(fresh(function() pivot_agreement(L, n_boot = 10, seed = 1)))
+  expect_false(fresh(function() mcs(cbind(a = L$a, b = L$b), B = 50, seed = 1)))
+  expect_false(fresh(function() exchangeable_benchmark(K = 2, T = 6, n_rep = 3, n_boot = 10, seed = 1)))
+  # And a normal (non-fresh) session is still restored byte-identically.
+  set.seed(99); before <- get(".Random.seed", envir = .GlobalEnv)
+  invisible(winner_stability(L, n_boot = 10, seed = 1))
+  expect_identical(before, get(".Random.seed", envir = .GlobalEnv))
+})
+
+test_that("pivot_agreement() rejects an out-of-int32 n_boot with a worded error, not an NA crash (8-reviewer round)", {
+  # REGRESSION: `if (as.integer(n_boot) <= 0)` coerced 3e9 to NA, so if(NA) crashed with the
+  # opaque base-R "missing value where TRUE/FALSE needed". Now mirrors winner_stability's guard.
+  L <- list(a = c(1.0, 1.0, 1.0, 1.0, 1.0, 1.0), b = c(0.5, 0.5, 0.5, 0.5, 0.5, 5.0))
+  expect_error(pivot_agreement(L, n_boot = 3e9), "single positive integer")
+})

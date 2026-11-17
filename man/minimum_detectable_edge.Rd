@@ -28,7 +28,7 @@ what to do instead (prefer \code{mcs()}/\code{model_confidence_set()}'s block bo
 and its binding rival sit at a comparable loss scale -- an extreme scale mismatch between
 them can produce a nonsensical, unbounded percentage (normalization is by the champion's
 own mean only); sanity-check this fraction yourself if your models' loss magnitudes differ
-by many orders of magnitude.
+by many orders of magnitude. In that same pathological regime (loss magnitudes differing by~15 orders of magnitude) this value can also differ numerically from the Python original bya small constant factor: the paired standard error is a var() of near-equal huge numbers,and R's and NumPy's variance routines are not bit-identical under that catastrophiccancellation. Both answers are meaningless in this regime; well-scaled losses agree tofloating-point.
 }
 
 \examples{

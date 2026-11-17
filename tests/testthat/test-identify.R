@@ -116,3 +116,12 @@ test_that(".validate_alpha gives a worded error for NA/NULL/length>1 alpha, not 
   expect_error(mcs_size(L, alpha = NA), "single finite number")
   expect_error(mcs_size(L, alpha = c(0.1, 0.2)), "single finite number")
 })
+
+test_that("mcs_size()/identified() reject out-of-int32 reps and block_size with worded errors, not NA crashes (8-reviewer round, 2026-11-17)", {
+  # REGRESSION: `if (as.integer(reps) < 2)` / `if (as.integer(block_size) < 0)` coerced an
+  # out-of-int32 count to NA, so if(NA) crashed with the opaque "missing value where TRUE/FALSE
+  # needed". The Python oracle (int()) has no overflow and proceeds. Now both coerce-and-check NA.
+  L <- list(a = c(1.0, 1.1, 0.9, 1.0), b = c(2.0, 2.1, 1.9, 2.0))
+  expect_error(mcs_size(L, reps = 3e9), "single integer >= 2")
+  expect_error(mcs_size(L, block_size = 3e9), "single non-negative integer")
+})

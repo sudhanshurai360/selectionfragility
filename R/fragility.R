@@ -12,11 +12,16 @@
 
 #' @keywords internal
 .unwrap_panel <- function(L, w) {
+  labels <- NULL
   if (inherits(L, "loss_panel")) {
     if (is.null(w)) w <- L$weights
+    # Surface only user-supplied labels; auto-generated positional labels are left
+    # NULL so label-resolving callers (fragility/surprise_concentration) keep their
+    # documented positional fallback instead of printing 0,1,2,... as if named.
+    if (isFALSE(L$labels_are_positional)) labels <- L$labels
     L <- L$losses
   }
-  list(L = L, w = w)
+  list(L = L, w = w, labels = labels)
 }
 
 #' @keywords internal
@@ -511,7 +516,7 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
   set.seed(seed)
   on.exit({
-    if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    if (is.null(old_seed)) { if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv) } else assign(".Random.seed", old_seed, envir = .GlobalEnv)
   }, add = TRUE)
   counts <- stats::setNames(rep(0L, length(L)), names(L))
   for (b in seq_len(n_boot)) {
@@ -556,7 +561,7 @@ exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL
   out <- numeric(n_rep)
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
   on.exit({
-    if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    if (is.null(old_seed)) { if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv) } else assign(".Random.seed", old_seed, envir = .GlobalEnv)
   }, add = TRUE)
   for (r in seq_len(n_rep)) {
     set.seed(seed + r)
@@ -587,6 +592,7 @@ exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL
 #' surprise_concentration(L)  # sci = 1 -- all of the surprise is in one period (hardest = 3)
 surprise_concentration <- function(L, labels = NULL) {
   up <- .unwrap_panel(L, NULL); L <- up$L
+  if (is.null(labels)) labels <- up$labels  # honor a panel's user-supplied labels
   L <- .as_loss_dict(L)
   T_sc <- .validate_losses(L)
   if (!is.null(labels) && length(labels) != T_sc) {
@@ -622,7 +628,11 @@ surprise_concentration <- function(L, labels = NULL) {
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @param w Optional numeric vector of per-period weights.
 #' @param shock_periods Optional vector of known shock-period labels.
-#' @param labels Optional vector of period labels.
+#' @param labels Optional vector of period labels. If `L` is a `loss_panel` built with
+#'   `labels=`, those labels are used automatically; pass `labels` here only to override them.
+#'   The `responsible` field reports the k* periods by these labels when supplied, otherwise as
+#'   0-based positional indices (matching the Python original; note `decision_breakdown()$removed`
+#'   is 1-based instead).
 #' @param n_boot,seed Bootstrap settings for `winner_stability()`.
 #' @param stability_block Block length override for the stability bootstrap.
 #' @param benchmark Optional `exchangeable_benchmark()` result (or its p05) to calibrate `fragile`.
@@ -647,6 +657,7 @@ surprise_concentration <- function(L, labels = NULL) {
 fragility <- function(L, w = NULL, shock_periods = NULL, labels = NULL, n_boot = 2000, seed = 0,
                        stability_block = NULL, benchmark = NULL) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
+  if (is.null(labels)) labels <- up$labels  # honor a panel's user-supplied labels
   L <- .as_loss_dict(L)
   .validate_losses(L, w)
   if (is.null(w)) w <- rep(1, length(L[[1]]))
