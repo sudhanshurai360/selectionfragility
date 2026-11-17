@@ -284,7 +284,10 @@ condorcet_status <- function(L) {
 #' Pairwise decision breakdown point
 #'
 #' k* for a pair: the minimum number of periods to delete to flip "a beats b" on the pooled
-#' metric, where `la` is the current pooled winner's losses.
+#' metric, where `la` is the current pooled winner's losses. This is a model-selection
+#' application of the robust-statistics breakdown-point concept (Hampel 1971, "A General
+#' Qualitative Definition of Robustness," Annals of Mathematical Statistics 42(6)) to a selection
+#' decision rather than an estimator.
 #'
 #' @param la,lb Numeric vectors, per-period loss for the champion (`la`) and the opponent (`lb`).
 #' @param w Numeric vector of per-period weights.
@@ -328,6 +331,9 @@ breakdown_number <- function(la, lb, w) {
 }
 
 #' Decision-level k* — fewest periods whose deletion flips the pooled winner to ANY opponent
+#'
+#' See [breakdown_number()] for the pairwise primitive and its robust-statistics lineage
+#' (Hampel 1971).
 #'
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @param w Optional numeric vector of per-period weights.

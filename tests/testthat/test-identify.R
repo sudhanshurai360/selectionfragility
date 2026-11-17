@@ -67,3 +67,22 @@ test_that("mcs_size()/identified() reject duplicate model names", {
   L <- list(a = c(1.0, 1.1, 0.9, 1.0), a = c(5.0, 5.1, 4.9, 5.0), b = c(2.0, 2.1, 1.9, 2.0))
   expect_error(mcs_size(L), "unique.*duplicate|duplicate.*unique")
 })
+
+test_that("identify() fails loudly, not silently, if MCS::MCSprocedure()'s Info list ever loses its 'included' field", {
+  # REGRESSION for the defensive guard in .run_mcs_arch() (R/identify.R): a future MCS release
+  # could restructure its Info list, and R's `$` on a list silently returns NULL for a missing
+  # name -- which would otherwise make mcs_size()/identified() silently report "nothing
+  # identified" on every call with no warning. Mock MCSprocedure() to return a real result with
+  # that one field stripped, and confirm the guard actually fires.
+  L <- list(a = c(1.0, 1.1, 0.9, 1.0, 1.2, 0.8, 1.0, 1.1), b = c(1.2, 1.3, 1.1, 1.2, 1.4, 1.0, 1.2, 1.3))
+  real_MCSprocedure <- MCS::MCSprocedure
+  testthat::local_mocked_bindings(
+    MCSprocedure = function(...) {
+      res <- real_MCSprocedure(...)
+      res@Info$included <- NULL
+      res
+    },
+    .package = "MCS"
+  )
+  expect_error(mcs_size(L, alpha = 0.5, reps = 300, block_size = 1, seed = 1), "no longer has an 'included' field")
+})

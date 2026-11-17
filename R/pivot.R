@@ -59,6 +59,8 @@
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @param w Optional numeric vector of per-period weights.
 #' @return The concentration share, or `NA` if there is no strict winner or the margin is degenerate.
+#' @seealso [pivot_agreement()] (whether this concentration is stable under subsampling),
+#'   [surprise_concentration()], [report()].
 #' @export
 #' @examples
 #' # ar1 wins steadily, but almost its whole margin over ets comes from one shock period

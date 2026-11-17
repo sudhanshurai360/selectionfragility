@@ -192,15 +192,14 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
       }
       lines <- c(lines, sprintf("  %s -- fragility read UNDETERMINED (%s); see VERDICT/RESOLUTION above before treating this as evidence either way", period_txt, reason))
     } else {
-      # FIXED 2026-11-17 (6-reviewer strict-verification pass, CONFIRMED CRITICAL): prop22_certifies()
-      # is only valid for a k* computed from an UNWEIGHTED breakdown_number() (see prop22.R's own
-      # scope note) -- but `k` here came from decision_breakdown(L, w, ...) using the panel's REAL,
-      # possibly non-uniform weights. Calling prop22_certifies(k, T) on that weighted k reproduces the
-      # exact "CONFIRMED CRITICAL" defect class certified_tied_subset() was fixed for in 2026-09-02
-      # (a weighted panel can silently get a confident "certifies non-significance" line that is not
-      # actually certified once weighting is correctly excluded from the Prop 2.2 statistic --
-      # measured at 6.75% of simulated weighted panels). Skip the certificate entirely on a weighted
-      # panel, same sentinel wording as k<=0/k>=T ("no constraint"), rather than ever compute it.
+      # prop22_certifies() is only valid for a k* computed from an UNWEIGHTED breakdown_number()
+      # (see prop22.R's own scope note) -- but `k` here came from decision_breakdown(L, w, ...)
+      # using the panel's REAL, possibly non-uniform weights. Calling prop22_certifies(k, T) on
+      # that weighted k can silently produce a confident "certifies non-significance" line that is
+      # not actually certified once weighting is correctly excluded from the Prop 2.2 statistic
+      # (measured at 6.75% of simulated weighted panels). Skip the certificate entirely on a
+      # weighted panel, same sentinel wording as k<=0/k>=T ("no constraint"), rather than ever
+      # compute it.
       cert_txt <- if (!.weights_are_uniform(w)) {
         "no constraint from Proposition 2.2 (panel has non-uniform weights)"
       } else {

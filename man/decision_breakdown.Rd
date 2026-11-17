@@ -22,7 +22,8 @@ POSITION into the loss vectors -- it is NOT resolved against \code{L}'s period l
 period labels for display; call \code{panel$labels[removed]} yourself if you need them here.
 }
 \description{
-Decision-level k* — fewest periods whose deletion flips the pooled winner to ANY opponent
+See \code{\link[=breakdown_number]{breakdown_number()}} for the pairwise primitive and its robust-statistics lineage
+(Hampel 1971).
 }
 \examples{
 # Same shock-period panel as breakdown_number(): on the full panel, ar1 is the pooled

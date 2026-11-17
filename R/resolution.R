@@ -50,7 +50,7 @@
 }
 
 #' @keywords internal
-# I.I.D. ASSUMPTION, NOT HAC-CORRECTED (ADDED 2026-11-17, 6-reviewer convergence pass): this
+# I.I.D. ASSUMPTION, NOT HAC-CORRECTED: this
 # estimates Var(weighted mean) = sigma^2/n_eff under an implicit assumption that successive
 # per-period (rival - champion) differentials are uncorrelated. Forecast loss differentials are
 # canonically autocorrelated in practice -- the same reason this package's own mcs()/
@@ -267,8 +267,8 @@ selection_regret <- function(L, weights = NULL, w = NULL) {
 #'   `identified` check does not share this assumption (it goes through the block-bootstrap MCS),
 #'   but the R1 `resolved` gate does; a "resolved" read can overstate confidence under
 #'   autocorrelated losses.
-#' @section Seed sensitivity: `mcs_seed` (ADDED 2026-11-17, 6-reviewer adversarial pass):
-#'   `fragility_read`'s `identified` check is a bootstrap-based MCS call, and on a genuinely
+#' @section Seed sensitivity: `mcs_seed` -- `fragility_read`'s `identified` check is a
+#'   bootstrap-based MCS call, and on a genuinely
 #'   borderline panel the verdict can be seed-sensitive (see `?mcs`'s "Adversarial use" section
 #'   for a quantified example). Previously silently pinned to `seed=0`; pass a few different seeds
 #'   yourself near a borderline alpha if this matters for your use case.

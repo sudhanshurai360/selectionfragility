@@ -78,11 +78,27 @@ test_that("save_loss_panel / load_loss_panel round-trips exactly", {
   L <- list(a = c(1.1, 2.2, 3.3, 0.9, 5.5), b = c(1.0, 2.0, 3.5, 4.0, 5.0))
   p <- loss_panel(L)
   tmp <- tempfile(fileext = ".json")
+  on.exit(unlink(tmp), add = TRUE)
   save_loss_panel(p, tmp)
   p2 <- load_loss_panel(tmp)
   expect_equal(p$losses, p2$losses)
   expect_equal(p$weights, p2$weights)
-  unlink(tmp)
+})
+
+test_that("save_loss_panel() errors loudly if file.rename() fails", {
+  L <- list(a = c(1.1, 2.2, 3.3, 0.9, 5.5), b = c(1.0, 2.0, 3.5, 4.0, 5.0))
+  p <- loss_panel(L)
+  # Destination is itself an existing, non-empty directory: the temp file writes fine (its
+  # directory, dest_dir, genuinely exists), but file.rename() cannot replace a non-empty
+  # directory with a file and returns FALSE -- exercising the checked-return-value branch, not
+  # an earlier (and differently-messaged) write failure.
+  bad_path <- tempfile()
+  dir.create(bad_path)
+  on.exit(unlink(bad_path, recursive = TRUE), add = TRUE)
+  file.create(file.path(bad_path, "placeholder"))
+  # base::file.rename() itself also emits a warning on this failure (platform-dependent wording);
+  # suppress it here since this test is about save_loss_panel()'s own stop(), not that warning.
+  expect_error(suppressWarnings(save_loss_panel(p, bad_path)), "failed to rename")
 })
 
 test_that("as.data.frame.loss_panel() returns a tidy long data.frame", {

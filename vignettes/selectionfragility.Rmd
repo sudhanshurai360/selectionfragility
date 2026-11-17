@@ -24,8 +24,11 @@ knitr::opts_chunk$set(
   a larger set means selection is **not identified** — the data cannot support crowning one model
   over its rivals.
 - **Decision breakdown point (`k*`)** — the *fewest evaluation periods whose deletion flips the
-  pooled winner*. A small `k*` means the crowned model rests on a handful of periods (often a
-  single shock) and should not be trusted as a stable choice.
+  pooled winner*, a model-selection application of the robust-statistics breakdown-point concept
+  (Hampel 1971, "A General Qualitative Definition of Robustness," *Annals of Mathematical
+  Statistics* 42(6)) to a selection decision rather than an estimator. A small `k*` means the
+  crowned model rests on a handful of periods (often a single shock) and should not be trusted as
+  a stable choice.
 
 This is the native R port of the Python package
 [`selection-fragility`](https://pypi.org/project/selection-fragility/); see "Relationship to the

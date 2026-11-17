@@ -16,7 +16,10 @@ A list \code{list(k = k_star, removed = removed_period_indices)} (1-based indice
 }
 \description{
 k* for a pair: the minimum number of periods to delete to flip "a beats b" on the pooled
-metric, where \code{la} is the current pooled winner's losses.
+metric, where \code{la} is the current pooled winner's losses. This is a model-selection
+application of the robust-statistics breakdown-point concept (Hampel 1971, "A General
+Qualitative Definition of Robustness," Annals of Mathematical Statistics 42(6)) to a selection
+decision rather than an estimator.
 }
 \examples{
 # nbeats is cheaper than ar1 in 4 of 5 periods, but one shock period (5.0) is bad enough

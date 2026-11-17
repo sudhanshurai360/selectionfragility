@@ -42,8 +42,8 @@ autocorrelated losses.
 }
 
 \section{Seed sensitivity}{
- \code{mcs_seed} (ADDED 2026-11-17, 6-reviewer adversarial pass):
-\code{fragility_read}'s \code{identified} check is a bootstrap-based MCS call, and on a genuinely
+ \code{mcs_seed} -- \code{fragility_read}'s \code{identified} check is a
+bootstrap-based MCS call, and on a genuinely
 borderline panel the verdict can be seed-sensitive (see \code{?mcs}'s "Adversarial use" section
 for a quantified example). Previously silently pinned to \code{seed=0}; pass a few different seeds
 yourself near a borderline alpha if this matters for your use case.

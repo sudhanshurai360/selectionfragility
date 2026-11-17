@@ -129,8 +129,8 @@ NULL
         "K=%d models -- report()/identified()/mcs_size() cost grows steeply with model count. ",
         "This is not an error -- large model sweeps are supported -- but expect it to be slow; ",
         "if you don't need per-model MCS membership, consider narrowing to a candidate shortlist ",
-        "first. THIS IS ONLY A WARNING, NOT A HARD CAP (ADDED 2026-11-17, 6-reviewer adversarial ",
-        "pass): neither K nor T has an enforced ceiling anywhere in this package (unlike B, which ",
+        "first. THIS IS ONLY A WARNING, NOT A HARD CAP: neither K nor T has an enforced ceiling ",
+        "anywhere in this package (unlike B, which ",
         "does -- see mcs.R's .MAX_BOOTSTRAP_B). Measured growth in K is super-quadratic. If this ",
         "package is ever called from a server/API process on untrusted caller-supplied K/T/B, that ",
         "caller can trivially turn a single call into a minutes-to-hours-long computation with ",
@@ -435,7 +435,7 @@ summary.loss_panel <- function(object, ...) {
   )
   wins <- .strict_win_counts(object$losses)
   mcs_res <- tryCatch(.run_mcs_arch(object$losses, w = object$weights, ...), error = function(e) {
-    # FIXED 2026-11-17 (6-reviewer strict-verification pass): a caller passing an argument that
+    # a caller passing an argument that
     # belongs to fragility() (e.g. full=TRUE) rather than to the internal MCS check (alpha=/reps=/
     # block_size=/seed=) previously degraded silently to in_mcs=NA with zero indication their
     # argument was ignored. A real MCS-unavailable failure (e.g. non-uniform weights) is still

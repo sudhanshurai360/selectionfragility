@@ -54,3 +54,15 @@ references:
       The Python original this package is a native R port of -- same method, same validated
       numerics, independently verified against it. Cite either implementation; they compute the
       same quantities.
+  - type: article
+    title: "A General Qualitative Definition of Robustness"
+    authors:
+      - family-names: Hampel
+        given-names: "Frank R."
+    journal: "Annals of Mathematical Statistics"
+    volume: "42"
+    issue: "6"
+    year: 1971
+    notes: >-
+      The decision breakdown point (k*) is a model-selection application of this paper's
+      breakdown-point concept to a selection decision rather than an estimator.

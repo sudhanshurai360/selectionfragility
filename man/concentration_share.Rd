@@ -27,3 +27,7 @@ L <- list(
 panel <- loss_panel(L)
 concentration_share(panel)  # ~0.82 -- the margin is highly concentrated in one period
 }
+\seealso{
+\code{\link[=pivot_agreement]{pivot_agreement()}} (whether this concentration is stable under subsampling),
+\code{\link[=surprise_concentration]{surprise_concentration()}}, \code{\link[=report]{report()}}.
+}

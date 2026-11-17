@@ -38,6 +38,10 @@ test_that(".fsum is permutation-invariant (the opponent tie-break summation)", {
   # 4 of 5 weight scales tested (including a 0.25 absolute difference at scale 1e9), which would
   # silently flip which opponent -- and therefore which pivotal period -- gets named purely from
   # model-naming/iteration order, not from any real difference in the data.
+  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
+  on.exit({
+    if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)
+  }, add = TRUE)
   set.seed(7)
   n <- 50
   base_c <- c(1e6, rexp(n - 1, rate = 1 / 1e-3))
