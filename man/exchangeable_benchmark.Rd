@@ -35,6 +35,17 @@ A list \code{list(median, p05, p95)}.
 \description{
 Null distribution of winner_stability under an exchangeable (no-true-winner) panel
 }
+\section{Assumption}{
+ the simulated null panels are drawn i.i.d. (independent across periods).
+Under positive autocorrelation -- the normal case for forecast-loss series -- the true null
+\code{winner_stability} distribution shifts UPWARD (e.g. at AR(1)=0.8 the null p05 is ~0.51 vs the
+i.i.d. ~0.42), so comparing an observed stability against this i.i.d. benchmark's p05 will
+UNDER-detect fragility on a persistent panel (it calls a genuinely-fragile winner "not
+fragile"). Treat a "not fragile relative to this benchmark" verdict with caution when your
+loss differentials are autocorrelated; check their ACF, or build a null that matches your
+panel's own serial-dependence structure.
+}
+
 \examples{
 # n_rep/n_boot are tiny here purely to keep the example fast; real usage should use the
 # defaults (n_rep = 200, n_boot = 500) or larger for a stable null distribution.

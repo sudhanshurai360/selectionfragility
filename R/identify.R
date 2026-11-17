@@ -18,6 +18,16 @@
 
 #' @keywords internal
 .validate_alpha <- function(alpha) {
+  # Length/NA/numeric guard FIRST: `alpha > 0 && alpha < 1` evaluates && on the raw input, so a
+  # NULL/NA/length>1/non-numeric alpha would otherwise detonate R internals ("missing value where
+  # TRUE/FALSE needed", "'length = 2' in coercion to 'logical(1)'") before this package's own
+  # worded message runs. Every public function taking alpha routes through here.
+  if (length(alpha) != 1 || !is.numeric(alpha) || !is.finite(alpha)) {
+    stop(sprintf(
+      "alpha must be a single finite number strictly between 0 and 1; got a %s of length %d.",
+      class(alpha)[1], length(alpha)
+    ), call. = FALSE)
+  }
   if (!(alpha > 0.0 && alpha < 1.0)) {
     stop(sprintf(
       paste0(
@@ -32,7 +42,14 @@
 .validate_mcs_weights2 <- function(w) {
   if (is.null(w)) return(invisible(NULL))
   wa <- as.numeric(w)
-  if (length(wa) > 0 && !isTRUE(all(abs(wa - wa[1]) < 1e-8 * max(1, abs(wa[1]))))) {
+  # Use the SAME uniform-weight tolerance as prop22.R's .weights_are_uniform (numpy allclose:
+  # atol 1e-8, rtol 1e-5), which is what the Python original's _validate_mcs_weights also uses
+  # (np.allclose). The previous ad-hoc stricter `< 1e-8 * max(1, |w0|)` here diverged from BOTH
+  # the Python oracle AND this package's own prop22 check, so a float-noisy-but-uniform weight
+  # vector (e.g. observation counts recomputed from a slightly perturbed source) could be accepted
+  # as uniform by certified_tied_subset() while being rejected as non-uniform by mcs_size()/
+  # identified() -- an inconsistency across the public API for the same input.
+  if (length(wa) > 0 && !.weights_are_uniform(wa)) {
     stop(paste0(
       "MCS::MCSprocedure() has no native support for non-uniform period weights, so the Model ",
       "Confidence Set cannot be silently computed unweighted while the panel's pooled champion is ",
@@ -132,6 +149,21 @@
   # noise. Must be "TR" here so this delegated engine is testing the same HLN statistic as its
   # two siblings; the bootstrap SCHEME (moving-block vs circular) remains a documented,
   # legitimate cross-language difference -- this is not that.
+  # RNG HYGIENE: MCS::MCSprocedure() calls set.seed() internally and consumes the RNG stream.
+  # Without this save/restore, every public function that routes through here --
+  # identified()/mcs_size()/resolution_report()/compare()/report() -- would silently corrupt the
+  # caller's global .Random.seed, unlike this package's native bootstrap functions (mcs.R, pivot.R,
+  # fragility.R, compare.R's .churn_base_rate) which all already save/restore. This path was the
+  # one that omitted the wrapper. On a fresh session (.Random.seed not yet created), restore to
+  # the pristine "no seed" state by removing the seed MCSprocedure's set.seed() leaves behind.
+  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
+  on.exit({
+    if (is.null(old_seed)) {
+      if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
+    } else {
+      assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    }
+  }, add = TRUE)
   res <- MCS::MCSprocedure(M, alpha = alpha, B = as.integer(reps), statistic = "TR",
                             k = as.integer(block_size), verbose = FALSE, seed = as.integer(seed))
   # DEFENSIVE, NOT PARANOID: `res@Info` is an informally-typed list (no S4 slot contract), and

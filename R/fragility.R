@@ -99,8 +99,11 @@
         T
       ), call. = FALSE)
     }
-    if (length(wa) != T || !all(is.finite(wa))) {
-      stop(sprintf("weights must be finite and of length %d; got length %d.", T, length(wa)), call. = FALSE)
+    if (length(wa) != T) {
+      stop(sprintf("weights must have length %d (one per period); got length %d.", T, length(wa)), call. = FALSE)
+    }
+    if (!all(is.finite(wa))) {
+      stop("weights must not contain NA/NaN/Inf values.", call. = FALSE)
     }
     if (any(wa < 0)) {
       stop("weights must not contain negative values -- weights are observation counts, not signed contributions.", call. = FALSE)
@@ -135,7 +138,13 @@ pooled_winner <- function(L, w = NULL) {
   means <- sapply(names(L), function(m) stats::weighted.mean(as.numeric(L[[m]]), w))
   best <- min(means)
   best_m <- names(sort(means))[1]
-  scale <- (abs(means[best_m]) + means) / 2.0
+  # abs() BOTH terms: the per-model term must be abs()'d too (matching the Python oracle and the
+  # sibling .binding_rival in resolution.R). With negative means, (|v| + v)/2 collapses to ~0, which
+  # collapses the relative tie floor to ~0, so a genuine degenerate tie among negative-mean models
+  # (common with decimal-quantized log/skill-score losses) would not be recognized and the winner
+  # would be broken toward the raw floating-point minimum instead of the name-sorted tie member --
+  # a cross-language champion divergence that propagates through selection_regret/decision_breakdown.
+  scale <- (abs(means[best_m]) + abs(means)) / 2.0
   tied <- names(L)[(means - best) <= .MARGIN_REL_FLOOR * scale]
   sort(tied, method = "radix")[1]
 }
@@ -402,15 +411,28 @@ decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
       ties <- c(ties, m)
     }
   }
+  # return_ties toggles the return shape, matching the Python original (which returns a 3- vs
+  # 4-tuple): with the default FALSE, `ties` is omitted; with TRUE it is included. Previously the
+  # parameter was inert -- `ties` was always returned regardless -- a doc/behaviour and
+  # cross-language contract mismatch (the @param promised conditional behaviour the code ignored).
   if (is.null(best)) {
-    return(list(k = 0L, binding_opponent = NULL, removed = integer(0), ties = character(0)))
+    out <- list(k = 0L, binding_opponent = NULL, removed = integer(0))
+    if (return_ties) out$ties <- character(0)
+    return(out)
   }
-  list(k = best$k, binding_opponent = best$opponent, removed = best$removed, ties = ties)
+  out <- list(k = best$k, binding_opponent = best$opponent, removed = best$removed)
+  if (return_ties) out$ties <- ties
+  out
 }
 
 #' @keywords internal
 .block_resample_idx <- function(T, block, circular = TRUE) {
-  if (block <= 1) return(sample.int(T, size = T, replace = TRUE))
+  # Coerce block to an integer up front: n_starts uses ceiling(T/block) (the fractional value) but
+  # the offset range 0:(block-1) truncates block, so a non-integer block makes the two disagree and
+  # pads the index vector with NA. Flooring here keeps them consistent (callers that accept a
+  # user-supplied block validate it as a count elsewhere; this is the last-line guard).
+  block <- as.integer(block)
+  if (is.na(block) || block <= 1) return(sample.int(T, size = T, replace = TRUE))
   if (!circular) {
     out <- integer(0)
     while (length(out) < T) {
@@ -469,7 +491,15 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
       ), block, T, T
     ), call. = FALSE)
   }
-  if (n_boot <= 0) stop(sprintf("n_boot must be a positive integer; got %d.", n_boot), call. = FALSE)
+  # as.integer() floor BEFORE the guard and the seq_len loop: a fractional 0 < n_boot < 1 would
+  # otherwise pass `n_boot <= 0` yet make seq_len(n_boot) empty, so the bootstrap loop never runs
+  # and stability silently returns 0 ("maximally fragile") with no error. %s not %d in the message
+  # so a non-integer/character n_boot prints its actual value instead of crashing sprintf.
+  n_boot_in <- n_boot
+  n_boot <- suppressWarnings(as.integer(n_boot))
+  if (length(n_boot) != 1 || is.na(n_boot) || n_boot <= 0) {
+    stop(sprintf("n_boot must be a single positive integer; got %s.", paste(format(n_boot_in), collapse = ", ")), call. = FALSE)
+  }
 
   obs <- pooled_winner(L, w)
   db <- decision_breakdown(L, w, a = obs)
@@ -495,6 +525,15 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
 }
 
 #' Null distribution of winner_stability under an exchangeable (no-true-winner) panel
+#'
+#' @section Assumption: the simulated null panels are drawn i.i.d. (independent across periods).
+#'   Under positive autocorrelation -- the normal case for forecast-loss series -- the true null
+#'   `winner_stability` distribution shifts UPWARD (e.g. at AR(1)=0.8 the null p05 is ~0.51 vs the
+#'   i.i.d. ~0.42), so comparing an observed stability against this i.i.d. benchmark's p05 will
+#'   UNDER-detect fragility on a persistent panel (it calls a genuinely-fragile winner "not
+#'   fragile"). Treat a "not fragile relative to this benchmark" verdict with caution when your
+#'   loss differentials are autocorrelated; check their ACF, or build a null that matches your
+#'   panel's own serial-dependence structure.
 #'
 #' @param K Number of models (all drawn from the same distribution, so no model is truly better).
 #' @param T Number of periods.
@@ -549,7 +588,10 @@ exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL
 surprise_concentration <- function(L, labels = NULL) {
   up <- .unwrap_panel(L, NULL); L <- up$L
   L <- .as_loss_dict(L)
-  .validate_losses(L)
+  T_sc <- .validate_losses(L)
+  if (!is.null(labels) && length(labels) != T_sc) {
+    stop(sprintf("labels has length %d, expected %d (one per period).", length(labels), T_sc), call. = FALSE)
+  }
   models <- names(L)
   M <- do.call(rbind, lapply(models, function(m) as.numeric(L[[m]])))
   d <- apply(M, 2, min)
@@ -610,6 +652,9 @@ fragility <- function(L, w = NULL, shock_periods = NULL, labels = NULL, n_boot =
   if (is.null(w)) w <- rep(1, length(L[[1]]))
   w <- as.numeric(w)
   T <- length(w)
+  if (!is.null(labels) && length(labels) != T) {
+    stop(sprintf("labels has length %d, expected %d (one per period).", length(labels), T), call. = FALSE)
+  }
   a <- pooled_winner(L, w)
 
   rest <- L[setdiff(names(L), a)]

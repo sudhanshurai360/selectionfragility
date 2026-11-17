@@ -165,18 +165,27 @@ compare <- function(previous, current, alpha = 0.10, n_perm = 400, seed = 0) {
     prev_label_set <- as.character(previous$labels)
     curr_label_set <- as.character(curr_labels)
     missing_old <- setdiff(prev_label_set, curr_label_set)
-    if (length(missing_old) > 0) {
+    is_new <- !(curr_label_set %in% prev_label_set)
+    n_new <- sum(is_new)
+    # Reversed-argument guard, deliberately NARROW: fire ONLY when current introduces no new
+    # periods yet is missing some of previous's (i.e. current's labels are a strict subset of
+    # previous's -- current is unambiguously the EARLIER/smaller run, so the arguments were
+    # swapped). A broader "current dropped any old label" guard would wrongly reject two cases the
+    # Python original supports and documents by name: a rolling window (drop the oldest period,
+    # append a new one at the same T -- here n_new > 0, so this guard stays silent and the overlap
+    # is compared), and a fully disjoint current (n_new == T_curr, handled below as "cannot
+    # attribute"). Python has no guard here at all and relies on honest reporting; this guard adds
+    # only the append-case reversed-order protection Python lacks, without regressing those two.
+    if (n_new == 0 && length(missing_old) > 0) {
       stop(sprintf(
         paste0(
-          "current is missing period label(s) present in previous (%s) -- compare() expects ",
-          "current to be the LATER run, which should retain every period previous had (plus any ",
-          "new ones). This usually means the two arguments were passed in the wrong order (try ",
-          "swapping them: compare(previous = current, current = previous))."
+          "current's periods are a strict subset of previous's (missing: %s) and current adds no ",
+          "new period -- compare() expects current to be the LATER run (retaining previous's ",
+          "periods, plus any new ones). This usually means the two arguments were passed in the ",
+          "wrong order (try swapping them: compare(previous = current, current = previous))."
         ), paste(missing_old, collapse = ", ")
       ), call. = FALSE)
     }
-    is_new <- !(curr_label_set %in% prev_label_set)
-    n_new <- sum(is_new)
     if (n_new == 0) {
       champion_without_new_periods <- curr_champ
     } else if (n_new == T_curr) {

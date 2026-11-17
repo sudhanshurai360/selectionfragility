@@ -20,7 +20,13 @@ model_confidence_set(
 
 \item{B}{Number of bootstrap resamples.}
 
-\item{block}{Block length for the circular block bootstrap.}
+\item{block}{Block length for the circular block bootstrap. The default (3) is tuned for
+roughly-i.i.d. losses; it does NOT adapt to serial dependence, and the EPA/MCS bootstrap test
+is over-sized (retains too few models) under persistent losses with a short block (e.g. at
+AR(1)=0.5 the complete-null retain-all rate falls to ~0.62 vs the nominal 0.90). If your loss
+differentials are autocorrelated, raise \code{block} and report the result across a block sweep
+rather than trusting the default. (This over-elimination is conservative for a tie claim --
+it shrinks the MCS -- but it inflates the apparent identification rate.)}
 
 \item{seed}{RNG seed.}
 

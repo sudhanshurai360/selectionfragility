@@ -86,3 +86,33 @@ test_that("identify() fails loudly, not silently, if MCS::MCSprocedure()'s Info 
   )
   expect_error(mcs_size(L, alpha = 0.5, reps = 300, block_size = 1, seed = 1), "no longer has an 'included' field")
 })
+
+test_that("mcs_size()/identified() use the SAME uniform-weight tolerance as certified_tied_subset()", {
+  # REGRESSION (weights-semantics review, 2026-11-17): .validate_mcs_weights2 used a stricter
+  # ad-hoc tolerance than prop22.R's .weights_are_uniform (numpy allclose), so a float-noisy-but-
+  # uniform weight vector (deviation ~1e-6) was accepted as uniform by certified_tied_subset() but
+  # rejected as non-uniform by mcs_size()/identified(). Both now use the numpy-allclose tolerance.
+  L <- list(a = c(1, 1.1, 0.9, 1, 1.2, 0.8, 1, 1.1, 0.95, 1.05),
+            b = c(1.2, 1.1, 1.3, 1.1, 1.4, 1.0, 1.2, 1.1, 1.25, 1.15),
+            c = c(1.5, 1.4, 1.6, 1.4, 1.7, 1.3, 1.5, 1.4, 1.55, 1.45))
+  w <- c(1, 1.000001, 1, 1, 1, 1, 1, 1, 1, 1)  # ~1e-6 deviation: within numpy allclose
+  expect_no_error(mcs_size(L, w = w))
+  expect_no_error(certified_tied_subset(L, w = w))
+})
+
+test_that("identified()/report() restore the caller's global .Random.seed (MCS path no longer leaks)", {
+  # REGRESSION (concurrency/global-state review, 2026-11-17): the MCS::MCSprocedure()-backed path
+  # (.run_mcs_arch) consumed RNG without saving/restoring .Random.seed, unlike every native
+  # bootstrap in the package -- so identified()/mcs_size()/resolution_report()/compare()/report()
+  # silently corrupted the caller's RNG stream.
+  L <- list(a = c(1.0, 1.1, 0.9, 1.0, 1.2, 0.8), b = c(1.2, 1.1, 1.3, 1.1, 1.4, 1.0))
+  set.seed(321); runif(3); before <- get(".Random.seed", envir = .GlobalEnv)
+  invisible(identified(L, seed = 77))
+  expect_identical(before, get(".Random.seed", envir = .GlobalEnv))
+})
+
+test_that(".validate_alpha gives a worded error for NA/NULL/length>1 alpha, not a raw base-R error", {
+  L <- list(a = c(1.0, 1.1, 0.9, 1.0), b = c(1.2, 1.1, 1.3, 1.1))
+  expect_error(mcs_size(L, alpha = NA), "single finite number")
+  expect_error(mcs_size(L, alpha = c(0.1, 0.2)), "single finite number")
+})

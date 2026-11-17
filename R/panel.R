@@ -126,12 +126,14 @@ NULL
   } else if (K > .LARGE_K_WARN_THRESHOLD) {
     warning(sprintf(
       paste0(
-        "K=%d models -- report()/identified()/mcs_size() cost grows steeply with model count. ",
-        "This is not an error -- large model sweeps are supported -- but expect it to be slow; ",
-        "if you don't need per-model MCS membership, consider narrowing to a candidate shortlist ",
-        "first. THIS IS ONLY A WARNING, NOT A HARD CAP: neither K nor T has an enforced ceiling ",
-        "anywhere in this package (unlike B, which ",
-        "does -- see mcs.R's .MAX_BOOTSTRAP_B). Measured growth in K is super-quadratic. If this ",
+        "K=%d models -- the native mcs()/model_confidence_set() engine's cost grows steeply with ",
+        "model count (measured super-cubic in K: its pairwise elimination is O(K^3 * B)); the ",
+        "MCS::MCSprocedure()-backed report()/identified()/mcs_size() path is cheaper (~quadratic) ",
+        "but still grows. This is not an error -- large model sweeps are supported -- but expect it ",
+        "to be slow; if you don't need per-model MCS membership, consider narrowing to a candidate ",
+        "shortlist first. THIS IS ONLY A WARNING, NOT A HARD CAP: neither K nor T has an enforced ",
+        "ceiling anywhere in this package (unlike B, which ",
+        "does -- see mcs.R's .MAX_BOOTSTRAP_B). If this ",
         "package is ever called from a server/API process on untrusted caller-supplied K/T/B, that ",
         "caller can trivially turn a single call into a minutes-to-hours-long computation with ",
         "nothing stronger than this warning to stop them -- validate/cap K and T yourself at your ",
@@ -298,6 +300,16 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
 #' @keywords internal
 .from_matrix <- function(arr) {
   if (length(dim(arr)) != 2) stop("matrix input to loss_panel() must be 2-D (periods x models).", call. = FALSE)
+  if (is.logical(arr)) {
+    # Matches the is.logical rejection the list and data.frame constructors already apply: a
+    # logical matrix otherwise coerces TRUE/FALSE -> 1/0 silently and gets treated as 0/1 "losses",
+    # so an indicator/flag matrix would be crowned a set of models with no warning on this one path.
+    stop(paste0(
+      "loss_panel() got a logical matrix -- this looks like a flag/indicator matrix, not per-period ",
+      "losses. If these really are 0/1 losses, convert with `arr * 1` or `matrix(as.numeric(arr), ...)` ",
+      "first so the intent is explicit."
+    ), call. = FALSE)
+  }
   T <- nrow(arr); K <- ncol(arr)
   if (K == 0) {
     stop(sprintf("matrix has zero model columns (dim %d x %d); need at least 2 models.", T, K), call. = FALSE)
@@ -398,8 +410,21 @@ print.loss_panel <- function(x, ...) {
 #' as.data.frame(panel)
 #' @export
 as.data.frame.loss_panel <- function(x, ...) {
-  models <- x$models
+  # Read model names LIVE from names(x$losses), not the cached x$models field: the rest of the
+  # pipeline (report/compare/pooled_winner/decision_breakdown) uses names(x$losses), so if a caller
+  # mutated x$losses after construction, the cached x$models would silently disagree. Validate
+  # lengths explicitly so this method fails as loudly as its siblings (report/summary) do on a
+  # mutated/inconsistent object, instead of silently recycling a wrong-length weight vector.
+  models <- names(x$losses)
   T <- length(x$labels)
+  if (length(x$weights) != T) {
+    stop(sprintf("loss_panel is inconsistent: %d weights but %d periods.", length(x$weights), T), call. = FALSE)
+  }
+  lens <- vapply(models, function(m) length(x$losses[[m]]), integer(1))
+  if (any(lens != T)) {
+    stop(sprintf("loss_panel is inconsistent: model(s) %s do not have %d periods.",
+                  paste(models[lens != T], collapse = ", "), T), call. = FALSE)
+  }
   period <- rep(x$labels, times = length(models))
   model <- rep(models, each = T)
   loss <- unlist(lapply(models, function(m) as.numeric(x$losses[[m]])), use.names = FALSE)
@@ -429,7 +454,9 @@ as.data.frame.loss_panel <- function(x, ...) {
 #' summary(panel)
 #' @export
 summary.loss_panel <- function(object, ...) {
-  models <- object$models
+  # Live names(object$losses), not the cached object$models -- see as.data.frame.loss_panel()'s
+  # note; keeps this method consistent with the rest of the pipeline on a mutated object.
+  models <- names(object$losses)
   mean_loss <- stats::setNames(
     sapply(models, function(m) stats::weighted.mean(as.numeric(object$losses[[m]]), object$weights)),
     models
@@ -520,6 +547,9 @@ save_loss_panel <- function(panel, path) {
 #' unlink(tmp)
 #' @export
 load_loss_panel <- function(path) {
+  if (!file.exists(path)) {
+    stop(sprintf("load_loss_panel(): file '%s' does not exist.", path), call. = FALSE)
+  }
   payload <- jsonlite::read_json(path, simplifyVector = TRUE)
   missing <- setdiff(c("losses", "weights", "labels"), names(payload))
   if (length(missing) > 0) {

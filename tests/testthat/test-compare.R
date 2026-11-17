@@ -54,3 +54,22 @@ test_that("compare() rejects reversed arguments with positional labels too", {
   curr <- loss_panel(list(a = c(1, 1, 1, 1, 1, 1), b = c(2, 2, 2, 2, 2, 2)))
   expect_error(compare(curr, prev), "fewer periods|wrong order")
 })
+
+test_that("compare() supports rolling-window and disjoint label sets (not just plain append)", {
+  # REGRESSION (cross-language parity + compare() deep-dive, 2026-11-17): the R-only reversed-order
+  # guard fired on ANY dropped old label, wrongly rejecting a rolling window (drop oldest, append
+  # newest at the same T) and a fully disjoint current -- both of which the Python original supports
+  # and documents. The guard is now narrowed to the unambiguous reversed case (current adds no new
+  # period yet is missing old ones). Rolling window and disjoint must NOT error; a strict earlier
+  # subset must STILL error.
+  prev <- loss_panel(list(a = rep(1, 10), b = c(1.2,1.1,1.0,1.3,0.9,1.1,1.2,1.0,1.1,1.0)), labels = 2015:2024)
+  roll <- loss_panel(list(a = c(rep(1,9), 0.5), b = c(1.1,1.0,1.3,0.9,1.1,1.2,1.0,1.1,1.0,1.4)), labels = 2016:2025)
+  expect_no_error(compare(prev, roll))
+  disj <- loss_panel(list(a = rep(1, 10), b = c(1.2,1.1,1.0,1.3,0.9,1.1,1.2,1.0,1.1,1.0)), labels = 2100:2109)
+  cr <- compare(prev, disj)
+  expect_s3_class(cr, "change_report")
+  # Strict earlier subset (reversed order) must still be caught.
+  later <- loss_panel(list(a = rep(1, 11), b = c(1.2,1.1,1.0,1.3,0.9,1.1,1.2,1.0,1.1,1.0,0.8)), labels = 2015:2025)
+  earlier <- loss_panel(list(a = rep(1, 10), b = c(1.2,1.1,1.0,1.3,0.9,1.1,1.2,1.0,1.1,1.0)), labels = 2015:2024)
+  expect_error(compare(later, earlier), "subset|wrong order")
+})

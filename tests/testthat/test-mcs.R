@@ -39,3 +39,14 @@ test_that("model_confidence_set() rejects duplicate model names", {
   L <- list(a = 1:4, a = 5:8, b = 2:5)
   expect_error(model_confidence_set(L), "unique.*duplicate|duplicate.*unique")
 })
+
+test_that("mcs() coerces/validates B and block instead of crashing its own %d error strings", {
+  # REGRESSION (type-coercion review, 2026-11-17): a fractional/character B or block crashed the
+  # very sprintf("%d") error/warning strings meant to describe it ("invalid format '%d'"), and a
+  # non-integer block injected NA into the resample index. B/block are now coerced up front.
+  L <- matrix(c(1.0, 1.1, 0.9, 1.0, 1.2, 1.2, 1.1, 1.3, 1.1, 1.4), ncol = 2)
+  colnames(L) <- c("a", "b")
+  expect_error(mcs(L, B = "x"), "single positive integer")
+  expect_error(mcs(L, B = NA), "single positive integer")
+  expect_no_error(mcs(L, B = 200.0, block = 3.0, seed = 1))  # whole-number doubles are fine
+})

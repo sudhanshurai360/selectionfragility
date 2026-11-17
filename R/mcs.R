@@ -23,7 +23,13 @@
 #' @param L A numeric matrix (T periods x K models; lower loss = better).
 #' @param alpha Significance level (strictly between 0 and 1).
 #' @param B Number of bootstrap resamples.
-#' @param block Block length for the circular block bootstrap.
+#' @param block Block length for the circular block bootstrap. The default (3) is tuned for
+#'   roughly-i.i.d. losses; it does NOT adapt to serial dependence, and the EPA/MCS bootstrap test
+#'   is over-sized (retains too few models) under persistent losses with a short block (e.g. at
+#'   AR(1)=0.5 the complete-null retain-all rate falls to ~0.62 vs the nominal 0.90). If your loss
+#'   differentials are autocorrelated, raise `block` and report the result across a block sweep
+#'   rather than trusting the default. (This over-elimination is conservative for a tie claim --
+#'   it shrinks the MCS -- but it inflates the apparent identification rate.)
 #' @param seed RNG seed.
 #' @param elimination `"studentized"` (Hansen-Lunde-Nason's e_max, default) or `"raw"` (legacy
 #'   mean-based rule). `NULL` reads `getOption("selectionfragility.elimination", "studentized")`.
@@ -92,8 +98,26 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
   if (!elimination %in% c("studentized", "raw")) {
     stop(sprintf("elimination must be 'studentized' or 'raw'; got '%s'.", elimination), call. = FALSE)
   }
+  # Coerce the two integer-count tuning args up front. Without this, a fractional/character B or
+  # block would (a) truncate silently in seq_len()/the resampler, and (b) crash the very %d-format
+  # error/warning strings meant to describe them ("invalid format '%d'; use %f..."). Validate B as
+  # a finite positive scalar with a worded message; floor block (a fractional block otherwise makes
+  # .block_resample_idx pad its index vector with NA).
+  B_in <- B
+  B <- suppressWarnings(as.integer(B))
+  if (length(B) != 1 || is.na(B)) {
+    stop(sprintf("mcs(): B must be a single positive integer; got %s.", paste(format(B_in), collapse = ", ")), call. = FALSE)
+  }
+  block <- suppressWarnings(as.integer(block))
+  if (length(block) != 1 || is.na(block) || block < 0) {
+    stop(sprintf("mcs(): block must be a single non-negative integer; got %s.", paste(format(block), collapse = ", ")), call. = FALSE)
+  }
   L <- as.matrix(L)
   storage.mode(L) <- "double"
+  if (length(alpha) != 1 || !is.numeric(alpha) || !is.finite(alpha)) {
+    stop(sprintf("mcs(): alpha must be a single finite number strictly between 0 and 1; got a %s of length %d.",
+                  class(alpha)[1], length(alpha)), call. = FALSE)
+  }
   if (!(alpha > 0.0 && alpha < 1.0)) {
     stop(sprintf(
       paste0(
@@ -132,6 +156,18 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
   if (B < 1) stop(sprintf("mcs(): B must be a positive integer; got %d.", B), call. = FALSE)
 
   T <- nrow(L); K <- ncol(L)
+  if (K > .LARGE_K_WARN_THRESHOLD) {
+    # The native engine is reached directly here (matrix input) without routing through
+    # loss_panel()'s large-K warning, so warn at this entry too -- this is the steepest path
+    # (super-cubic in K). Not an error; large sweeps are supported.
+    warning(sprintf(
+      paste0(
+        "mcs(): K=%d models -- the native MCS engine's pairwise elimination is super-cubic in K ",
+        "(O(K^3 * B)); expect this to be slow for large K. Not an error -- narrow to a candidate ",
+        "shortlist if you don't need the full set."
+      ), K
+    ), call. = FALSE)
+  }
   if (T * B > 20000000) {
     warning(sprintf(
       paste0(

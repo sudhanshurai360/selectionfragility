@@ -163,3 +163,25 @@ test_that("loss_panel() from a matrix rejects duplicate column names, matching t
   colnames(M) <- c("a", "a")
   expect_error(loss_panel(M), "duplicate")
 })
+
+test_that("loss_panel() from a LOGICAL matrix is rejected, matching the list/data.frame paths", {
+  # REGRESSION (type-coercion fuzz, 2026-11-17): the matrix constructor had no is.logical guard, so
+  # a logical/indicator matrix was silently coerced TRUE/FALSE -> 1/0 and crowned as "losses",
+  # while the list and data.frame constructors already rejected the identical input.
+  M <- matrix(c(TRUE, FALSE, TRUE, TRUE, FALSE, TRUE, TRUE, FALSE, TRUE, FALSE), ncol = 2)
+  colnames(M) <- c("a", "b")
+  expect_error(loss_panel(M), "logical")
+})
+
+test_that("load_loss_panel() gives a package message for a missing file, not a raw connection error", {
+  expect_error(load_loss_panel(file.path(tempdir(), "definitely-not-here-xyz.json")), "does not exist")
+})
+
+test_that("as.data.frame/summary read live model names and fail loudly on an inconsistent object", {
+  # REGRESSION (S3 object-model review, 2026-11-17): both methods read a cached x$models field and
+  # as.data.frame silently recycled a wrong-length weight vector. They now read names(x$losses) and
+  # validate lengths, so they fail as loudly as report()/their siblings on a mutated object.
+  p <- loss_panel(list(a = c(1.1, 2.2, 3.3, 0.9, 5.5), b = c(1.0, 2.0, 3.5, 4.0, 5.0)))
+  p$weights <- c(1, 2)  # deliberately inconsistent
+  expect_error(as.data.frame(p), "inconsistent")
+})

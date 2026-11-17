@@ -176,3 +176,40 @@ test_that("exchangeable_benchmark() rejects K < 2 with a clean error, not a raw 
   # a clean, worded validation message matching the rest of this package's discipline.
   expect_error(exchangeable_benchmark(K = 0, T = 10), "at least 2 models")
 })
+
+test_that("pooled_winner recognizes a degenerate tie among NEGATIVE means (abs() on both scale terms)", {
+  # REGRESSION (differential R-vs-Python fuzzing, 2026-11-17): the tie-tolerance scale was
+  # (abs(best) + means)/2 -- the per-model term not abs()'d. With negative means, (|v|+v)/2 -> ~0
+  # collapsed the relative tie floor to ~0, so a genuine degenerate tie among negative-mean models
+  # (common with decimal-quantized log/skill-score losses) was not recognized and the winner was
+  # broken toward the raw floating-point minimum, diverging from the Python oracle.
+  expect_equal(pooled_winner(list(a = c(-1, -1), b = c(-1, -1.000000000001))), "a")
+  # Positive-mean control still behaves (both pick "a").
+  expect_equal(pooled_winner(list(a = c(1, 1), b = c(1, 0.999999999999))), "a")
+})
+
+test_that("decision_breakdown()'s return_ties actually toggles the return shape (matches Python)", {
+  # REGRESSION (doc-vs-code contract audit + parity, 2026-11-17): return_ties was an inert
+  # parameter -- `ties` was always in the returned list regardless. Python returns a 3- vs 4-tuple;
+  # R now omits/includes the `ties` field accordingly.
+  L <- list(ar1 = c(1, 1, 1, 1, 1), nbeats = c(0.5, 0.5, 0.5, 0.5, 5.0))
+  expect_false("ties" %in% names(decision_breakdown(L)))
+  expect_true("ties" %in% names(decision_breakdown(L, return_ties = TRUE)))
+})
+
+test_that("winner_stability() rejects a fractional 0<n_boot<1 instead of silently returning stability=0", {
+  # REGRESSION (type-coercion review, 2026-11-17): 0 < n_boot < 1 passed the `n_boot <= 0` guard
+  # but made seq_len(n_boot) empty, so the bootstrap never ran and stability silently returned 0
+  # ("maximally fragile") with no error.
+  L <- list(a = c(1.0, 1.1, 0.9, 1.0, 1.2), b = c(1.2, 1.1, 1.3, 1.1, 1.4))
+  expect_error(winner_stability(L, n_boot = 0.9), "positive integer")
+})
+
+test_that("a non-integer block does not inject NA into the bootstrap resample index", {
+  # REGRESSION (type-coercion review, 2026-11-17): ceiling(T/block) used the fractional block while
+  # 0:(block-1) truncated it, so the index vector was padded with NA and the bootstrap then blamed
+  # the (finite) input data for "non-finite loss values". .block_resample_idx now floors block.
+  L <- list(a = c(1.0, 1.1, 0.9, 1.0, 1.2, 0.8, 1.0, 1.1, 0.95, 1.05),
+            b = c(1.2, 1.1, 1.3, 1.1, 1.4, 1.0, 1.2, 1.1, 1.25, 1.15))
+  expect_no_error(winner_stability(L, block = 3.7, seed = 1))
+})
