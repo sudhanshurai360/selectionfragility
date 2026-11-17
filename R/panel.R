@@ -411,7 +411,10 @@ as.data.frame.loss_panel <- function(x, ...) {
 #' periods won, decision breakdown point) as a data.frame, one row per model, sorted by mean loss.
 #'
 #' @param object A `loss_panel` object.
-#' @param ... Passed to [fragility()] (e.g. `alpha=`).
+#' @param ... Passed to the internal MCS membership check that fills the `in_mcs` column (e.g.
+#'   `alpha=`, `reps=`, `block_size=`, `seed=`) -- NOT forwarded to [fragility()]'s own arguments
+#'   (e.g. `full=`); an unrecognized name here raises a clear argument-matching error rather than
+#'   being silently absorbed into `in_mcs = NA`.
 #' @return A data.frame with columns `model`, `mean_loss`, `periods_won`, `in_mcs`.
 #' @seealso [report()] for the prose summary; [fragility()] for the full set of diagnostic fields.
 #' @examples
@@ -430,7 +433,16 @@ summary.loss_panel <- function(object, ...) {
     models
   )
   wins <- .strict_win_counts(object$losses)
-  mcs_res <- tryCatch(.run_mcs_arch(object$losses, w = object$weights, ...), error = function(e) NULL)
+  mcs_res <- tryCatch(.run_mcs_arch(object$losses, w = object$weights, ...), error = function(e) {
+    # FIXED 2026-11-17 (6-reviewer strict-verification pass): a caller passing an argument that
+    # belongs to fragility() (e.g. full=TRUE) rather than to the internal MCS check (alpha=/reps=/
+    # block_size=/seed=) previously degraded silently to in_mcs=NA with zero indication their
+    # argument was ignored. A real MCS-unavailable failure (e.g. non-uniform weights) is still
+    # swallowed into NA, same as before -- only an R argument-matching error (a typo/wrong-function
+    # argument name) is now surfaced loudly instead.
+    if (grepl("unused argument", conditionMessage(e), fixed = TRUE)) stop(e)
+    NULL
+  })
   in_mcs <- if (is.null(mcs_res)) rep(NA, length(models)) else models %in% mcs_res
   out <- data.frame(
     model = models,

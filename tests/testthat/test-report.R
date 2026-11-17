@@ -80,17 +80,39 @@ test_that("LEADERBOARD's collision-disambiguation quoting is byte-identical to t
 test_that("report()'s seed parameter actually threads through to the MCS bootstrap (not silently ignored)", {
   # REGRESSION (round of 6 adversarial review, 2026-11-17): report() previously had no seed=
   # argument at all and silently always used seed=0 -- added one and threaded it to
-  # .run_mcs_arch()/resolution_report(mcs_seed=); this pins that the parameter is live, not just
-  # present and discarded.
+  # .run_mcs_arch()/resolution_report(mcs_seed=). A first version of this test only checked that
+  # report(seed=0)/report(seed=1) both ran without error -- which would pass identically even if
+  # `seed` were accepted and silently discarded, so it pinned nothing. This version traces
+  # set.seed() itself (the actual mechanism by which `seed` reaches the RNG) to confirm the value
+  # the caller passed is genuinely the value reaching the bootstrap, not just a parameter that
+  # exists on paper.
   L <- list(
-    a = c(1.00, 1.05, 0.95, 1.10, 0.90, 1.08, 0.92, 1.03, 0.97, 1.02),
-    b = c(1.01, 1.04, 0.96, 1.09, 0.91, 1.07, 0.93, 1.02, 0.98, 1.01)
+    a = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+    b = c(1.01, 0.99, 1.03, 1.02, 1.00, 1.04, 0.98, 1.01, 1.03, 0.99)
   )
   panel <- loss_panel(L)
-  out_seed0 <- report(panel, seed = 0)
-  out_seed1 <- report(panel, seed = 1)
-  # Not asserting they differ (they may legitimately agree) -- asserting the call succeeds with
-  # an explicit seed and produces a well-formed report either way.
-  expect_true(is.character(out_seed0))
-  expect_true(is.character(out_seed1))
+  # `<<-` inside a trace() tracer searches enclosing environments from the TRACED FUNCTION's own
+  # call frame, not from this test_that() block's local frame -- a `seen <<- ...` tracer silently
+  # records nothing when run inside a wrapped function (verified directly: 0 calls observed).
+  # Assigning explicitly into globalenv() by name sidesteps that scoping trap.
+  assign(".seen_seeds_test_report_seed", c(), envir = globalenv())
+  trace("set.seed", tracer = quote(assign(
+    ".seen_seeds_test_report_seed",
+    c(get(".seen_seeds_test_report_seed", envir = globalenv()), seed),
+    envir = globalenv()
+  )), print = FALSE, where = globalenv())
+  on.exit({
+    suppressMessages(try(untrace("set.seed"), silent = TRUE))
+    if (exists(".seen_seeds_test_report_seed", envir = globalenv())) {
+      rm(".seen_seeds_test_report_seed", envir = globalenv())
+    }
+  }, add = TRUE)
+  report(panel, seed = 77)
+  seen <- get(".seen_seeds_test_report_seed", envir = globalenv())
+  # Exactly two of the observed set.seed() calls must be 77 (VERDICT's .run_mcs_arch() call and
+  # RESOLUTION's resolution_report(mcs_seed=) -> identified() call); a third, unrelated call at
+  # seed=0 comes from PIVOT's pivot_agreement(L, w, seed=0), which is intentionally independent of
+  # the user's seed= argument and must not be mistaken for a leak of the default.
+  expect_equal(sum(seen == 77), 2)
+  expect_true(0 %in% seen)
 })

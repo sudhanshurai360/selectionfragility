@@ -113,3 +113,25 @@ test_that("summary.loss_panel() returns a sorted-by-mean-loss data.frame", {
   expect_true(all(diff(s$mean_loss) >= 0))
   expect_true("in_mcs" %in% names(s))
 })
+
+test_that("summary.loss_panel()'s ... goes to the MCS check, not to fragility() -- a real argument typo errors loudly", {
+  # REGRESSION (6-reviewer strict-verification pass, 2026-11-17): @param ... previously claimed to
+  # route to fragility() but actually went to the internal MCS check (.run_mcs_arch); an argument
+  # that belongs to fragility() (e.g. full=TRUE) but not to the MCS check silently degraded to
+  # in_mcs=NA with no indication the argument did anything different from what the docs implied.
+  L <- list(
+    ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+    nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+    ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+  )
+  panel <- loss_panel(L)
+  expect_error(summary(panel, full = TRUE), "unused argument")
+  # A genuinely MCS-relevant argument (alpha=) still works and is not mistaken for a typo.
+  s <- summary(panel, alpha = 0.5)
+  expect_true("in_mcs" %in% names(s))
+  # A real MCS-unavailable failure (non-uniform weights) must still degrade to NA, not error.
+  w <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+  panel_w <- loss_panel(L, weights = w)
+  s_w <- summary(panel_w)
+  expect_true(all(is.na(s_w$in_mcs)))
+})

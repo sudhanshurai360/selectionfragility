@@ -9,7 +9,10 @@
 \arguments{
 \item{object}{A \code{loss_panel} object.}
 
-\item{...}{Passed to \code{\link[=fragility]{fragility()}} (e.g. \verb{alpha=}).}
+\item{...}{Passed to the internal MCS membership check that fills the \code{in_mcs} column (e.g.
+\verb{alpha=}, \verb{reps=}, \verb{block_size=}, \verb{seed=}) -- NOT forwarded to \code{\link[=fragility]{fragility()}}'s own arguments
+(e.g. \verb{full=}); an unrecognized name here raises a clear argument-matching error rather than
+being silently absorbed into \code{in_mcs = NA}.}
 }
 \value{
 A data.frame with columns \code{model}, \code{mean_loss}, \code{periods_won}, \code{in_mcs}.

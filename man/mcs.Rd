@@ -54,11 +54,11 @@ to \code{MCS::MCSprocedure()}) called it "identified" on only 13.0\% of seeds. A
 handful of seeds and reports only the favorable one can flip the headline verdict roughly 1
 time in 3 (this engine) to 1 time in 8 (the cross-check engine) with NO data manipulation at
 all. \code{\link[=winner_stability]{winner_stability()}} is NOT exploitable this way (it stayed within 0.933-0.960 across the
-same seed sweep) -- only the MCS/identification layer is. \code{\link[=report]{report()}}'s one-screen summary has
-no \verb{seed=} argument and is permanently pinned to \code{seed=0}, so an honest reader of \code{report()}
-alone has no way to know how seed-sensitive that single verdict is; call \code{mcs()}/
-\code{mcs_size()}/\code{identified()} directly across a few seeds yourself near a borderline alpha if
-this matters for your use case, rather than trusting one fixed-seed call.
+same seed sweep) -- only the MCS/identification layer is. \code{\link[=report]{report()}} has a \verb{seed=} argument
+(default 0, matching its prior hardcoded behavior) precisely so a caller CAN check this --
+call \code{report(panel, seed=...)}/\code{mcs()}/\code{mcs_size()}/\code{identified()} across a few different
+seeds yourself near a borderline alpha if this matters for your use case, rather than
+trusting one fixed-seed call.
 }
 Strategic period-withholding (submitting only "easy" periods to inflate an apparent record) is
 only PARTIALLY closed at the input layer: \code{loss_panel()} requires every model to have the SAME

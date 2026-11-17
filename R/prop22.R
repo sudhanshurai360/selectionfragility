@@ -39,6 +39,17 @@ prop22_certifies <- function(k, T, z = 1.96) {
   isTRUE(k <= .prop22_threshold(T, z = z))
 }
 
+#' @keywords internal
+# Tolerance matches numpy's `np.allclose(w, w.flat[0])` default (atol=1e-8, rtol=1e-5) exactly --
+# a tighter, ad hoc tolerance here previously rejected float-noisy-but-uniform weight vectors
+# (e.g. observation counts recomputed from a slightly perturbed source) that the Python oracle
+# accepts, a real cross-language behavioral divergence, not just a decimal-precision difference.
+# Shared by certified_tied_subset() (below) and report()'s PIVOT section (report.R) -- both call
+# prop22_certifies() on a k* that is only valid when it came from UNWEIGHTED breakdown_number().
+.weights_are_uniform <- function(w) {
+  isTRUE(all(abs(w - w[1]) <= 1e-8 + 1e-5 * abs(w[1])))
+}
+
 #' No-bootstrap lower bound on the tied set's size
 #'
 #' The champion plus every rival whose pairwise k* is certified non-significant by Proposition 2.2.
@@ -63,11 +74,7 @@ certified_tied_subset <- function(L, w = NULL, z = 1.96) {
   L <- .as_loss_dict(L)
   T <- .validate_losses(L, w)
   w <- if (is.null(w)) rep(1, T) else as.numeric(w)
-  # Tolerance matches numpy's `np.allclose(w, w.flat[0])` default (atol=1e-8, rtol=1e-5) exactly --
-  # a tighter, ad hoc tolerance here previously rejected float-noisy-but-uniform weight vectors
-  # (e.g. observation counts recomputed from a slightly perturbed source) that the Python oracle
-  # accepts, a real cross-language behavioral divergence, not just a decimal-precision difference.
-  if (!isTRUE(all(abs(w - w[1]) <= 1e-8 + 1e-5 * abs(w[1])))) {
+  if (!.weights_are_uniform(w)) {
     stop(paste0(
       "certified_tied_subset() only supports uniform weights (or w=NULL) -- Proposition 2.2's ",
       "bound is proved for the unweighted i.i.d. population-sd statistic, and applying it to a ",

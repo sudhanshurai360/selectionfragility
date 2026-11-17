@@ -91,7 +91,7 @@ periods (8)`, where `8` is the 0-indexed position of the 9th period) — matchin
 package's own default positional labels, not R's usual 1-based counting. This is deliberate for
 cross-language consistency, but it means the bare number in an unlabeled `report()` is one less
 than the period's 1-based position if you count by hand. (Note: this differs from
-`decision_breakdown()$removed`, which reports a bare 1-based position — see its own `?help` page.)
+`decision_breakdown()$removed`, which reports a bare 1-based position — see its own `?decision_breakdown` page.)
 Pass real labels and avoid the ambiguity entirely:
 
 ```{r}
