@@ -44,10 +44,29 @@ criterion in an adversarial setting -- pair it with an independent accuracy floo
 participant-supplied rather than fixed by the competition operator in advance, it can flip
 both the pooled winner and k* entirely. Weights must always be operator-controlled and
 fixed before results are known in any setting with an adversarial party.
+\item \strong{Seed-shopping on a borderline panel is at least as exploitable as the two
+vectors above} (ADDED 2026-11-17, 6-reviewer adversarial pass): quantified on a genuinely
+borderline K=2, T=20 panel sitting near the alpha=0.10 boundary, sweeping seed=1..300 with
+every other argument at its default: the native engine (this function) called the comparison
+"identified" (singleton MCS) on 37.3\% of seeds at B=2000 (42.0\% at B=500) and "not identified"
+on the rest; the independent cross-check engine (\code{\link[=mcs_size]{mcs_size()}}/\code{\link[=identified]{identified()}}, which delegates
+to \code{MCS::MCSprocedure()}) called it "identified" on only 13.0\% of seeds. A party who tries a
+handful of seeds and reports only the favorable one can flip the headline verdict roughly 1
+time in 3 (this engine) to 1 time in 8 (the cross-check engine) with NO data manipulation at
+all. \code{\link[=winner_stability]{winner_stability()}} is NOT exploitable this way (it stayed within 0.933-0.960 across the
+same seed sweep) -- only the MCS/identification layer is. \code{\link[=report]{report()}}'s one-screen summary has
+no \verb{seed=} argument and is permanently pinned to \code{seed=0}, so an honest reader of \code{report()}
+alone has no way to know how seed-sensitive that single verdict is; call \code{mcs()}/
+\code{mcs_size()}/\code{identified()} directly across a few seeds yourself near a borderline alpha if
+this matters for your use case, rather than trusting one fixed-seed call.
 }
 Strategic period-withholding (submitting only "easy" periods to inflate an apparent record) is
-already closed at the input layer: \code{loss_panel()} requires equal period counts across all
-models and refuses otherwise.
+only PARTIALLY closed at the input layer: \code{loss_panel()} requires every model to have the SAME
+period count, which closes the ASYMMETRIC case (one model's record quietly shorter than the
+others'). It cannot and does not close the SYMMETRIC case -- an analyst handing every model the
+same curated/cherry-picked subset of periods, which looks identical to honest data from inside
+any loss-matrix-consuming tool. That is an inherent limitation of any diagnostic at this level,
+not a gap specific to this package.
 }
 
 \examples{

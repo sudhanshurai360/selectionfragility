@@ -21,6 +21,12 @@ The minimum detectable edge, as a fraction of the champion's loss level.
 \description{
 Minimum detectable edge against the binding rival
 }
+\section{Assumption}{
+ assumes no autocorrelation in the per-period (rival - champion) loss
+differential -- see \code{.weighted_se}'s comment in resolution.R for why this can matter and
+what to do instead (prefer \code{mcs()}/\code{model_confidence_set()}'s block bootstrap) when it does.
+}
+
 \examples{
 L <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),

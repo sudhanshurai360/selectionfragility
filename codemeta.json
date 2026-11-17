@@ -1,0 +1,64 @@
+{
+  "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
+  "@type": "SoftwareSourceCode",
+  "identifier": "selectionfragility",
+  "name": "selectionfragility: Decision Breakdown Point and Selection-Fragility Diagnostics for Forecast Model Comparison",
+  "description": "Decision-oriented diagnostics for forecast model selection: the Model Confidence Set (Hansen, Lunde and Nason 2011) for identification of the best model, and the decision breakdown point (k*), the fewest evaluation periods whose deletion flips the pooled winner. Includes selection-as-election diagnostics (score vs plurality vs Condorcet winners, cycles vs ties, margin concentration) and a staged pipeline from a validated loss panel through identification, resolution, significance certification, pivot analysis, and run-over-run comparison. A native R port of the Python package selection-fragility.",
+  "codeRepository": "https://github.com/sudhanshurai360/selectionfragility",
+  "issueTracker": "https://github.com/sudhanshurai360/selectionfragility/issues",
+  "license": "https://spdx.org/licenses/MIT",
+  "version": "0.1.0",
+  "programmingLanguage": {
+    "@type": "ComputerLanguage",
+    "name": "R",
+    "url": "https://r-project.org"
+  },
+  "runtimePlatform": "R version 4.1.0 or later",
+  "author": [
+    {
+      "@type": "Person",
+      "givenName": "Sudhanshu",
+      "familyName": "Rai",
+      "email": "me@sudhanshurai.org",
+      "@id": "https://orcid.org/0009-0001-2447-0336"
+    }
+  ],
+  "maintainer": [
+    {
+      "@type": "Person",
+      "givenName": "Sudhanshu",
+      "familyName": "Rai",
+      "email": "me@sudhanshurai.org",
+      "@id": "https://orcid.org/0009-0001-2447-0336"
+    }
+  ],
+  "softwareRequirements": [
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "MCS",
+      "name": "MCS"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "jsonlite",
+      "name": "jsonlite"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "identifier": "stats",
+      "name": "stats"
+    }
+  ],
+  "relatedLink": [
+    "https://github.com/sudhanshurai360/selection-fragility"
+  ],
+  "keywords": [
+    "forecasting",
+    "model selection",
+    "model confidence set",
+    "robustness",
+    "breakdown point",
+    "reproducibility",
+    "R"
+  ]
+}

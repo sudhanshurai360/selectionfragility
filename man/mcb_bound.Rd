@@ -21,6 +21,11 @@ fraction of the champion's loss level, corrected for the post-hoc rival-selectio
 \description{
 MCB-style simultaneous upper confidence bound on the champion's edge
 }
+\section{Assumption}{
+ assumes no autocorrelation in the per-period (rival - champion) loss
+differential -- see \code{.weighted_se}'s comment in resolution.R.
+}
+
 \examples{
 L <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),

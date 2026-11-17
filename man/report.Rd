@@ -4,7 +4,7 @@
 \alias{report}
 \title{One-screen summary of a loss_panel}
 \usage{
-report(panel, alpha = 0.1, full = FALSE)
+report(panel, alpha = 0.1, full = FALSE, seed = 0)
 }
 \arguments{
 \item{panel}{A \code{loss_panel} object (not a raw list -- this function reads \verb{$weights}/\verb{$labels}).}
@@ -12,6 +12,13 @@ report(panel, alpha = 0.1, full = FALSE)
 \item{alpha}{Significance level for the Model Confidence Set.}
 
 \item{full}{Accepted for forward compatibility; unused (the default view is the compact one).}
+
+\item{seed}{RNG seed for the Model Confidence Set bootstrap. VERDICT/\code{fragility_read} run a
+bootstrap-based MCS, and on a genuinely borderline panel the identified/not-identified
+verdict can be seed-sensitive (see \code{?mcs}'s "Adversarial use" section for a quantified
+example: identification can swing ~37-42 percentage points across seed=1..300 on one
+borderline panel). Previously silently pinned to \code{seed=0} with no way to check; pass a few
+different seeds yourself near a borderline alpha if this matters for your use case.}
 }
 \value{
 A character string of class \code{selectionfragility_report} (the report text) with a

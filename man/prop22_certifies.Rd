@@ -17,7 +17,15 @@ prop22_certifies(k, T, z = 1.96)
 \code{TRUE}/\code{FALSE}, or \code{NA} when the certificate does not apply (\code{k <= 0} or \code{k >= T}).
 }
 \description{
-Zero-simulation certificate of non-significance for a champion-vs-rival k*
+Scope, not enforced here: this function takes a bare \code{k}/\code{T}, with no visibility into how \code{k}
+was computed, so it CANNOT itself check two preconditions the caller must. (1) \code{k} must come
+from an UNWEIGHTED \code{breakdown_number()} call -- see \code{certified_tied_subset()}'s own guard for
+the bug this produces when violated (a genuinely significant gap silently certified
+"non-significant"). (2) This certifies the SINGLE binding rival named by k*'s definition (min
+over rivals), not an adaptively re-searched one -- if your workflow re-runs
+\code{decision_breakdown()} with different weight vectors until a favorable rival turns up, that is
+a multiple-comparisons problem this certificate does not correct for (contrast \code{\link[=mcb_bound]{mcb_bound()}},
+which DOES Bonferroni-correct for an analogous post-hoc rival-selection problem).
 }
 \examples{
 prop22_certifies(2, T = 10)   # TRUE  -- k*=2 is certified non-significant at T=10

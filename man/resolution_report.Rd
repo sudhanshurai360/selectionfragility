@@ -4,7 +4,14 @@
 \alias{resolution_report}
 \title{R1/R2 resolution report with refusal rules}
 \usage{
-resolution_report(L, w = NULL, alpha = 0.05, power = 0.8, mcs_alpha = 0.1)
+resolution_report(
+  L,
+  w = NULL,
+  alpha = 0.05,
+  power = 0.8,
+  mcs_alpha = 0.1,
+  mcs_seed = 0
+)
 }
 \arguments{
 \item{L}{A named list \code{{model: vector}} or a \code{loss_panel}.}
@@ -16,6 +23,8 @@ resolution_report(L, w = NULL, alpha = 0.05, power = 0.8, mcs_alpha = 0.1)
 \item{power}{Target power for the reported MDE (> 0.5).}
 
 \item{mcs_alpha}{Significance level passed to \code{identified()} for R2.}
+
+\item{mcs_seed}{RNG seed passed to \code{identified()} for R2 (see "Seed sensitivity" below).}
 }
 \value{
 A named list: \code{champion}, \code{resolved}, \code{observed_edge}, \code{mde}, \code{significance_boundary},
@@ -24,6 +33,22 @@ A named list: \code{champion}, \code{resolved}, \code{observed_edge}, \code{mde}
 \description{
 R1/R2 resolution report with refusal rules
 }
+\section{Assumption}{
+ \code{resolved}/\code{mde}/\code{significance_boundary} assume no autocorrelation in the
+per-period loss differential (see \code{.weighted_se}'s comment in resolution.R). \code{fragility_read}'s
+\code{identified} check does not share this assumption (it goes through the block-bootstrap MCS),
+but the R1 \code{resolved} gate does; a "resolved" read can overstate confidence under
+autocorrelated losses.
+}
+
+\section{Seed sensitivity}{
+ \code{mcs_seed} (ADDED 2026-11-17, 6-reviewer adversarial pass):
+\code{fragility_read}'s \code{identified} check is a bootstrap-based MCS call, and on a genuinely
+borderline panel the verdict can be seed-sensitive (see \code{?mcs}'s "Adversarial use" section
+for a quantified example). Previously silently pinned to \code{seed=0}; pass a few different seeds
+yourself near a borderline alpha if this matters for your use case.
+}
+
 \examples{
 # Only 4 periods, and nbeats narrowly beats ar1 on average -- but with this
 # little data, that edge is NOT resolved: it falls short of the significance

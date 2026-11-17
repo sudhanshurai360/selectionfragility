@@ -1,0 +1,56 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite both the software and the accompanying paper. See also the sibling Python package, selection-fragility, which implements the same methods."
+title: "selectionfragility: the decision breakdown point (k*) and ranking-fragility diagnostics for forecast model selection (R port)"
+abstract: >-
+  Decision-oriented diagnostics for forecast model selection: the Model Confidence Set
+  (which candidate models are statistically indistinguishable from the best), the decision
+  breakdown point k* (the fewest evaluation periods whose deletion flips the pooled winner),
+  a resolution report answering whether the observed edge is actually resolvable at the
+  available sample size (with a refusal discipline for reads the data cannot support), a
+  zero-simulation significance certificate for k*, run-over-run champion-change comparison,
+  and selection-as-election diagnostics including score, plurality and Condorcet winners,
+  genuine intransitive cycles versus pairwise ties, margin concentration, and a
+  block-bootstrap winner-stability null. A native R port of the Python package
+  selection-fragility; see that repository for the accompanying paper.
+type: software
+authors:
+  - family-names: Rai
+    given-names: Sudhanshu
+    orcid: "https://orcid.org/0009-0001-2447-0336"
+    affiliation: "Independent Researcher"
+    email: me@sudhanshurai.org
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/sudhanshurai360/selectionfragility"
+keywords:
+  - forecasting
+  - model selection
+  - model confidence set
+  - robustness
+  - breakdown point
+  - computational social choice
+  - reproducibility
+  - R
+
+# No version-specific DOI yet -- this package has not had a GitHub release or Zenodo deposit as
+# of this file's creation (2026-11-17). Add an `identifiers:` block (type: doi) once a release is
+# cut and Zenodo mints one, mirroring the Python sibling package's CITATION.cff.
+
+# The accompanying paper is still unpublished (in journal review); no preferred-citation block
+# for it yet, for the same reason the Python sibling package's CITATION.cff omits one -- adding a
+# title/author/year block here would make GitHub's own "Cite this repository" button render the
+# paper's exact title paired with the author's name while the manuscript is under review. Add this
+# block once the paper has a stable, citable reference.
+
+references:
+  - type: software
+    title: "selection-fragility"
+    authors:
+      - family-names: Rai
+        given-names: Sudhanshu
+        orcid: "https://orcid.org/0009-0001-2447-0336"
+    repository-code: "https://github.com/sudhanshurai360/selection-fragility"
+    notes: >-
+      The Python original this package is a native R port of -- same method, same validated
+      numerics, independently verified against it. Cite either implementation; they compute the
+      same quantities.

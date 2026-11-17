@@ -50,6 +50,17 @@
 }
 
 #' @keywords internal
+# I.I.D. ASSUMPTION, NOT HAC-CORRECTED (ADDED 2026-11-17, 6-reviewer convergence pass): this
+# estimates Var(weighted mean) = sigma^2/n_eff under an implicit assumption that successive
+# per-period (rival - champion) differentials are uncorrelated. Forecast loss differentials are
+# canonically autocorrelated in practice -- the same reason this package's own mcs()/
+# model_confidence_set() runs a block bootstrap rather than an i.i.d. variance formula. Under
+# positive autocorrelation, this SE understates the true uncertainty, so
+# minimum_detectable_edge()/significance_boundary()/mcb_bound()/resolution_report() can report
+# more confidence (a smaller MDE, a "resolved" read) than the data actually supports. No HAC/
+# Newey-West correction is implemented here; prefer mcs()/model_confidence_set()'s
+# block-bootstrap-based identification over this module's closed-form significance reads if
+# autocorrelation is a live concern for your panel.
 .weighted_se <- function(diff, w) {
   T <- length(diff)
   if (T < 2) stop(sprintf("need at least 2 periods to estimate a standard error; got T=%d.", T), call. = FALSE)
@@ -94,6 +105,9 @@
 #' @param power Target power (> 0.5).
 #' @param alpha One-sided significance level (< 0.5).
 #' @return The minimum detectable edge, as a fraction of the champion's loss level.
+#' @section Assumption: assumes no autocorrelation in the per-period (rival - champion) loss
+#'   differential -- see `.weighted_se`'s comment in resolution.R for why this can matter and
+#'   what to do instead (prefer `mcs()`/`model_confidence_set()`'s block bootstrap) when it does.
 #' @examples
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
@@ -122,6 +136,8 @@ minimum_detectable_edge <- function(L, w = NULL, power = 0.80, alpha = 0.05) {
 #' @inheritParams minimum_detectable_edge
 #' @return The significance threshold, as a fraction of the champion's loss level. The observed
 #'   edge must clear this value to be called significant at the stated one-sided `alpha`.
+#' @section Assumption: assumes no autocorrelation in the per-period (rival - champion) loss
+#'   differential -- see `.weighted_se`'s comment in resolution.R.
 #' @examples
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
@@ -150,6 +166,8 @@ significance_boundary <- function(L, w = NULL, alpha = 0.05) {
 #' @return The upper confidence bound on the champion's true edge over its binding rival, as a
 #'   fraction of the champion's loss level, corrected for the post-hoc rival-selection problem
 #'   (unlike `k*`, which is a descriptive fact about the observed data, not a corrected bound).
+#' @section Assumption: assumes no autocorrelation in the per-period (rival - champion) loss
+#'   differential -- see `.weighted_se`'s comment in resolution.R.
 #' @examples
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
@@ -231,11 +249,22 @@ selection_regret <- function(L, weights = NULL, w = NULL) {
 #' @param alpha One-sided significance level for R1 (< 0.5).
 #' @param power Target power for the reported MDE (> 0.5).
 #' @param mcs_alpha Significance level passed to `identified()` for R2.
+#' @param mcs_seed RNG seed passed to `identified()` for R2 (see "Seed sensitivity" below).
 #' @return A named list: `champion`, `resolved`, `observed_edge`, `mde`, `significance_boundary`,
 #'   `binding_rival`, `identified`, `fragility_read`.
 #' @seealso [minimum_detectable_edge()], [significance_boundary()], [mcb_bound()] for the
 #'   individual statistics this report assembles; [report()] for the one-screen view that reuses
 #'   this same R1/R2 logic.
+#' @section Assumption: `resolved`/`mde`/`significance_boundary` assume no autocorrelation in the
+#'   per-period loss differential (see `.weighted_se`'s comment in resolution.R). `fragility_read`'s
+#'   `identified` check does not share this assumption (it goes through the block-bootstrap MCS),
+#'   but the R1 `resolved` gate does; a "resolved" read can overstate confidence under
+#'   autocorrelated losses.
+#' @section Seed sensitivity: `mcs_seed` (ADDED 2026-11-17, 6-reviewer adversarial pass):
+#'   `fragility_read`'s `identified` check is a bootstrap-based MCS call, and on a genuinely
+#'   borderline panel the verdict can be seed-sensitive (see `?mcs`'s "Adversarial use" section
+#'   for a quantified example). Previously silently pinned to `seed=0`; pass a few different seeds
+#'   yourself near a borderline alpha if this matters for your use case.
 #' @examples
 #' # Only 4 periods, and nbeats narrowly beats ar1 on average -- but with this
 #' # little data, that edge is NOT resolved: it falls short of the significance
@@ -251,7 +280,7 @@ selection_regret <- function(L, weights = NULL, w = NULL) {
 #' r$resolved       # FALSE -- observed edge doesn't clear the significance boundary
 #' r$fragility_read # "undetermined" -- too little data to certify this pick
 #' @export
-resolution_report <- function(L, w = NULL, alpha = 0.05, power = 0.80, mcs_alpha = 0.10) {
+resolution_report <- function(L, w = NULL, alpha = 0.05, power = 0.80, mcs_alpha = 0.10, mcs_seed = 0) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
   L <- .as_loss_dict(L)
   T <- .validate_losses(L, w)
@@ -265,7 +294,7 @@ resolution_report <- function(L, w = NULL, alpha = 0.05, power = 0.80, mcs_alpha
 
   is_identified <- NULL
   fragility_read <- NULL
-  id_result <- tryCatch(isTRUE(identified(L, alpha = mcs_alpha, w = ww)), error = function(e) e)
+  id_result <- tryCatch(isTRUE(identified(L, alpha = mcs_alpha, w = ww, seed = mcs_seed)), error = function(e) e)
   if (inherits(id_result, "error")) {
     is_identified <- NULL
     fragility_read <- "undetermined"

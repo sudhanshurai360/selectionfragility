@@ -20,6 +20,11 @@ edge must clear this value to be called significant at the stated one-sided \cod
 \description{
 One-sided significance threshold against the binding rival
 }
+\section{Assumption}{
+ assumes no autocorrelation in the per-period (rival - champion) loss
+differential -- see \code{.weighted_se}'s comment in resolution.R.
+}
+
 \examples{
 L <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),

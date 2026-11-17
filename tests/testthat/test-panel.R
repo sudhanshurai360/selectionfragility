@@ -84,3 +84,32 @@ test_that("save_loss_panel / load_loss_panel round-trips exactly", {
   expect_equal(p$weights, p2$weights)
   unlink(tmp)
 })
+
+test_that("as.data.frame.loss_panel() returns a tidy long data.frame", {
+  L <- list(
+    ar1 = c(1.00, 0.98, 1.02, 1.01, 0.99),
+    ets = c(1.20, 1.18, 1.22, 1.21, 1.19)
+  )
+  panel <- loss_panel(L, labels = 2020:2024)
+  df <- as.data.frame(panel)
+  expect_equal(nrow(df), 10)
+  expect_equal(sort(unique(df$model)), c("ar1", "ets"))
+  expect_equal(df$loss[df$model == "ar1" & df$period == 2020], 1.00)
+  expect_equal(df$loss[df$model == "ets" & df$period == 2023], 1.21)
+  expect_true(all(df$weight == 1))
+})
+
+test_that("summary.loss_panel() returns a sorted-by-mean-loss data.frame", {
+  L <- list(
+    ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+    nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+    ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+  )
+  panel <- loss_panel(L)
+  s <- summary(panel)
+  expect_equal(nrow(s), 3)
+  expect_equal(s$model[1], "ar1")
+  expect_true(is.numeric(s$mean_loss))
+  expect_true(all(diff(s$mean_loss) >= 0))
+  expect_true("in_mcs" %in% names(s))
+})

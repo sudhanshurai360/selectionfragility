@@ -128,7 +128,14 @@ NULL
       paste0(
         "K=%d models -- report()/identified()/mcs_size() cost grows steeply with model count. ",
         "This is not an error -- large model sweeps are supported -- but expect it to be slow; ",
-        "if you don't need per-model MCS membership, consider narrowing to a candidate shortlist first."
+        "if you don't need per-model MCS membership, consider narrowing to a candidate shortlist ",
+        "first. THIS IS ONLY A WARNING, NOT A HARD CAP (ADDED 2026-11-17, 6-reviewer adversarial ",
+        "pass): neither K nor T has an enforced ceiling anywhere in this package (unlike B, which ",
+        "does -- see mcs.R's .MAX_BOOTSTRAP_B). Measured growth in K is super-quadratic. If this ",
+        "package is ever called from a server/API process on untrusted caller-supplied K/T/B, that ",
+        "caller can trivially turn a single call into a minutes-to-hours-long computation with ",
+        "nothing stronger than this warning to stop them -- validate/cap K and T yourself at your ",
+        "own service boundary if that's your deployment shape."
       ), K
     ), call. = FALSE)
   }
@@ -368,6 +375,71 @@ print.loss_panel <- function(x, ...) {
   }
   cat(sprintf("<loss_panel> models=%s, T=%d\n", paste(x$models, collapse = ", "), length(x$labels)))
   invisible(x)
+}
+
+#' Convert a loss_panel to a long data.frame
+#'
+#' One row per (period, model): `period` (the panel's labels, repeated), `model`, `loss`, and
+#' `weight`. The standard escape hatch out of a `loss_panel` for `ggplot2`/`dplyr`/other tabular
+#' workflows -- every other field (`$losses`, `$weights`, `$labels`) is still reachable by hand,
+#' but this is the one-call tidy shape most R users reach for first.
+#'
+#' @param x A `loss_panel` object.
+#' @param ... Unused; present for S3 consistency with `as.data.frame()`.
+#' @return A data.frame with columns `period`, `model`, `loss`, `weight`.
+#' @examples
+#' L <- list(
+#'   ar1 = c(1.00, 0.98, 1.02, 1.01, 0.99),
+#'   ets = c(1.20, 1.18, 1.22, 1.21, 1.19)
+#' )
+#' panel <- loss_panel(L, labels = 2020:2024)
+#' as.data.frame(panel)
+#' @export
+as.data.frame.loss_panel <- function(x, ...) {
+  models <- x$models
+  T <- length(x$labels)
+  period <- rep(x$labels, times = length(models))
+  model <- rep(models, each = T)
+  loss <- unlist(lapply(models, function(m) as.numeric(x$losses[[m]])), use.names = FALSE)
+  weight <- rep(as.numeric(x$weights), times = length(models))
+  data.frame(period = period, model = model, loss = loss, weight = weight, stringsAsFactors = FALSE)
+}
+
+#' Summarize a loss_panel's per-model fragility diagnostics
+#'
+#' A numeric-first alternative to [report()]'s prose: `fragility()`'s per-model fields (mean loss,
+#' periods won, decision breakdown point) as a data.frame, one row per model, sorted by mean loss.
+#'
+#' @param object A `loss_panel` object.
+#' @param ... Passed to [fragility()] (e.g. `alpha=`).
+#' @return A data.frame with columns `model`, `mean_loss`, `periods_won`, `in_mcs`.
+#' @seealso [report()] for the prose summary; [fragility()] for the full set of diagnostic fields.
+#' @examples
+#' L <- list(
+#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+#'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+#'   ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+#' )
+#' panel <- loss_panel(L)
+#' summary(panel)
+#' @export
+summary.loss_panel <- function(object, ...) {
+  models <- object$models
+  mean_loss <- stats::setNames(
+    sapply(models, function(m) stats::weighted.mean(as.numeric(object$losses[[m]]), object$weights)),
+    models
+  )
+  wins <- .strict_win_counts(object$losses)
+  mcs_res <- tryCatch(.run_mcs_arch(object$losses, w = object$weights, ...), error = function(e) NULL)
+  in_mcs <- if (is.null(mcs_res)) rep(NA, length(models)) else models %in% mcs_res
+  out <- data.frame(
+    model = models,
+    mean_loss = unname(mean_loss[models]),
+    periods_won = unname(wins[models]),
+    in_mcs = in_mcs,
+    stringsAsFactors = FALSE
+  )
+  out[order(out$mean_loss), , drop = FALSE]
 }
 
 #' Save a loss_panel to a JSON file

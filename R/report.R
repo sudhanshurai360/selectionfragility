@@ -64,6 +64,12 @@
 #' @param panel A `loss_panel` object (not a raw list -- this function reads `$weights`/`$labels`).
 #' @param alpha Significance level for the Model Confidence Set.
 #' @param full Accepted for forward compatibility; unused (the default view is the compact one).
+#' @param seed RNG seed for the Model Confidence Set bootstrap. VERDICT/`fragility_read` run a
+#'   bootstrap-based MCS, and on a genuinely borderline panel the identified/not-identified
+#'   verdict can be seed-sensitive (see `?mcs`'s "Adversarial use" section for a quantified
+#'   example: identification can swing ~37-42 percentage points across seed=1..300 on one
+#'   borderline panel). Previously silently pinned to `seed=0` with no way to check; pass a few
+#'   different seeds yourself near a borderline alpha if this matters for your use case.
 #' @return A character string of class `selectionfragility_report` (the report text) with a
 #'   `print` method, so both `report(panel)` (auto-printed at the console) and
 #'   `print(report(panel))` display the formatted report; `cat(report(panel))` also works.
@@ -81,7 +87,7 @@
 #' panel <- loss_panel(L)
 #' report(panel)   # auto-prints; print(report(panel))/cat(report(panel)) also work
 #' @export
-report <- function(panel, alpha = 0.10, full = FALSE) {
+report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
   if (!inherits(panel, "loss_panel")) {
     stop(sprintf("report() expects a loss_panel, got %s. Build one first with loss_panel(...).", class(panel)[1]), call. = FALSE)
   }
@@ -94,7 +100,7 @@ report <- function(panel, alpha = 0.10, full = FALSE) {
 
   mcs_error <- NULL
   survivors <- character(0); msize <- NULL; ident <- NULL
-  mcs_res <- tryCatch(.run_mcs_arch(L, alpha = alpha, w = w), error = function(e) e)
+  mcs_res <- tryCatch(.run_mcs_arch(L, alpha = alpha, w = w, seed = seed), error = function(e) e)
   if (inherits(mcs_res, "error")) {
     ident <- NULL; msize <- NULL; survivors <- character(0)
     mcs_error <- conditionMessage(mcs_res)
@@ -108,7 +114,7 @@ report <- function(panel, alpha = 0.10, full = FALSE) {
   champ <- pooled_winner(L, w)
 
   res <- tryCatch(
-    resolution_report(L, w, alpha = 0.05, power = 0.80, mcs_alpha = alpha),
+    resolution_report(L, w, alpha = 0.05, power = 0.80, mcs_alpha = alpha, mcs_seed = seed),
     error = function(e) list(resolved = FALSE, observed_edge = NaN, mde = NaN,
                               significance_boundary = NaN, binding_rival = NULL,
                               identified = NULL, fragility_read = "undetermined")

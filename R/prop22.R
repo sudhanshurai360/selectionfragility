@@ -10,6 +10,16 @@
 
 #' Zero-simulation certificate of non-significance for a champion-vs-rival k*
 #'
+#' Scope, not enforced here: this function takes a bare `k`/`T`, with no visibility into how `k`
+#' was computed, so it CANNOT itself check two preconditions the caller must. (1) `k` must come
+#' from an UNWEIGHTED `breakdown_number()` call -- see `certified_tied_subset()`'s own guard for
+#' the bug this produces when violated (a genuinely significant gap silently certified
+#' "non-significant"). (2) This certifies the SINGLE binding rival named by k*'s definition (min
+#' over rivals), not an adaptively re-searched one -- if your workflow re-runs
+#' `decision_breakdown()` with different weight vectors until a favorable rival turns up, that is
+#' a multiple-comparisons problem this certificate does not correct for (contrast [mcb_bound()],
+#' which DOES Bonferroni-correct for an analogous post-hoc rival-selection problem).
+#'
 #' @param k The pairwise decision breakdown point (k*).
 #' @param T Number of periods.
 #' @param z Two-sided critical value (default 1.96, two-sided 5%).

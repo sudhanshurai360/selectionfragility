@@ -28,29 +28,8 @@ knitr::opts_chunk$set(
   single shock) and should not be trusted as a stable choice.
 
 This is the native R port of the Python package
-[`selection-fragility`](https://pypi.org/project/selection-fragility/) (same method, same
-validated numerics, independently verified against it). Function names and signatures are
-near-identical 1:1 across the two (`loss_panel()` ≈ `LossPanel.from_losses()`, `report()`,
-`decision_breakdown()`, `mcs_size()`, `identified()`, `compare()`, `pooled_winner(L, w)`, ...), and
-the VERDICT/LEADERBOARD/RESOLUTION/PIVOT report sections are structured identically in both
-languages. Cite either implementation; they compute the same quantities. If you work in Python
-instead of R, use `pip install selection-fragility`.
-
-**Two things do NOT carry over if you are switching from the Python package, or running both side
-by side during a migration:**
-
-- **`LossPanel.from_forecasts()` has no R equivalent yet.** Python's `from_forecasts(df, y_true=,
-  period=, group=)` ingests a wide forecast-vs-actual frame directly (e.g. from
-  `statsforecast`/`neuralforecast`'s `cross_validation()`) and computes the per-period loss for
-  you. This R port only takes an already-computed loss panel (`loss_panel()`, below) — compute
-  your per-period losses yourself first (e.g. `abs(actual - forecast)` per model per period,
-  pivoted to one column per model) before calling `loss_panel()`.
-- **Bootstrap-based numbers will NOT match the Python package bit-for-bit on "the same" seed.**
-  `winner_stability()`, the Model Confidence Set's bootstrap p-value, and `compare()`'s
-  permutation churn rate all depend on a random-number stream, and R's RNG and NumPy's RNG are
-  different generators — `seed = 0` in both languages draws different resamples. Compare
-  *conclusions* (is the champion identified, is `winner_stability` near the exchangeable
-  benchmark) across the two implementations, never exact decimals of a bootstrap statistic.
+[`selection-fragility`](https://pypi.org/project/selection-fragility/); see "Relationship to the
+Python package" below if you are switching between the two or running both side by side.
 
 ## Installation
 
@@ -89,14 +68,14 @@ This one-screen report has four sections:
 - **LEADERBOARD** — mean loss, MCS membership, and how many periods each model actually won.
 - **RESOLUTION** — is the observed edge over the closest rival statistically significant at this
   sample size, versus what sample size *would* resolve it (minimum detectable edge)?
-- **PIVOT** — `k*`, which specific periods are responsible, and how concentrated the champion's
-  win is in a single period.
+- **PIVOT** — `k*`, which specific periods are responsible, and how concentrated the pooled
+  winner's win is in a single period.
 
 Read this example's own output carefully, because it is deliberately **not** a clean case, and
-that is the point. `ar1` is the pooled champion, but VERDICT says **not identified** (the Model
+that is the point. `ar1` is the pooled winner, but VERDICT says **not identified** (the Model
 Confidence Set has two members — `ar1` and `nbeats` are statistically tied), and PIVOT reports
 `k*=1`: deleting just the single responsible period would flip the pooled winner to `nbeats`.
-Because the champion is not identified, PIVOT's fragility read is explicitly **UNDETERMINED** — the
+Because the pooled winner is not identified, PIVOT's fragility read is explicitly **UNDETERMINED** — the
 package tells you the `k*=1` fact (that part is always shown, since it is a deterministic property
 of the data), but refuses to also certify it as "non-significant" or interpret `concentration_share`
 on top of an undetermined decision. **This refusal is the central design discipline of the whole
@@ -107,11 +86,13 @@ agree — it is not a robust, well-separated decision.
 
 ### Name your periods
 
-Without `labels=`, periods are reported by **position, 0-indexed** (`k*=1 of 10 periods (8)` for
-the 9th period) — matching the Python package's own default positional labels, not R's usual
-1-based counting. This is deliberate for cross-language consistency, but it means the bare number
-in an unlabeled report is one less than the period's 1-based position if you count by hand. Pass
-real labels and avoid the ambiguity entirely:
+Without `labels=`, periods are reported by **position, 0-indexed** (reported as `k*=1 of 10
+periods (8)`, where `8` is the 0-indexed position of the 9th period) — matching the Python
+package's own default positional labels, not R's usual 1-based counting. This is deliberate for
+cross-language consistency, but it means the bare number in an unlabeled `report()` is one less
+than the period's 1-based position if you count by hand. (Note: this differs from
+`decision_breakdown()$removed`, which reports a bare 1-based position — see its own `?help` page.)
+Pass real labels and avoid the ambiguity entirely:
 
 ```{r}
 years <- 2015:2024
@@ -129,6 +110,38 @@ absolute error, and similar). If you feed it *accuracy*-style data instead (anyt
 confident, silently **inverted** answer, because the worst model by your own metric gets crowned
 the winner. There is no way for the package to know your metric's direction, so it is entirely on
 you to pass loss, not accuracy.
+
+## Relationship to the Python package
+
+Function names and signatures are near-identical 1:1 across the two (`loss_panel()` ≈
+`LossPanel.from_losses()`, `report()`, `decision_breakdown()`, `mcs_size()`, `identified()`,
+`compare()`, `pooled_winner()`), and the VERDICT/LEADERBOARD/RESOLUTION/PIVOT report sections
+are structured identically in both languages. Cite either implementation; they compute the same
+quantities. If you work in Python instead of R, use `pip install selection-fragility`.
+
+Two things do **not** carry over if you are switching from the Python package, or running both
+side by side during a migration:
+
+- **`LossPanel.from_forecasts()` has no R equivalent yet.** Python's `from_forecasts(df, y_true=,
+  period=, group=)` ingests a wide forecast-vs-actual frame directly (e.g. from
+  `statsforecast`/`neuralforecast`'s `cross_validation()`) and computes the per-period loss for
+  you. This R port only takes an already-computed loss panel (`loss_panel()`, above) — compute
+  your per-period losses yourself first (e.g. `abs(actual - forecast)` per model per period,
+  pivoted to one column per model) before calling `loss_panel()`.
+- **Bootstrap-based numbers will NOT match the Python package bit-for-bit on "the same" seed.**
+  `winner_stability()`, the Model Confidence Set's bootstrap p-value, and `compare()`'s
+  permutation churn rate all depend on a random-number stream, and R's RNG and NumPy's RNG are
+  different generators — `seed = 0` in both languages draws different resamples. Compare
+  *conclusions* (is the pooled winner identified, is `winner_stability` near the exchangeable
+  benchmark) across the two implementations, never exact decimals of a bootstrap statistic.
+
+`identified()`/`mcs_size()` can run on the CRAN [`MCS`](https://cran.r-project.org/package=MCS)
+package's own `MCSprocedure()` engine, cross-checked against this package's independent native
+re-implementation (`mcs()`/`model_confidence_set()`) — MCS membership by itself is not new here,
+`MCS` already does that; what this package adds on top is k*, resolution/power diagnostics,
+selection-as-election diagnostics, and `compare()`. `mcb_bound()` is **not**
+[`tsutils`](https://cran.r-project.org/package=tsutils)'s `nemenyi()` rank-based "MCB plot" — it
+bounds the loss-level edge directly, not average ranks; see "Honest reporting" below.
 
 ## Core functions, one stage at a time
 
@@ -232,15 +245,17 @@ step should gate on.
   `bench$p05` for your own panel's actual `K` (model count) and `T` (period count).
 - **`k*` is a descriptive fact about the observed data, not a hypothesis test** — no
   multiple-comparisons correction applies to it. `mcb_bound()` *is* a corrected confidence bound
-  for the same post-hoc rival-selection problem:
+  for the same post-hoc rival-selection problem (and is **not** `tsutils::nemenyi()`'s rank-based
+  "MCB plot" — it bounds the loss-level edge directly, not average ranks):
 
   ```{r}
   mcb_bound(L)   # "the champion's true edge over its binding rival may be as large as X%, at 95% confidence"
   ```
-- This package was built for a trusted analyst diagnosing their own model comparison, not for an
-  adversarial setting where the models being evaluated were chosen knowing the methodology. See
-  `?mcs` (its "Adversarial use / competition settings" section) for the gaming vectors to guard
-  against before using an MCS "tie" claim in a competition or leaderboard context.
+- **Built for a trusted analyst, not an adversarial setting.** This package was built for a
+  trusted analyst diagnosing their own model comparison, not for an adversarial setting where the
+  models being evaluated were chosen knowing the methodology. See `?mcs` (its "Adversarial use /
+  competition settings" section) for the gaming vectors to guard against before using an MCS
+  "tie" claim in a competition or leaderboard context.
 
 See the companion paper for the full power/false-discovery tables and derivations behind these
 statistics.
