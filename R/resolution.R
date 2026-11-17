@@ -61,6 +61,21 @@
 # Newey-West correction is implemented here; prefer mcs()/model_confidence_set()'s
 # block-bootstrap-based identification over this module's closed-form significance reads if
 # autocorrelation is a live concern for your panel.
+#
+# SECOND, SEPARATE ASSUMPTION -- VARIANCE HOMOGENEITY ACROSS WEIGHT CLASSES: `var_` is the RAW,
+# UNWEIGHTED sample variance of `diff`; only `n_eff` (the Kish effective-sample-size denominator)
+# actually uses `w`. This is only valid if per-period variance doesn't depend on weight. Weights
+# are documented elsewhere (loss_panel()'s own docs) as typically "observation counts per period" --
+# exactly the kind of weight that, in real panels, often correlates with how volatile a period's
+# loss differential is (e.g. a few high-observation-count periods that are also the volatile ones,
+# many low-observation-count periods that are flat). When that correlation holds, the many flat
+# periods drag the pooled unweighted variance down even though the decision is actually being
+# driven by the volatile, high-weight few -- understating this SE and letting
+# minimum_detectable_edge()/significance_boundary()/mcb_bound() print a confident "resolved" edge
+# that the weight-heterogeneous variance doesn't actually support. No weighted-variance correction
+# is implemented here; this is a genuine, undisclosed-until-now sibling of the autocorrelation
+# caveat above, not a coding bug -- confirmed reproducible on a realistic (not adversarial) 20-period
+# panel with 2 high-weight volatile periods among 18 low-weight flat ones.
 .weighted_se <- function(diff, w) {
   T <- length(diff)
   if (T < 2) stop(sprintf("need at least 2 periods to estimate a standard error; got T=%d.", T), call. = FALSE)

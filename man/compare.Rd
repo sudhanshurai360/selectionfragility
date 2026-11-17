@@ -24,6 +24,17 @@ An object of class \code{change_report}.
 Reports whether the pooled champion changed between two consecutive evaluation runs, and
 whether that change looks like signal or noise.
 }
+\section{New-period attribution requires real labels}{
+ \code{n_new_periods}/\code{champion_without_new_periods}
+detect a rolling window by comparing the two panels' period LABELS -- if both panels were built
+with \code{loss_panel()}'s default positional labels (no \verb{labels=} passed, the common case for a bare
+list/matrix), positional labels carry no cross-panel identity, so a same-length rolling window
+(periods really did drop out and new ones came in, but T stayed the same) is honestly reported as
+\code{n_new_periods=0}/\code{champion_without_new_periods=NULL} ("cannot attribute"), even though periods
+really did change. Pass \verb{labels=} explicitly to \code{loss_panel()} for both panels if you need
+accurate new-period attribution on a same-length rolling window.
+}
+
 \examples{
 L <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),

@@ -193,18 +193,35 @@ test_that("save_loss_panel()/load_loss_panel() round-trip bit-exactly under a co
   # invalid with NO error at write time, and load_loss_panel() on that same file then failed with
   # a raw jsonlite parse error. save_loss_panel()/load_loss_panel() now force LC_NUMERIC="C" for
   # the duration of the write/read (restored via on.exit either way).
-  avail <- tryCatch(Sys.setlocale("LC_NUMERIC", "de_DE.UTF-8"), warning = function(w) NA, error = function(e) NA)
-  skip_if(is.na(avail) || identical(avail, ""), "de_DE.UTF-8 locale not available on this machine")
+  # NOTE (test-quality fix, 2026-11-18): base R's Sys.setlocale() emits a warning
+  # ("may cause R to function strangely") on ANY attempt to set LC_NUMERIC away from "C",
+  # REGARDLESS of whether the target locale is actually installed -- so the original
+  # tryCatch(..., warning=function(w) NA) skip condition fired every time on every machine, even
+  # when de_DE.UTF-8 genuinely was available, and this test never actually ran. Detect
+  # availability from `locale -a` instead, and use suppressWarnings() (not tryCatch-on-warning)
+  # for the actual Sys.setlocale() calls.
   old <- Sys.getlocale("LC_NUMERIC")
   on.exit(suppressWarnings(Sys.setlocale("LC_NUMERIC", old)), add = TRUE)
+  avail <- "de_DE.UTF-8" %in% suppressWarnings(tryCatch(system("locale -a", intern = TRUE), error = function(e) character(0)))
+  skip_if(!avail, "de_DE.UTF-8 locale not available on this machine")
+  set_ok <- !is.na(suppressWarnings(Sys.setlocale("LC_NUMERIC", "de_DE.UTF-8")))
+  skip_if(!set_ok, "Sys.setlocale(\"LC_NUMERIC\", \"de_DE.UTF-8\") failed on this machine despite locale -a listing it")
   set.seed(42)
   L <- list(a = 1 + stats::rnorm(20)^2, b = 1 + (stats::rnorm(20) + 1)^2)
   p <- loss_panel(L)
   tmp <- tempfile(fileext = ".json")
   on.exit(unlink(tmp), add = TRUE)
   expect_no_error(save_loss_panel(p, tmp))
-  raw <- readLines(tmp, warn = FALSE)
-  expect_false(grepl(",0\\.|,-?[0-9]+,", raw))  # no comma-decimal digits leaked into the JSON
+  # NOTE (test-quality fix, 2026-11-18): a raw-text regex for "no comma-decimal digits leaked"
+  # is fundamentally ambiguous -- JSON's own array-separator comma between two correctly-formatted
+  # numbers (e.g. "1.234,5.678") is indistinguishable, at the text level, from a genuinely
+  # comma-corrupted decimal (e.g. "1,234" meaning 1.234). Confirmed empirically: this exact file,
+  # written correctly under the LC_NUMERIC="C" fix, still has literal ",1,1," substrings from its
+  # all-equal weights array, so any such regex false-positive-fails on correct output. The
+  # decisive, unambiguous check is simply that the file parses and round-trips bit-identically --
+  # jsonlite's reader either fails outright (confirmed on the pre-fix bug) or parses into the WRONG
+  # values if the decimal corruption changes array element counts, either of which the
+  # expect_no_error(load_loss_panel(...))/expect_identical() pair below already catches directly.
   p2 <- expect_no_error(load_loss_panel(tmp))
   expect_identical(p$losses, p2$losses)
 })

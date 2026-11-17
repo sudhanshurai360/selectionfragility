@@ -56,11 +56,20 @@ test_that("mcs()'s large-T*B warning message doesn't itself overflow to 'NA' (24
   # large T), but the warning MESSAGE TEXT two lines later still computed plain-integer T*B,
   # silently overflowing back to NA and printing "= NA" in the user-facing diagnostic (plus R's
   # own spurious "NAs produced by integer overflow" warning) for any T*B combination above both
-  # the 2e7 warning threshold and int32 max. Isolated at the exact types/values mcs() uses.
-  T <- 21500L; B <- 100000L
-  expect_true(as.double(T) * B > 20000000)
-  msg <- sprintf("T=%d periods x B=%d bootstrap resamples = %s", T, B, format(as.double(T) * B, big.mark = ","))
+  # the 2e7 warning threshold and int32 max.
+  #
+  # TEST-QUALITY FIX (test-suite self-audit, 2026-11-18): the original version of this test never
+  # called mcs() at all -- it independently re-derived the same sprintf() expression inline and
+  # checked its own re-derivation, so it would still pass even with the pre-fix bug (reverting
+  # R/mcs.R's fix and rerunning confirmed this: the old test provided zero real coverage). This
+  # version calls the REAL mcs() at the real int32-overflow magnitude (T*B=2.15e9, matching the
+  # original bug report) and captures the warning via tryCatch(warning=...), which unwinds the
+  # call stack immediately once the warning fires -- so the (slow, multi-second) bootstrap body
+  # never actually executes, keeping this test fast while still exercising the genuine code path.
+  set.seed(1)
+  T <- 21500L
+  L <- cbind(a = rnorm(T), b = rnorm(T) + 0.01)
+  msg <- tryCatch(mcs(L, B = 100000, block = 3, seed = 1), warning = function(w) conditionMessage(w))
   expect_false(grepl("= NA", msg, fixed = TRUE))
   expect_true(grepl("2.15e\\+09|2,150,000,000", msg))  # format() may use scientific notation at this magnitude; either is fine, "NA" is not
-  expect_no_warning(format(as.double(T) * B, big.mark = ","))  # the fixed version must not itself trigger "NAs produced by integer overflow"
 })

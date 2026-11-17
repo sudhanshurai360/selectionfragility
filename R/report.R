@@ -195,11 +195,14 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
       # prop22_certifies() is only valid for a k* computed from an UNWEIGHTED breakdown_number()
       # (see prop22.R's own scope note) -- but `k` here came from decision_breakdown(L, w, ...)
       # using the panel's REAL, possibly non-uniform weights. Calling prop22_certifies(k, T) on
-      # that weighted k can silently produce a confident "certifies non-significance" line that is
-      # not actually certified once weighting is correctly excluded from the Prop 2.2 statistic
-      # (measured at 6.75% of simulated weighted panels). Skip the certificate entirely on a
-      # weighted panel, same sentinel wording as k<=0/k>=T ("no constraint"), rather than ever
-      # compute it.
+      # that weighted k could in principle silently produce a confident "certifies non-significance"
+      # line that is not actually certified once weighting is correctly excluded from the Prop 2.2
+      # statistic (measured at 6.75% of simulated weighted panels). This branch is reached only when
+      # fragility_read != "undetermined" (i.e. "resolved"), which already requires identified() to
+      # have succeeded, which already requires .weights_are_uniform(w) (.validate_mcs_weights2()
+      # rejects non-uniform weights upstream in .run_mcs_arch) -- so `!.weights_are_uniform(w)` below
+      # is provably always FALSE here today. It is kept as a defensive, currently-inert guard in case
+      # a future change relaxes that upstream validation; it does not currently execute.
       cert_txt <- if (!.weights_are_uniform(w)) {
         "no constraint from Proposition 2.2 (panel has non-uniform weights)"
       } else {

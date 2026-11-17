@@ -572,7 +572,17 @@ load_loss_panel <- function(path) {
   old_numeric <- Sys.getlocale("LC_NUMERIC")
   Sys.setlocale("LC_NUMERIC", "C")
   on.exit(suppressWarnings(Sys.setlocale("LC_NUMERIC", old_numeric)), add = TRUE)
-  payload <- jsonlite::read_json(path, simplifyVector = TRUE)
+  payload <- tryCatch(
+    jsonlite::read_json(path, simplifyVector = TRUE),
+    error = function(e) {
+      # Every OTHER failure mode here (missing keys, wrong type, length mismatch, ...) raises a
+      # clear, path-prefixed load_loss_panel() message; a JSON SYNTAX error otherwise leaked
+      # jsonlite's raw internal parser error straight through -- no mention of load_loss_panel(),
+      # no mention of the file path, and raw unprintable bytes dumped to the console for a binary
+      # garbage file. A caller looping over many files had no way to tell which one failed.
+      stop(sprintf("load_loss_panel(): '%s' is not valid JSON (%s).", path, conditionMessage(e)), call. = FALSE)
+    }
+  )
   missing <- setdiff(c("losses", "weights", "labels"), names(payload))
   if (length(missing) > 0) {
     stop(sprintf(

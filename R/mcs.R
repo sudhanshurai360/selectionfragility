@@ -232,7 +232,12 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
     surv <- surv[-drop_pos]
     p_stop <- p
   }
-  list(surviving = surv, p = p_stop)
+  # Stamp which elimination rule actually produced this result. Without this, two "identical"
+  # mcs() calls across sessions are silently incomparable if a global
+  # options(selectionfragility.elimination=...) was quietly set in one of them -- confirmed to be
+  # consequential, not cosmetic: on one panel, studentized gave surviving={1,2}/p=0.257 while raw
+  # gave surviving={2}/p=0.002 at the same seed/B.
+  list(surviving = surv, p = p_stop, elimination = elimination)
 }
 
 #' Model Confidence Set on a named list of per-period losses

@@ -306,3 +306,35 @@ test_that("breakdown_number() scans in O(T), not O(T^2), and matches the old c()
   expect_equal(r$k, 12000L)
   expect_lt(elapsed, 2.0)
 })
+
+test_that(".block_resample_idx(circular=FALSE) is O(T), not O(T^2), and matches the old while-loop exactly under the same seed (meta-review round, 2026-11-18)", {
+  # REGRESSION: the non-circular branch built its index via `out <- c(out, seq(...))` inside a
+  # while loop whose iteration count scales with T -- the identical anti-pattern fixed in
+  # breakdown_number()'s elimination loop earlier this round, left unfixed in this sibling.
+  # Reachable via the public circular=FALSE argument on winner_stability()/exchangeable_benchmark()
+  # (default n_boot=2000, so the quadratic cost is paid once per bootstrap replicate). Confirmed
+  # 14+ seconds at T=80,000 before the fix; rewritten to draw all block starts up front
+  # (vectorized, matching the already-fast circular branch) instead of growing a vector in a loop.
+  old_resample <- function(T, block) {
+    out <- integer(0)
+    while (length(out) < T) {
+      start <- sample.int(max(1, T - block + 1), 1)
+      out <- c(out, seq(start, min(start + block - 1, T)))
+    }
+    out[1:T]
+  }
+  for (i in 1:50) {
+    Tn <- sample(3:60, 1); bl <- sample(2:min(Tn, 15), 1)
+    set.seed(i); r_new <- selectionfragility:::.block_resample_idx(Tn, bl, circular = FALSE)
+    set.seed(i); r_old <- old_resample(Tn, bl)
+    expect_identical(r_new, r_old)
+    expect_equal(length(r_new), Tn)
+    expect_true(all(r_new >= 1 & r_new <= Tn))
+  }
+  # Performance sanity: would be many seconds under the old O(T^2) growth at this size.
+  t0 <- Sys.time()
+  idx <- selectionfragility:::.block_resample_idx(80000L, 5, circular = FALSE)
+  elapsed <- as.numeric(Sys.time() - t0)
+  expect_equal(length(idx), 80000L)
+  expect_lt(elapsed, 2.0)
+})

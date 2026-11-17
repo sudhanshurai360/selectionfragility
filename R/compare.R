@@ -86,6 +86,14 @@ print.change_report <- function(x, ...) {
 #'
 #' @param previous A `loss_panel` from the earlier run.
 #' @param current A `loss_panel` from the later run.
+#' @section New-period attribution requires real labels: `n_new_periods`/`champion_without_new_periods`
+#'   detect a rolling window by comparing the two panels' period LABELS -- if both panels were built
+#'   with `loss_panel()`'s default positional labels (no `labels=` passed, the common case for a bare
+#'   list/matrix), positional labels carry no cross-panel identity, so a same-length rolling window
+#'   (periods really did drop out and new ones came in, but T stayed the same) is honestly reported as
+#'   `n_new_periods=0`/`champion_without_new_periods=NULL` ("cannot attribute"), even though periods
+#'   really did change. Pass `labels=` explicitly to `loss_panel()` for both panels if you need
+#'   accurate new-period attribution on a same-length rolling window.
 #' @param alpha Significance level passed to the MCS check.
 #' @param n_perm Number of permutations for the churn base rate.
 #' @param seed RNG seed.

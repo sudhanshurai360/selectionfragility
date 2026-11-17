@@ -447,12 +447,15 @@ decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
   block <- as.integer(block)
   if (is.na(block) || block <= 1) return(sample.int(T, size = T, replace = TRUE))
   if (!circular) {
-    out <- integer(0)
-    while (length(out) < T) {
-      start <- sample.int(max(1, T - block + 1), 1)
-      out <- c(out, seq(start, min(start + block - 1, T)))
-    }
-    return(out[1:T])
+    # Draw all block starts up front and build the index via lapply+unlist (vectorized), mirroring
+    # the circular branch below, instead of `out <- c(out, ...)` inside a while loop -- that
+    # reallocated and copied the whole vector every iteration, the identical O(T^2)-instead-of-O(T)
+    # anti-pattern found and fixed in breakdown_number()'s elimination loop in this same round
+    # (confirmed: 14+ seconds at T=80,000 vs ~1s for the circular default at the same T).
+    n_starts <- ceiling(T / block) + 1L  # +1 covers the worst case where the last start barely fits
+    starts <- sample.int(max(1, T - block + 1), size = n_starts, replace = TRUE)
+    idx <- unlist(lapply(starts, function(s) seq(s, min(s + block - 1, T))))
+    return(idx[1:T])
   }
   n_starts <- ceiling(T / block)
   starts <- sample.int(T, size = n_starts, replace = TRUE)
