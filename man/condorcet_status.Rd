@@ -27,3 +27,6 @@ L <- list(
 )
 condorcet_status(L)  # "cycle"
 }
+\seealso{
+\code{\link[=condorcet_winner]{condorcet_winner()}}, \code{\link[=pooled_winner]{pooled_winner()}}, \code{\link[=per_period_winner]{per_period_winner()}}.
+}

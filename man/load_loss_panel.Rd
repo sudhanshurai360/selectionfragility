@@ -27,3 +27,6 @@ reloaded <- load_loss_panel(tmp)
 identical(panel$losses, reloaded$losses)
 unlink(tmp)
 }
+\seealso{
+\code{\link[=save_loss_panel]{save_loss_panel()}} (the writer this reads back), \code{\link[=loss_panel]{loss_panel()}}.
+}

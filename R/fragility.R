@@ -117,6 +117,8 @@
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @param w Optional numeric vector of per-period weights.
 #' @return The winning model's name.
+#' @seealso [per_period_winner()] (plurality winner), [condorcet_winner()] (pairwise-majority
+#'   winner), [decision_breakdown()] (how fragile this pooled winner is), [report()].
 #' @export
 #' @examples
 #' L <- list(
@@ -143,6 +145,8 @@ pooled_winner <- function(L, w = NULL) {
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @param return_ties If TRUE, return `list(winner, tied)` instead of just the winner.
 #' @return The winning model's name, or a list with the full tied set.
+#' @seealso [pooled_winner()] (score winner), [condorcet_winner()] (pairwise-majority winner),
+#'   [condorcet_status()] (classifies when these disagree).
 #' @export
 #' @examples
 #' L <- list(
@@ -178,6 +182,8 @@ per_period_winner <- function(L, return_ties = FALSE) {
 #' Condorcet winner — beats every other model in pairwise per-period majority
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @return The winning model's name, or `NULL` if none exists.
+#' @seealso [condorcet_status()] (classifies why this returned `NULL`, if it did),
+#'   [pooled_winner()], [per_period_winner()].
 #' @export
 #' @examples
 #' # Each model is best in one period and worst in another -- a rock/paper/scissors cycle,
@@ -210,6 +216,7 @@ condorcet_winner <- function(L) {
 #' @return One of `"winner"` (a Condorcet winner exists), `"cycle"` (no winner, and the
 #'   pairwise-majority relation is intransitive -- e.g. rock/paper/scissors), or `"tie"` (no
 #'   winner, but no cycle either -- a direct pairwise tie).
+#' @seealso [condorcet_winner()], [pooled_winner()], [per_period_winner()].
 #' @export
 #' @examples
 #' # Same rock/paper/scissors panel as condorcet_winner(): no model dominates, so the
@@ -282,6 +289,8 @@ condorcet_status <- function(L) {
 #' @param la,lb Numeric vectors, per-period loss for the champion (`la`) and the opponent (`lb`).
 #' @param w Numeric vector of per-period weights.
 #' @return A list `list(k = k_star, removed = removed_period_indices)` (1-based indices).
+#' @seealso [decision_breakdown()] (the decision-level k*, searching over all opponents),
+#'   [prop22_certifies()] (a zero-simulation significance certificate for this k*).
 #' @export
 #' @examples
 #' # nbeats is cheaper than ar1 in 4 of 5 periods, but one shock period (5.0) is bad enough
@@ -328,6 +337,9 @@ breakdown_number <- function(la, lb, w) {
 #'   POSITION into the loss vectors -- it is NOT resolved against `L`'s period labels even when
 #'   `L` is a `loss_panel` built with `labels=`. Only [report()] resolves `removed` into actual
 #'   period labels for display; call `panel$labels[removed]` yourself if you need them here.
+#' @seealso [breakdown_number()] (the pairwise primitive this searches over), [prop22_certifies()]
+#'   (significance certificate for the resulting k*), [winner_stability()] (a complementary,
+#'   bootstrap-based fragility read).
 #' @export
 #' @examples
 #' # Same shock-period panel as breakdown_number(): on the full panel, ar1 is the pooled
@@ -404,6 +416,8 @@ decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
 #' @param seed RNG seed.
 #' @param circular Use the circular (wrap-around) block bootstrap (default) or moving-block.
 #' @return A list `list(stability, freq)`.
+#' @seealso [exchangeable_benchmark()] (the null distribution to compare this against --
+#'   required, not optional, for interpreting a `stability` value), [decision_breakdown()].
 #' @export
 #' @examples
 #' L <- list(
@@ -468,6 +482,7 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
 #' @param seed RNG seed.
 #' @param circular Use the circular (wrap-around) block bootstrap (default) or moving-block.
 #' @return A list `list(median, p05, p95)`.
+#' @seealso [winner_stability()] (the statistic this provides a null distribution for).
 #' @export
 #' @examples
 #' # n_rep/n_boot are tiny here purely to keep the example fast; real usage should use the
@@ -496,6 +511,7 @@ exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @param labels Optional vector of period labels (used only to report `hardest`).
 #' @return A list `list(sci, eff_surprising_periods, hardest, d_max_over_median)`.
+#' @seealso [pivot_agreement()] (a related period-sensitivity diagnostic), [decision_breakdown()].
 #' @export
 #' @examples
 #' # Irreducible difficulty (the best ANY model can do each period) is flat except period 4,

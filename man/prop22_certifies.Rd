@@ -33,3 +33,8 @@ prop22_certifies(5, T = 10)   # FALSE -- k*=5 is too large for Prop 2.2 to certi
 prop22_certifies(0, T = 10)   # NA -- sentinel: k <= 0 means no breakdown exists, out of scope
 prop22_certifies(10, T = 10)  # NA -- sentinel: k >= T is also out of scope
 }
+\seealso{
+\code{\link[=certified_tied_subset]{certified_tied_subset()}} (applies this certificate across a whole panel),
+\code{\link[=breakdown_number]{breakdown_number()}}/\code{\link[=decision_breakdown]{decision_breakdown()}} (where \code{k} comes from), \code{\link[=mcb_bound]{mcb_bound()}} (the
+multiple-comparisons-corrected analogue for an adaptively-searched rival).
+}

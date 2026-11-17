@@ -33,3 +33,7 @@ L2 <- list(
 )
 per_period_winner(L2, return_ties = TRUE)  # $tied = c("ar1", "ets"); both won 2 of 4 periods
 }
+\seealso{
+\code{\link[=pooled_winner]{pooled_winner()}} (score winner), \code{\link[=condorcet_winner]{condorcet_winner()}} (pairwise-majority winner),
+\code{\link[=condorcet_status]{condorcet_status()}} (classifies when these disagree).
+}

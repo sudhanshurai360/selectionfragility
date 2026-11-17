@@ -95,6 +95,8 @@ concentration_share <- function(L, w = NULL) {
 #' @param frac Fraction of periods kept in each subsample (strictly between 0 and 1).
 #' @return The agreement fraction, or `NA` if there is no strict winner, the subsample is too
 #'   small, or every subsample drawn had no strict winner.
+#' @seealso [concentration_share()] (how much of the margin a single period accounts for),
+#'   [surprise_concentration()], [report()].
 #' @export
 #' @examples
 #' # Same shock-year panel as concentration_share(): is the single-period pivot stable

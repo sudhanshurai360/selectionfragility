@@ -25,3 +25,7 @@ ar1    <- c(1.0, 1.0, 1.0, 1.0, 1.0)
 nbeats <- c(0.5, 0.5, 0.5, 0.5, 5.0)
 breakdown_number(la = ar1, lb = nbeats, w = rep(1, 5))  # k = 1, removed = 5
 }
+\seealso{
+\code{\link[=decision_breakdown]{decision_breakdown()}} (the decision-level k*, searching over all opponents),
+\code{\link[=prop22_certifies]{prop22_certifies()}} (a zero-simulation significance certificate for this k*).
+}

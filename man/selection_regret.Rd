@@ -32,3 +32,6 @@ panel <- loss_panel(L)
 # the selection rule rather than having picked the true best model each time.
 selection_regret(panel)
 }
+\seealso{
+\code{\link[=resolution_report]{resolution_report()}}, \code{\link[=decision_breakdown]{decision_breakdown()}}.
+}

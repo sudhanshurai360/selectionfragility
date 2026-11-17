@@ -45,7 +45,7 @@ participant-supplied rather than fixed by the competition operator in advance, i
 both the pooled winner and k* entirely. Weights must always be operator-controlled and
 fixed before results are known in any setting with an adversarial party.
 \item \strong{Seed-shopping on a borderline panel is at least as exploitable as the two
-vectors above} (ADDED 2026-11-17, 6-reviewer adversarial pass): quantified on a genuinely
+vectors above}: quantified on a genuinely
 borderline K=2, T=20 panel sitting near the alpha=0.10 boundary, sweeping seed=1..300 with
 every other argument at its default: the native engine (this function) called the comparison
 "identified" (singleton MCS) on 37.3\% of seeds at B=2000 (42.0\% at B=500) and "not identified"
@@ -83,4 +83,9 @@ L <- cbind(
 res <- mcs(L, B = 200, seed = 1)
 res$surviving  # columns 1 and 2 (ar1, ets) survive; nbeats is eliminated
 
+}
+\seealso{
+\code{\link[=model_confidence_set]{model_confidence_set()}} (list-return alias), \code{\link[=identified]{identified()}}/\code{\link[=mcs_size]{mcs_size()}} (the
+independent \code{MCS::MCSprocedure()}-backed cross-check engine), \code{\link[=report]{report()}} (one-screen summary
+that calls this internally).
 }

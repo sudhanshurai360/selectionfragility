@@ -18,3 +18,8 @@ Initial release: a native R port of the Python package
 * Known, documented differences from the Python original: `loss_panel()` does not yet port
   `from_forecasts()` (build a wide loss matrix/data.frame/list yourself); RNG draws are not
   bit-for-bit identical across languages (statistically equivalent, not byte-identical).
+* Pre-release hardening (multiple rounds of independent adversarial/CRAN-reviewer/adopter review):
+  quantified a seed-shopping vulnerability in the MCS/identification layer (see `?mcs`,
+  "Adversarial use" section) and added `report()`'s `seed=` argument so a caller can check it;
+  added defensive guards around the `MCS::MCSprocedure()` cross-check call and `save_loss_panel()`'s
+  atomic write; pinned a minimum `MCS` version.

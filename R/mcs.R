@@ -61,7 +61,7 @@
 #'     both the pooled winner and k* entirely. Weights must always be operator-controlled and
 #'     fixed before results are known in any setting with an adversarial party.
 #'   \item \strong{Seed-shopping on a borderline panel is at least as exploitable as the two
-#'     vectors above} (ADDED 2026-11-17, 6-reviewer adversarial pass): quantified on a genuinely
+#'     vectors above}: quantified on a genuinely
 #'     borderline K=2, T=20 panel sitting near the alpha=0.10 boundary, sweeping seed=1..300 with
 #'     every other argument at its default: the native engine (this function) called the comparison
 #'     "identified" (singleton MCS) on 37.3% of seeds at B=2000 (42.0% at B=500) and "not identified"
@@ -83,6 +83,9 @@
 #' same curated/cherry-picked subset of periods, which looks identical to honest data from inside
 #' any loss-matrix-consuming tool. That is an inherent limitation of any diagnostic at this level,
 #' not a gap specific to this package.
+#' @seealso [model_confidence_set()] (list-return alias), [identified()]/[mcs_size()] (the
+#'   independent `MCS::MCSprocedure()`-backed cross-check engine), [report()] (one-screen summary
+#'   that calls this internally).
 #' @export
 mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NULL) {
   if (is.null(elimination)) elimination <- getOption("selectionfragility.elimination", "studentized")
@@ -216,6 +219,7 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
 #' # B kept small here purely for example speed; use the B=2000 default for real analyses.
 #' res <- model_confidence_set(L, B = 200, seed = 1)
 #' res$surviving  # c("ar1", "ets"); nbeats is eliminated
+#' @seealso [mcs()] (character-vector return, same engine), [identified()]/[mcs_size()].
 #' @export
 model_confidence_set <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NULL) {
   up <- .unwrap_panel(L, NULL); L <- up$L

@@ -387,6 +387,7 @@ print.loss_panel <- function(x, ...) {
 #' @param x A `loss_panel` object.
 #' @param ... Unused; present for S3 consistency with `as.data.frame()`.
 #' @return A data.frame with columns `period`, `model`, `loss`, `weight`.
+#' @seealso [summary.loss_panel()] (sorted per-model summary table), [loss_panel()].
 #' @examples
 #' L <- list(
 #'   ar1 = c(1.00, 0.98, 1.02, 1.01, 0.99),
@@ -465,6 +466,8 @@ summary.loss_panel <- function(object, ...) {
 #'
 #' @param panel A `loss_panel` object.
 #' @param path Destination file path.
+#' @return `NULL`, invisibly. Called for its side effect of writing `panel` to `path`.
+#' @seealso [load_loss_panel()] (the reader for the file this writes), [loss_panel()].
 #' @examples
 #' L <- list(
 #'   ar1 = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97),
@@ -489,7 +492,12 @@ save_loss_panel <- function(panel, path) {
   tmp <- tempfile(pattern = ".losspanel-", tmpdir = dest_dir, fileext = ".tmp")
   on.exit(if (file.exists(tmp)) unlink(tmp), add = TRUE)
   jsonlite::write_json(payload, tmp, auto_unbox = TRUE, digits = NA)
-  file.rename(tmp, path)
+  if (!file.rename(tmp, path)) {
+    stop(sprintf(paste0(
+      "save_loss_panel(): failed to rename the temp file to '%s' -- check that the destination ",
+      "directory is writable and not on a different filesystem/mount than R's tempdir()."
+    ), path), call. = FALSE)
+  }
   invisible(NULL)
 }
 
@@ -497,6 +505,7 @@ save_loss_panel <- function(panel, path) {
 #'
 #' @param path Source file path.
 #' @return An object of class `loss_panel`.
+#' @seealso [save_loss_panel()] (the writer this reads back), [loss_panel()].
 #' @examples
 #' L <- list(
 #'   ar1 = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97),

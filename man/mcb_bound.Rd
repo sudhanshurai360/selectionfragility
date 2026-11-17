@@ -38,3 +38,8 @@ panel <- loss_panel(L)
 # large as this fraction of its own loss level, at the stated confidence."
 mcb_bound(panel)
 }
+\seealso{
+\code{\link[=minimum_detectable_edge]{minimum_detectable_edge()}}, \code{\link[=significance_boundary]{significance_boundary()}}, \code{\link[=resolution_report]{resolution_report()}},
+\code{\link[=prop22_certifies]{prop22_certifies()}} (contrast: NOT multiple-comparisons-corrected, for a single
+pre-specified rival rather than an adaptively-searched one).
+}

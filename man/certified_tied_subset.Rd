@@ -30,3 +30,7 @@ L <- list(
 panel <- loss_panel(L)
 certified_tied_subset(panel)  # c("ar1", "nbeats") -- ets is not certified tied
 }
+\seealso{
+\code{\link[=prop22_certifies]{prop22_certifies()}} (the underlying per-k* certificate), \code{\link[=mcs]{mcs()}}/\code{\link[=identified]{identified()}}
+(bootstrap-based tie assessment, no uniform-weight restriction).
+}

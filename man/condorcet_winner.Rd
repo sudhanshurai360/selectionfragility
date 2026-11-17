@@ -25,3 +25,7 @@ L <- list(
 )
 condorcet_winner(L)  # NULL -- no model beats every other model pairwise
 }
+\seealso{
+\code{\link[=condorcet_status]{condorcet_status()}} (classifies why this returned \code{NULL}, if it did),
+\code{\link[=pooled_winner]{pooled_winner()}}, \code{\link[=per_period_winner]{per_period_winner()}}.
+}

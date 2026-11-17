@@ -28,3 +28,6 @@ L <- list(
 panel <- loss_panel(L, labels = 2020:2024)
 as.data.frame(panel)
 }
+\seealso{
+\code{\link[=summary.loss_panel]{summary.loss_panel()}} (sorted per-model summary table), \code{\link[=loss_panel]{loss_panel()}}.
+}

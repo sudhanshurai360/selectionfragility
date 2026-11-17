@@ -34,3 +34,8 @@ L <- list(
 )
 decision_breakdown(L)  # k = 1, binding_opponent = "nbeats", removed = 5
 }
+\seealso{
+\code{\link[=breakdown_number]{breakdown_number()}} (the pairwise primitive this searches over), \code{\link[=prop22_certifies]{prop22_certifies()}}
+(significance certificate for the resulting k*), \code{\link[=winner_stability]{winner_stability()}} (a complementary,
+bootstrap-based fragility read).
+}

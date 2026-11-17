@@ -108,6 +108,8 @@
 #' @section Assumption: assumes no autocorrelation in the per-period (rival - champion) loss
 #'   differential -- see `.weighted_se`'s comment in resolution.R for why this can matter and
 #'   what to do instead (prefer `mcs()`/`model_confidence_set()`'s block bootstrap) when it does.
+#' @seealso [significance_boundary()], [mcb_bound()], [resolution_report()] (combines all three
+#'   into the full R1/R2 refusal-gated workflow).
 #' @examples
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
@@ -138,6 +140,7 @@ minimum_detectable_edge <- function(L, w = NULL, power = 0.80, alpha = 0.05) {
 #'   edge must clear this value to be called significant at the stated one-sided `alpha`.
 #' @section Assumption: assumes no autocorrelation in the per-period (rival - champion) loss
 #'   differential -- see `.weighted_se`'s comment in resolution.R.
+#' @seealso [minimum_detectable_edge()], [mcb_bound()], [resolution_report()].
 #' @examples
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
@@ -168,6 +171,9 @@ significance_boundary <- function(L, w = NULL, alpha = 0.05) {
 #'   (unlike `k*`, which is a descriptive fact about the observed data, not a corrected bound).
 #' @section Assumption: assumes no autocorrelation in the per-period (rival - champion) loss
 #'   differential -- see `.weighted_se`'s comment in resolution.R.
+#' @seealso [minimum_detectable_edge()], [significance_boundary()], [resolution_report()],
+#'   [prop22_certifies()] (contrast: NOT multiple-comparisons-corrected, for a single
+#'   pre-specified rival rather than an adaptively-searched one).
 #' @examples
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
@@ -201,6 +207,7 @@ mcb_bound <- function(L, w = NULL, alpha = 0.05) {
 #' @param weights Optional numeric vector of per-period weights (primary name).
 #' @param w Optional alias for `weights` (keyword-only in the Python original; pass only one).
 #' @return The weighted-average realised regret of the picking rule.
+#' @seealso [resolution_report()], [decision_breakdown()].
 #' @examples
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),

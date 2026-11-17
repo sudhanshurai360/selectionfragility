@@ -47,3 +47,7 @@ ws$stability  # fraction of bootstrap resamples where ar1 is still the pooled wi
 # exchangeable_benchmark(K = 3, T = 10)'s p05: only below that is the win unusually fragile
 # relative to chance, not just "looks uncertain."
 }
+\seealso{
+\code{\link[=exchangeable_benchmark]{exchangeable_benchmark()}} (the null distribution to compare this against --
+required, not optional, for interpreting a \code{stability} value), \code{\link[=decision_breakdown]{decision_breakdown()}}.
+}

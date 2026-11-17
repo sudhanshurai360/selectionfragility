@@ -36,3 +36,6 @@ panel <- loss_panel(L)
 # significant at the one-sided alpha = 0.05 level against its binding rival.
 significance_boundary(panel)
 }
+\seealso{
+\code{\link[=minimum_detectable_edge]{minimum_detectable_edge()}}, \code{\link[=mcb_bound]{mcb_bound()}}, \code{\link[=resolution_report]{resolution_report()}}.
+}

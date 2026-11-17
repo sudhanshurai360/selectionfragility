@@ -39,3 +39,7 @@ panel <- loss_panel(L)
 # own loss level) for an 80\%-power test to have a chance of detecting it.
 minimum_detectable_edge(panel)
 }
+\seealso{
+\code{\link[=significance_boundary]{significance_boundary()}}, \code{\link[=mcb_bound]{mcb_bound()}}, \code{\link[=resolution_report]{resolution_report()}} (combines all three
+into the full R1/R2 refusal-gated workflow).
+}

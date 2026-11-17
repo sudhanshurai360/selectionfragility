@@ -41,3 +41,6 @@ Null distribution of winner_stability under an exchangeable (no-true-winner) pan
 eb <- exchangeable_benchmark(K = 3, T = 20, n_rep = 20, n_boot = 50, seed = 1)
 eb$median  # typical winner_stability() under "no model is really better"
 }
+\seealso{
+\code{\link[=winner_stability]{winner_stability()}} (the statistic this provides a null distribution for).
+}

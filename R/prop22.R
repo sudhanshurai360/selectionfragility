@@ -24,6 +24,9 @@
 #' @param T Number of periods.
 #' @param z Two-sided critical value (default 1.96, two-sided 5%).
 #' @return `TRUE`/`FALSE`, or `NA` when the certificate does not apply (`k <= 0` or `k >= T`).
+#' @seealso [certified_tied_subset()] (applies this certificate across a whole panel),
+#'   [breakdown_number()]/[decision_breakdown()] (where `k` comes from), [mcb_bound()] (the
+#'   multiple-comparisons-corrected analogue for an adaptively-searched rival).
 #' @export
 #' @examples
 #' prop22_certifies(2, T = 10)   # TRUE  -- k*=2 is certified non-significant at T=10
@@ -59,6 +62,8 @@ prop22_certifies <- function(k, T, z = 1.96) {
 #' @param w Optional numeric vector of per-period weights; must be uniform (or `NULL`).
 #' @param z Two-sided critical value (default 1.96, two-sided 5%).
 #' @return A sorted character vector of model names in the certified tied subset.
+#' @seealso [prop22_certifies()] (the underlying per-k* certificate), [mcs()]/[identified()]
+#'   (bootstrap-based tie assessment, no uniform-weight restriction).
 #' @export
 #' @examples
 #' # ar1 and nbeats are a genuine near-tie; ets is clearly worse.

@@ -134,6 +134,18 @@
   # legitimate cross-language difference -- this is not that.
   res <- MCS::MCSprocedure(M, alpha = alpha, B = as.integer(reps), statistic = "TR",
                             k = as.integer(block_size), verbose = FALSE, seed = as.integer(seed))
+  # DEFENSIVE, NOT PARANOID: `res@Info` is an informally-typed list (no S4 slot contract), and
+  # R's `$` on a list returns NULL -- silently, no error -- for a missing name. If a future MCS
+  # release ever renames/restructures this field, `included` below would silently become NULL,
+  # which `mcs_size()`/`identified()` would then read as "nothing identified" on EVERY call, with
+  # no warning. Fail loudly here instead of letting that propagate as a quiet wrong answer.
+  if (!("included" %in% names(res@Info))) {
+    stop(paste0(
+      "identify(): MCS::MCSprocedure()'s returned Info list no longer has an 'included' field -- ",
+      "this likely means an incompatible MCS package update changed its internal result ",
+      "structure. Check the installed MCS version against the minimum this package requires."
+    ), call. = FALSE)
+  }
   res@Info$included
 }
 

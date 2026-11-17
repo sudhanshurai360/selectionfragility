@@ -9,21 +9,14 @@
   best (Hansen, Lunde & Nason 2011). A set of size 1 means the best model is **point-identified**;
   a larger set means selection is **not identified**.
 - **Decision breakdown point (`k*`)** — the *fewest evaluation periods whose deletion flips the
-  pooled winner*. A small `k*` means the crowned model rests on a handful of periods and should
-  not be trusted as a stable choice.
+  pooled winner*, a model-selection application of the robust-statistics breakdown-point concept
+  (Hampel 1971) to a selection decision rather than an estimator. A small `k*` means the crowned
+  model rests on a handful of periods and should not be trusted as a stable choice.
 
 This is the native R port of the Python package
 [`selection-fragility`](https://github.com/sudhanshurai360/selection-fragility) (PyPI:
 `pip install selection-fragility`) — same method, same validated numerics, independently verified
 against it. See that repo for the accompanying paper and the full evaluation card.
-
-> **Status: pre-CRAN release.** The core port (9 modules), its `testthat` suite (187 tests), and a
-> getting-started vignette are complete and independently audited module-by-module against the
-> Python package's own test suite and live output. `R CMD check --as-cran` passes with 0 errors
-> and 0 warnings (no notes beyond the standard "new submission" notice every first CRAN
-> submission gets), and the package also passes R-hub's cross-platform check (Linux, macOS,
-> Windows, all on R-devel). CRAN submission is in progress; until then, install from GitHub
-> (below).
 
 ## Install
 
@@ -51,9 +44,24 @@ panel <- loss_panel(L)
 report(panel)
 ```
 
-See `vignette("selectionfragility")` for the full walkthrough — installation, interpreting the
+Notice `ar1` is crowned the pooled-mean champion even though `nbeats` wins 9 of the 10 periods
+outright — one bad period (a loss of 2.60) is enough to flip the pooled winner. That gap between
+"wins almost every period" and "loses on the pooled mean" is exactly what this package's
+diagnostics are built to surface: the MCS tells you whether that gap is statistically real or just
+noise, and `k*` tells you how many periods' removal it would take to flip the verdict back.
+
+If the Model Confidence Set comes back larger than 1 model, or `k*` is small (as here), don't
+report a single champion as settled — report the full MCS membership, note the small `k*`
+explicitly, and either collect more evaluation periods or treat the two models as practically
+tied until you have more data. `report()`'s R1/R2 refusal rules already withhold a confident
+`k*` read when the data can't support one; take that refusal as the answer, not an obstacle.
+
+See `?selectionfragility` for a one-page map of every function in the staged pipeline, and
+`vignette("selectionfragility")` for the full walkthrough — installation, interpreting the
 report, the staged API, weights, CI-gating with `compare()`, and the honest-reporting caveats
-(what `k*`/`winner_stability`/the MCS will and will not tell you).
+(what `k*`/`winner_stability`/the MCS will and will not tell you — including why a result computed
+on autocorrelated forecast losses, the normal case in time series, needs extra care; see that
+section before trusting a close "resolved" call).
 
 ## Relationship to the Python package
 

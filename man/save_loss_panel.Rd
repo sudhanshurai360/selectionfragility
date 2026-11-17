@@ -11,6 +11,9 @@ save_loss_panel(panel, path)
 
 \item{path}{Destination file path.}
 }
+\value{
+\code{NULL}, invisibly. Called for its side effect of writing \code{panel} to \code{path}.
+}
 \description{
 Labels are always written out as strings (JSON has no integer/Date type), so
 \code{load_loss_panel()} reads them back as character even if the original \code{labels} were integer
@@ -30,4 +33,7 @@ save_loss_panel(panel, tmp)
 reloaded <- load_loss_panel(tmp)
 identical(panel$losses, reloaded$losses)
 unlink(tmp)
+}
+\seealso{
+\code{\link[=load_loss_panel]{load_loss_panel()}} (the reader for the file this writes), \code{\link[=loss_panel]{loss_panel()}}.
 }

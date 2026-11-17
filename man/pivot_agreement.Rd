@@ -37,3 +37,7 @@ L <- list(
 panel <- loss_panel(L)
 pivot_agreement(panel, seed = 42)  # ~0.78 -- the named pivot period is fairly stable
 }
+\seealso{
+\code{\link[=concentration_share]{concentration_share()}} (how much of the margin a single period accounts for),
+\code{\link[=surprise_concentration]{surprise_concentration()}}, \code{\link[=report]{report()}}.
+}

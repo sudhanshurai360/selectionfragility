@@ -28,3 +28,6 @@ L <- list(
 )
 surprise_concentration(L)  # sci = 1 -- all of the surprise is in one period (hardest = 3)
 }
+\seealso{
+\code{\link[=pivot_agreement]{pivot_agreement()}} (a related period-sensitivity diagnostic), \code{\link[=decision_breakdown]{decision_breakdown()}}.
+}

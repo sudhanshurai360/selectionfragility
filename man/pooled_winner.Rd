@@ -25,3 +25,7 @@ L <- list(
 )
 pooled_winner(L)  # "ar1" -- nbeats' one bad period (2.60) drags its mean above ar1's
 }
+\seealso{
+\code{\link[=per_period_winner]{per_period_winner()}} (plurality winner), \code{\link[=condorcet_winner]{condorcet_winner()}} (pairwise-majority
+winner), \code{\link[=decision_breakdown]{decision_breakdown()}} (how fragile this pooled winner is), \code{\link[=report]{report()}}.
+}
