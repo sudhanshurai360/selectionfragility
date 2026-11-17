@@ -73,3 +73,19 @@ test_that("mcs()'s large-T*B warning message doesn't itself overflow to 'NA' (24
   expect_false(grepl("= NA", msg, fixed = TRUE))
   expect_true(grepl("2.15e\\+09|2,150,000,000", msg))  # format() may use scientific notation at this magnitude; either is fine, "NA" is not
 })
+
+test_that("model_confidence_set() propagates elimination=, mirroring mcs() (strict-regression round, 2026-11-18)", {
+  # REGRESSION: mcs()'s return list was stamped with elimination= so two "identical" calls across
+  # sessions aren't silently incomparable under a quietly-set global
+  # options(selectionfragility.elimination=...). model_confidence_set() -- the convenience wrapper
+  # a typical user is MORE likely to call directly, since it takes named lists/loss_panels instead
+  # of raw matrices -- reintroduced the exact same gap one layer up by dropping elimination= on
+  # the floor. Found independently by a dedicated audit of every mcs()-return consumer.
+  L <- list(ar1 = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+            ets = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+            nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18))
+  res <- model_confidence_set(L, B = 200, seed = 1)
+  expect_equal(res$elimination, "studentized")
+  res2 <- model_confidence_set(L, B = 200, seed = 1, elimination = "raw")
+  expect_equal(res2$elimination, "raw")
+})

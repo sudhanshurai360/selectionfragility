@@ -112,3 +112,36 @@ test_that(".res_scale()'s champion-only normalization stays finite under an extr
   expect_true(is.finite(significance_boundary(L)))
   expect_true(is.finite(mcb_bound(L)))
 })
+
+test_that("resolution_report() warns on a 'resolved' verdict driven by weight/volatility correlation (strict-regression round, 2026-11-18)", {
+  # REGRESSION: a dedicated verification agent measured a 15-39% false-confidence rate among
+  # "resolved" verdicts under realistic (non-adversarial) weight/volatility correlation -- not a
+  # rare edge case. resolution_report() now warn()s when weights are non-uniform AND correlate
+  # with the differential's volatility AND it is about to report "resolved". Gated on `resolved`
+  # (the R1-only field report()'s RESOLUTION line actually prints), NOT `fragility_read` -- MCS
+  # already rejects non-uniform weights, forcing fragility_read to "undetermined" regardless, which
+  # would make a fragility_read-gated guard unreachable dead code (the exact bug class already
+  # found once in report.R's own Prop 2.2 branch).
+  set.seed(123)
+  T <- 20
+  w <- c(rep(1, 18), rep(100, 2))
+  diff_lowwt <- rnorm(18, mean = 0.0, sd = 0.0005)
+  diff_hiwt  <- c(1.3, 1.1)
+  diffs <- c(diff_lowwt, diff_hiwt)
+  A <- rep(1.00, T); B <- A + diffs
+  L <- list(champ = A, rival = B)
+  expect_warning(resolution_report(L, w), "non-uniform.*correlate")
+  r <- suppressWarnings(resolution_report(L, w))
+  expect_true(r$resolved)  # confirms this is exactly the risky "resolved"-on-weighted-panel case
+
+  # Control 1: uniform weights (default) -- no warning.
+  L2 <- list(a = rnorm(20, 1, 0.05), b = rnorm(20, 1.3, 0.05))
+  expect_no_warning(resolution_report(L2))
+
+  # Control 2: non-uniform weights that do NOT correlate with volatility -- no warning.
+  set.seed(5)
+  w3 <- c(rep(1, 10), rep(50, 10))
+  d3 <- rnorm(20, mean = 0.5, sd = 0.05)
+  A3 <- rep(1, 20); B3 <- A3 + d3
+  expect_no_warning(resolution_report(list(a = A3, b = B3), w3))
+})

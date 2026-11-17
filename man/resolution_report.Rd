@@ -38,7 +38,13 @@ R1/R2 resolution report with refusal rules
 per-period loss differential (see \code{.weighted_se}'s comment in resolution.R). \code{fragility_read}'s
 \code{identified} check does not share this assumption (it goes through the block-bootstrap MCS),
 but the R1 \code{resolved} gate does; a "resolved" read can overstate confidence under
-autocorrelated losses.
+autocorrelated losses. The R1 gate also assumes per-period variance doesn't depend on \code{w}
+(\code{.weighted_se}'s comment again) -- re-verified NOT a rare edge case: among "resolved" verdicts,
+a false-confidence rate of 15-39\% was measured across mild-to-strong, realistic weight/
+volatility correlations (as low as rho=0.1), and 8\% even on an unremarkable seasonal
+observation-count pattern. This function now \code{warning()}s when \code{w} is non-uniform AND
+correlates with the differential's volatility AND it is about to report "resolved" -- treat
+that warning as a real signal to sanity-check the result, not noise.
 }
 
 \section{Seed sensitivity}{

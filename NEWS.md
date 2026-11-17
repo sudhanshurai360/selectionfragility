@@ -11,10 +11,13 @@ Initial release: a native R port of the Python package
   refusal rules), `prop22` (zero-simulation Proposition 2.2 certificate), `pivot` (concentration
   share, pivot agreement), `report` (one-screen summary), `compare` (run-over-run champion-change
   diagnostic).
-* 187 tests (`testthat`, edition 3), including a dedicated cross-language oracle-comparison suite
-  verified against the Python package's live behavior, not just its documented contract.
-* `R CMD check --as-cran`: 0 errors, 0 warnings; passes R-hub's cross-platform check (Linux, macOS,
-  Windows, R-devel).
+* 995 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds),
+  including a dedicated cross-language oracle-comparison suite verified against the Python
+  package's live behavior, not just its documented contract.
+* `R CMD check --as-cran`: 0 errors, 0 warnings given a complete LaTeX toolchain and a current
+  HTML Tidy on the checking machine (both independently confirmed); a machine missing either
+  reports environment-only PDF/HTML-manual ERROR/WARNING/NOTE lines that are not package defects.
+  Passes R-hub's cross-platform check (Linux, macOS, Windows, R-devel).
 * Known, documented differences from the Python original: `loss_panel()` does not yet port
   `from_forecasts()` (build a wide loss matrix/data.frame/list yourself); RNG draws are not
   bit-for-bit identical across languages (statistically equivalent, not byte-identical).

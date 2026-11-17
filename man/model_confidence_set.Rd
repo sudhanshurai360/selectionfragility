@@ -34,7 +34,8 @@ it shrinks the MCS -- but it inflates the apparent identification rate.)}
 mean-based rule). \code{NULL} reads \code{getOption("selectionfragility.elimination", "studentized")}.}
 }
 \value{
-A list \code{list(surviving = surviving_model_names, p = p_at_stop)}.
+A list \code{list(surviving = surviving_model_names, p = p_at_stop, elimination = elimination_rule_used)} -- see \code{mcs()}'s \verb{@return} for why \code{elimination} is stamped onto the
+result (cross-session comparability under a quietly-set global option).
 }
 \description{
 Convenience wrapper over \code{mcs()} that takes a named list \code{{model: vector}} (or a \code{loss_panel})

@@ -247,7 +247,9 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
 #'
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @inheritParams mcs
-#' @return A list `list(surviving = surviving_model_names, p = p_at_stop)`.
+#' @return A list `list(surviving = surviving_model_names, p = p_at_stop, elimination =
+#'   elimination_rule_used)` -- see `mcs()`'s `@return` for why `elimination` is stamped onto the
+#'   result (cross-session comparability under a quietly-set global option).
 #'
 #' @examples
 #' # Same tied panel as mcs(), but as a named list -- the surviving set comes back as names.
@@ -281,5 +283,5 @@ model_confidence_set <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0,
   }
   M <- do.call(cbind, lapply(models, function(m) as.numeric(L[[m]])))
   res <- mcs(M, alpha = alpha, B = B, block = block, seed = seed, elimination = elimination)
-  list(surviving = models[res$surviving], p = res$p)
+  list(surviving = models[res$surviving], p = res$p, elimination = res$elimination)
 }
