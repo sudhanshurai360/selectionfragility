@@ -33,7 +33,12 @@
 #' @param seed RNG seed.
 #' @param elimination `"studentized"` (Hansen-Lunde-Nason's e_max, default) or `"raw"` (legacy
 #'   mean-based rule). `NULL` reads `getOption("selectionfragility.elimination", "studentized")`.
-#' @return A list `list(surviving = surviving_column_indices, p = p_at_stop)` (1-based indices).
+#' @return A list `list(surviving = surviving_column_indices, p = p_at_stop, elimination =
+#'   elimination_rule_used)` (1-based indices). `elimination` is stamped onto the result (not just
+#'   accepted as an argument) because two "identical" calls across sessions are otherwise silently
+#'   incomparable if a global `options(selectionfragility.elimination=...)` was quietly set in one
+#'   of them -- confirmed consequential, not cosmetic: on one panel, `"studentized"` gave
+#'   `surviving={1,2}`/`p=0.257` while `"raw"` gave `surviving={2}`/`p=0.002` at the same seed/B.
 #'
 #' @examples
 #' # A 10-period, 3-model loss panel where models 1 and 2 are tied (identical losses) and

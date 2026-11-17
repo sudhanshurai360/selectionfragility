@@ -338,3 +338,18 @@ test_that(".block_resample_idx(circular=FALSE) is O(T), not O(T^2), and matches 
   expect_equal(length(idx), 80000L)
   expect_lt(elapsed, 2.0)
 })
+
+test_that("winner_stability()'s block= is coerced/validated like n_boot=, not crashed on (strict sibling-pattern sweep, 2026-11-18)", {
+  # REGRESSION: block was used raw in `if (block >= T)` and in this function's own sprintf("%d",...)
+  # message -- the identical two-bug shape (guard condition AND its own display message) already
+  # fixed 3+ times in mcs.R, found unfixed here by an exhaustive sibling-pattern sweep.
+  # block=NA crashed inside the bare if(); block="3" crashed inside the %d message.
+  L <- list(ar1 = c(1, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1, 1.02, 0.98),
+            nbeats = c(0.9, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.9, 2.6, 0.88))
+  expect_error(winner_stability(L, block = NA), "block must be a single integer")
+  expect_no_error(winner_stability(L, block = "3", n_boot = 50, seed = 1))  # numeric string coerces, like mcs()'s B/block
+  expect_error(winner_stability(L, block = "abc"), "block must be a single integer")
+  # exchangeable_benchmark() and fragility(stability_block=) funnel through the same unguarded path.
+  expect_error(exchangeable_benchmark(K = 2, T = 10, n_rep = 2, block = NA), "block must be a single integer")
+  expect_error(fragility(L, stability_block = NA), "block must be a single integer")
+})

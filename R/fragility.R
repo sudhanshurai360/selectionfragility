@@ -496,7 +496,21 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
   L <- .as_loss_dict(L)
   T <- .validate_losses(L, w)
   w <- if (is.null(w)) rep(1, T) else as.numeric(w)
-  if (is.null(block)) block <- max(1, round(T ^ (1 / 3)))
+  if (is.null(block)) {
+    block <- max(1, round(T ^ (1 / 3)))
+  } else {
+    # Coerce/validate a user-supplied block the same way n_boot already is below -- the identical
+    # unguarded-int32/NA pattern already fixed 3+ times in mcs.R (guard condition AND its own
+    # display message), ported here after being found unfixed in this sibling. Without this,
+    # block=NA crashed inside the bare `if (block >= T)` and block="3" crashed inside this
+    # function's own sprintf("%d", ...) message -- both raw, unhelpful R-internal errors.
+    block_in <- block
+    block <- suppressWarnings(as.integer(block))
+    if (length(block) != 1 || is.na(block)) {
+      stop(sprintf("winner_stability(): block must be a single integer; got %s.",
+                    paste(format(block_in), collapse = ", ")), call. = FALSE)
+    }
+  }
   if (block >= T) {
     stop(sprintf(
       paste0(

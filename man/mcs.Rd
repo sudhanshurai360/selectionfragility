@@ -27,7 +27,11 @@ it shrinks the MCS -- but it inflates the apparent identification rate.)}
 mean-based rule). \code{NULL} reads \code{getOption("selectionfragility.elimination", "studentized")}.}
 }
 \value{
-A list \code{list(surviving = surviving_column_indices, p = p_at_stop)} (1-based indices).
+A list \code{list(surviving = surviving_column_indices, p = p_at_stop, elimination = elimination_rule_used)} (1-based indices). \code{elimination} is stamped onto the result (not just
+accepted as an argument) because two "identical" calls across sessions are otherwise silently
+incomparable if a global \code{options(selectionfragility.elimination=...)} was quietly set in one
+of them -- confirmed consequential, not cosmetic: on one panel, \code{"studentized"} gave
+\verb{surviving=\{1,2\}}/\code{p=0.257} while \code{"raw"} gave \code{surviving={2}}/\code{p=0.002} at the same seed/B.
 }
 \description{
 Model Confidence Set on a T x K loss matrix

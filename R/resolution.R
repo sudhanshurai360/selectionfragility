@@ -378,8 +378,10 @@ resolution_report <- function(L, w = NULL, alpha = 0.05, power = 0.80, mcs_alpha
 
   # Low-risk mitigation for the weighted-SE assumption disclosed in .weighted_se()'s comment
   # (variance-homogeneity-across-weight-classes): a dedicated re-verification measured a 28.5%
-  # false-confidence rate among "resolved" verdicts even at mild (rho~0.1-0.2), non-adversarial
-  # weight/volatility correlation -- not a rare edge case. Rather than touch the shared,
+  # OVERALL false-confidence rate among "resolved" verdicts, averaged across rho=0.1-0.8 weight/
+  # volatility correlations combined -- and the rate is still double-digit (15.3%-38.7%, see the
+  # per-rho breakdown and the 8.1% seasonal-pattern figure above) even at mild, non-adversarial
+  # correlation -- not a rare edge case. Rather than touch the shared,
   # oracle-pinned .weighted_se() formula this close to submission, warn when the SAME conditions
   # that make the understatement likely are present on a panel this function is about to call
   # "resolved": non-uniform weights (CV(w) above a modest threshold) that correlate with the
@@ -403,7 +405,7 @@ resolution_report <- function(L, w = NULL, alpha = 0.05, power = 0.80, mcs_alpha
           "per-period differential's volatility (r=%.2f) -- .weighted_se() uses the RAW, ",
           "UNWEIGHTED variance (only the effective-sample-size denominator uses the weights), ",
           "which can understate the true SE when weight correlates with volatility this way. ",
-          "This 'resolved' read should be treated with extra caution; see minimum_detectable_edge()'s ",
+          "This 'resolved' read should be treated with extra caution; see resolution_report()'s ",
           "@section Assumption for the confirmed scope of this issue."
         ), cv_w, wv_cor), call. = FALSE)
       }
