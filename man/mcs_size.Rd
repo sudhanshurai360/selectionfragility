@@ -28,6 +28,10 @@ how this engine relates to this package's own native \code{mcs()}/\code{model_co
 }
 \examples{
 # A 10-period, 3-model loss panel where ar1 and ets are tied and nbeats is clearly worse.
+# T/K=3.3 here is below this engine's own small-T threshold (see .run_mcs_arch's warning),
+# so running this deliberately-small teaching example will print that warning -- expected,
+# not a sign anything is broken; kept small for example speed rather than enlarged to T=30+,
+# since the point here is the tie/clear-winner contrast, not threshold-avoidance.
 L <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
   ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),

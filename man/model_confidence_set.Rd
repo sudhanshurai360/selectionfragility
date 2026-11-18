@@ -62,13 +62,13 @@ Convenience wrapper over \code{mcs()} that takes a named list \code{{model: vect
 and returns the surviving model NAMES rather than column indices.
 }
 \examples{
-# Same tied panel as mcs(), but as a named list -- the surviving set comes back as names.
-# No set.seed() call is needed: reproducibility comes from the seed= argument below.
-L <- list(
-  ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
-  ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
-  nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
-)
+# Same tied panel as mcs() (T=30, matching its T/K=10 "already-tolerated" anchor so this
+# example doesn't trigger mcs()'s own small-T warning), but as a named list -- the surviving
+# set comes back as names. No set.seed() call is needed: reproducibility comes from the
+# seed= argument below.
+ar1_ets <- rep(c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98), 3)
+nbeats  <- rep(c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18), 3)
+L <- list(ar1 = ar1_ets, ets = ar1_ets, nbeats = nbeats)
 # B kept small here purely for example speed; use the B=2000 default for real analyses.
 res <- model_confidence_set(L, B = 200, seed = 1)
 res$surviving  # c("ar1", "ets"); nbeats is eliminated

@@ -143,10 +143,16 @@ test_that(
   # creating a temporary, serially-correlated regime in the loss differential, not i.i.d. noise.
   expect_true(ac[1] > 0.3)
   bt <- Box.test(diff_cr, lag = 10, type = "Ljung-Box")
-  # Overwhelmingly significant: a real analyst who skipped resolution.R's documentation would have
-  # no in-workflow signal that their "no autocorrelation" assumption is this badly violated --
-  # report()/resolution_report() do not run or surface this diagnostic themselves.
+  # Overwhelmingly significant. GAP NOW PARTIALLY CLOSED (2026-11-18): report() does NOT run this
+  # (or any) autocorrelation diagnostic itself -- a real analyst still gets no quantified ACF/
+  # Ljung-Box readout from the package -- but report() now ALWAYS prints a static, unconditional
+  # disclosure immediately under RESOLUTION naming exactly this assumption ("RESOLUTION assumes no
+  # autocorrelation in the per-period loss differential ... this is NOT checked at runtime"), so an
+  # analyst reading report()'s printed text is no longer left with zero in-workflow signal that the
+  # assumption exists and is unchecked -- only with no quantified measurement of how badly it is
+  # violated on their specific panel.
   expect_lt(bt$p.value, 1e-6)
+  expect_match(report(loss_panel(.energy_L)), "RESOLUTION assumes no autocorrelation")
 })
 
 test_that(

@@ -56,21 +56,18 @@
 #   ignoring this domain's own best-known pitfall (serial correlation in forecast errors) produces
 #   exactly the false confidence this package's documentation warns about.
 #
-#   FINDING 2 (documented, not fixed here -- for human review): resolution_report()/report() emit
-#   NO runtime warning of any kind about autocorrelation on this same panel when called with
-#   uniform weights (the common case -- no `w=` argument at all), even though it reports
-#   "resolved". The package's ONLY existing runtime guard against an analogous risk (resolution.R's
-#   weight/volatility-correlation warning) is gated on non-uniform weights and does not fire here.
-#   The autocorrelation caveat itself exists only in `@section Assumption` roxygen prose (resolution.R,
-#   mcs.R, fragility.R) -- real, thorough, and correctly describing the risk, but NOT reachable by a
-#   realistic workflow that just calls `loss_panel() -> report()` and reads the printed text,
-#   unless the VERDICT/RESOLUTION disagreement happens to manifest (as in Finding 1, which is data-
-#   dependent and not guaranteed). This is flagged here for human review rather than fixed in this
-#   test file: adding a new runtime autocorrelation warning would need the same false-positive-rate
-#   calibration work the existing weight/volatility guard went through (measured 15-39% false-fire
-#   rate even on panels where its assumption holds), which is a deliberate methodology decision, not
-#   a one-line fix, and the test below pins the CURRENT (silent) behavior so a future change to it
-#   is a visible, deliberate decision rather than an invisible regression.
+#   FINDING 2 (GAP NOW CLOSED, 2026-11-18): resolution_report()/report() still emit NO runtime
+#   warning() about autocorrelation on this same panel when called with uniform weights (the
+#   package's ONLY existing runtime warning() against an analogous risk, resolution.R's
+#   weight/volatility-correlation guard, is gated on non-uniform weights and does not fire here) --
+#   but report()'s printed text is no longer silent about it. report() now ALWAYS prints a static
+#   "(RESOLUTION assumes no autocorrelation in the per-period loss differential; ... this is NOT
+#   checked at runtime)" disclosure immediately under RESOLUTION, unconditionally, not gated on the
+#   VERDICT/RESOLUTION disagreement happening to manifest on this specific data draw (unlike Finding
+#   1's caveat, which IS data-dependent). So a realistic workflow that just calls
+#   `loss_panel() -> report()` and reads the printed text now DOES see an explicit, in-band caveat
+#   about this exact assumption on every call, including this one -- the test below confirms the
+#   disclosure text's presence (not absence) in `out`.
 #
 #   FINDING 3 (compare() across the structural break): a forecasting team that re-evaluates its
 #   champion choice before vs. after the 2008-09/2020 structural breaks have played out sees its
@@ -157,13 +154,17 @@ test_that("realistic AR(1)-correlated, structurally-broken GDP-nowcasting panel:
   expect_length(mcs_block1$surviving, 1)   # i.i.d.-style block: false-confidence singleton
   expect_gt(length(mcs_block3$surviving), 1)  # package default: correctly does not single out a winner
 
-  # FINDING 2 (documented here, not fixed -- see file header): on this realistic, uniform-weight,
-  # autocorrelated, "resolved" panel, resolution_report() emits ZERO runtime warnings. The package's
-  # only existing runtime guard against an analogous risk (non-uniform weights correlated with
-  # volatility) does not apply here because no weights were passed. This pins the CURRENT behavior
-  # so a future change is a deliberate, visible decision, not a silent regression either way.
+  # FINDING 2, UPDATED (gap now closed -- see file header): resolution_report() itself still
+  # emits ZERO runtime warning()s on this realistic, uniform-weight, autocorrelated, "resolved"
+  # panel (the package's only existing runtime warning() against an analogous risk -- non-uniform
+  # weights correlated with volatility -- does not apply here because no weights were passed), so
+  # this expectation on resolution_report() alone still correctly pins silence. report(), however,
+  # is NOT silent about the autocorrelation assumption any more: it always prints the static
+  # RESOLUTION disclosure in its text (checked below), even though it still raises no warning().
   expect_no_warning(resolution_report(panel))
   expect_no_warning(report(panel, alpha = 0.10))
+  out <- report(panel, alpha = 0.10)
+  expect_match(out, "RESOLUTION assumes no autocorrelation in the per-period loss differential")
 })
 
 test_that("compare() across the 2008-09/2020 structural break: correctly attributes a champion flip to the new (crisis) periods and does not overclaim 'act'", {

@@ -122,7 +122,7 @@ Function names and signatures are near-identical 1:1 across the two (`loss_panel
 are structured identically in both languages. Cite either implementation; they compute the same
 quantities. If you work in Python instead of R, use `pip install selection-fragility`.
 
-Two things do **not** carry over if you are switching from the Python package, or running both
+Three things do **not** carry over if you are switching from the Python package, or running both
 side by side during a migration:
 
 - **`LossPanel.from_forecasts()` has no R equivalent yet.** Python's `from_forecasts(df, y_true=,
@@ -137,6 +137,12 @@ side by side during a migration:
   different generators — `seed = 0` in both languages draws different resamples. Compare
   *conclusions* (is the pooled winner identified, is `winner_stability` near the exchangeable
   benchmark) across the two implementations, never exact decimals of a bootstrap statistic.
+- **`identified()`/`mcs_size()`'s positional argument order no longer matches Python's.** R puts
+  `w` second, immediately after `L` (`identified(L, w, alpha, ...)`), matching every other
+  `(L, w, ...)` function in this package; Python's `identified(L, alpha=, reps=, block_size=,
+  seed=, w=None)` still puts `w` last. A call written positionally for one language (e.g.
+  `identified(L, w)`) does not do the same thing in the other — pass `w=` by name if you maintain
+  code for both.
 
 `identified()`/`mcs_size()` can run on the CRAN [`MCS`](https://cran.r-project.org/package=MCS)
 package's own `MCSprocedure()` engine, cross-checked against this package's independent native
@@ -190,6 +196,12 @@ resolution_report(panel)
 # Stage 3 — the decision breakdown point itself
 decision_breakdown(panel)
 ```
+
+`mcs_size()`/`identified()` above print a `T/K < 10` small-sample warning because this
+walkthrough's own demo panel (`T=10`, `K=3`, so `T/K≈3.3`) sits well inside that regime — this is
+the real warning you will also see on any similarly-sized panel of your own, not a bug in this
+vignette, and it will recur in several of the chunks below for the same reason. See "Honest
+reporting" below for what it means and how to read a result from a panel this small.
 
 `decision_breakdown()$removed` above is a bare, 1-based **position** into the loss vectors, not a
 resolved label — even though `panel` was built with `labels = years`. Only `report()` resolves
@@ -255,7 +267,11 @@ step should gate on.
   the autocorrelation of the loss differential yourself, e.g. `acf(L$model_a - L$model_b)`.
 - **`mcs_size(L) > 1` can reflect low statistical power, not just a genuine tie** — especially at
   small `T`. Read it as *"cannot be distinguished at this sample size,"* never as *"these models
-  are equivalent."*
+  are equivalent."* Below `T/K < 10` (this walkthrough's own demo panel included — see Stage 1
+  above), `mcs()`/`identified()`/`mcs_size()` print a warning for exactly this reason: the measured
+  false-elimination rate there runs well above the nominal `alpha` (~18% at `T=30`/`K=3`, ~41% at
+  `T=12`/`K=4`, vs. nominal ~10%) — a blanket caveat tied to sample size alone, not a verdict on
+  any one panel.
 - **`winner_stability()` is not interpretable on its own.** Compare it to
   `exchangeable_benchmark(K, T)` — the distribution this same statistic takes when no model is
   truly better. Values in the 0.4–0.6 range are often exactly what chance alone produces:

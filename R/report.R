@@ -97,7 +97,10 @@
 #' @examples
 #' # Ten years of losses for three models: ar1 is steady, nbeats wins nine of the ten years
 #' # but one shock-year loss (2.60) is large enough that ar1 wins on the pooled mean anyway,
-#' # ets is uniformly worse.
+#' # ets is uniformly worse. T/K=3.3 is below the internal MCS engine's own small-T threshold,
+#' # so report() below is expected to print its "small-sample regime" warning once (it
+#' # de-duplicates the same warning firing from its two internal MCS call sites) -- that is
+#' # disclosure, not a sign report() is broken.
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
 #'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
@@ -119,7 +122,31 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
 
   mcs_error <- NULL
   survivors <- character(0); msize <- NULL; ident <- NULL
-  mcs_res <- tryCatch(.run_mcs_arch(L, alpha = alpha, w = w, seed = seed), error = function(e) e)
+  # STRICT-AUDIT FIX (2026-11-18, new-comment-block adversarial round): report() calls
+  # .run_mcs_arch() directly (right below, for VERDICT) AND ALSO calls resolution_report() (below)
+  # which, for its own R2 check, internally calls identified() -> mcs_size() -> the SAME
+  # .run_mcs_arch(), with matching T/K/w AND matching alpha/seed (resolution_report() is called
+  # with mcs_alpha = alpha, mcs_seed = seed -- this function's own `alpha`/`seed` arguments). Any
+  # warning .run_mcs_arch() raises based only on T/K/alpha (the small-T warning added in the
+  # immediately-preceding commit, the large-K warning, the block-shrink warning) is therefore
+  # byte-for-byte identical on both call sites and fires TWICE per report() call -- confirmed
+  # directly: report() on a T=12/K=3 panel prints the "identified()/mcs_size(): T=12 periods for
+  # K=3 models..." small-sample warning twice, word-for-word, which looks like a duplicated/buggy
+  # warning to a real user rather than one risk surfaced from two internal call sites. Fixed
+  # conservatively: capture every warning from both internal engine calls via
+  # withCallingHandlers()/muffleWarning (deferring, not suppressing, them), then re-emit only the
+  # UNIQUE messages once each after both calls complete. This also naturally de-duplicates the
+  # large-K and block-shrink warnings if they ever fire from both sites the same way, without
+  # hardcoding anything specific to the small-T wording.
+  warn_msgs <- character(0)
+  .collect_warning <- function(w) {
+    warn_msgs <<- c(warn_msgs, conditionMessage(w))
+    invokeRestart("muffleWarning")
+  }
+  mcs_res <- withCallingHandlers(
+    tryCatch(.run_mcs_arch(L, alpha = alpha, w = w, seed = seed), error = function(e) e),
+    warning = .collect_warning
+  )
   if (inherits(mcs_res, "error")) {
     ident <- NULL; msize <- NULL; survivors <- character(0)
     mcs_error <- conditionMessage(mcs_res)
@@ -132,12 +159,16 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
   wins <- .strict_win_counts(L)
   champ <- pooled_winner(L, w)
 
-  res <- tryCatch(
-    resolution_report(L, w, alpha = 0.05, power = 0.80, mcs_alpha = alpha, mcs_seed = seed),
-    error = function(e) list(resolved = FALSE, observed_edge = NaN, mde = NaN,
-                              significance_boundary = NaN, binding_rival = NULL,
-                              identified = NULL, fragility_read = "undetermined")
+  res <- withCallingHandlers(
+    tryCatch(
+      resolution_report(L, w, alpha = 0.05, power = 0.80, mcs_alpha = alpha, mcs_seed = seed),
+      error = function(e) list(resolved = FALSE, observed_edge = NaN, mde = NaN,
+                                significance_boundary = NaN, binding_rival = NULL,
+                                identified = NULL, fragility_read = "undetermined")
+    ),
+    warning = .collect_warning
   )
+  for (msg in unique(warn_msgs)) warning(msg, call. = FALSE)
 
   lines <- character(0)
   if (is.null(mcs_error)) {

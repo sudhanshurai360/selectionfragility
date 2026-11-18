@@ -113,15 +113,15 @@ not a gap specific to this package.
 }
 
 \examples{
-# A 10-period, 3-model loss panel where models 1 and 2 are tied (identical losses) and
-# model 3 is clearly worse -- the MCS should retain the tied pair. No set.seed() call is
-# needed here: mcs() saves/restores the caller's RNG state internally, so reproducibility
-# comes from the seed= argument below, not from the global RNG.
-L <- cbind(
-  ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
-  ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
-  nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
-)
+# A 30-period, 3-model loss panel (T=30 deliberately -- it matches the T/K=10 anchor this
+# function's own small-T warning above cites as its "already-tolerated" boundary, so this
+# example does not trigger that warning on itself; a shorter panel would) where models 1 and
+# 2 are tied (identical losses) and model 3 is clearly worse -- the MCS should retain the
+# tied pair. No set.seed() call is needed here: mcs() saves/restores the caller's RNG state
+# internally, so reproducibility comes from the seed= argument below, not from the global RNG.
+ar1_ets <- rep(c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98), 3)
+nbeats  <- rep(c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18), 3)
+L <- cbind(ar1 = ar1_ets, ets = ar1_ets, nbeats = nbeats)
 # B kept small here purely for example speed; use the B=2000 default for real analyses.
 res <- mcs(L, B = 200, seed = 1)
 res$surviving  # columns 1 and 2 (ar1, ets) survive; nbeats is eliminated

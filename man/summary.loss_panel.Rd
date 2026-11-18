@@ -22,6 +22,9 @@ A numeric-first alternative to \code{\link[=report]{report()}}'s prose: \code{fr
 periods won, decision breakdown point) as a data.frame, one row per model, sorted by mean loss.
 }
 \examples{
+# T/K=3.3 is below the internal MCS membership check's own small-T threshold, so the
+# summary(panel) call below is expected to print its "small-sample regime" warning --
+# disclosure from the check that fills in_mcs, not a sign this call is broken.
 L <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),

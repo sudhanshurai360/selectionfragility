@@ -64,6 +64,19 @@ test_that("mcs() rejects a data.frame with a non-numeric column instead of a raw
   expect_no_error(mcs(data.frame(a = c(1, 2, 1, 2, 1, 2, 1, 2), b = c(1, 2, 1, 2, 1, 2, 1, 2) + 0.1), B = 20, seed = 1))
 })
 
+test_that("mcs() rejects a plain list/loss_panel with a worded message instead of a raw base-R error (fresh-eyes round, 2026-11-18)", {
+  # REGRESSION: the data.frame guard just above (same commit family as this test) closed the
+  # data.frame case but missed the sibling case -- the single most natural misuse of this exact
+  # function: calling mcs(L, ...) on the named {model: vector} list (or a loss_panel object,
+  # itself a list) that model_confidence_set()/mcs_size()/identified() take, instead of routing
+  # it through model_confidence_set() first as documented. Both used to reach a raw, unworded
+  # "'list' object cannot be coerced to type 'double'" from storage.mode(L) <- "double".
+  L <- list(a = rnorm(10), b = rnorm(10), c = rnorm(10))
+  expect_error(mcs(L, B = 20, seed = 1), "model_confidence_set")
+  panel <- loss_panel(L)
+  expect_error(mcs(panel, B = 20, seed = 1), "model_confidence_set")
+})
+
 test_that("model_confidence_set() wraps mcs() and returns model names", {
   L1 <- matrix(rep(c(1.0, 2.0, 3.0, 1.1, 2.1, 3.1, 0.9, 1.9, 2.9, 1.0, 2.0, 3.0), 3), ncol = 3, byrow = TRUE)
   Ld <- list(a = L1[, 1], b = L1[, 2], c = L1[, 3])

@@ -11,7 +11,7 @@ Initial release: a native R port of the Python package
   refusal rules), `prop22` (zero-simulation Proposition 2.2 certificate), `pivot` (concentration
   share, pivot agreement), `report` (one-screen summary), `compare` (run-over-run champion-change
   diagnostic).
-* 2042 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
+* 2077 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
   this count will keep moving as hardening continues; check `devtools::test()`'s own output rather
   than treating this number as authoritative), including a dedicated cross-language
   oracle-comparison suite verified against the Python package's live behavior, not just its
@@ -290,7 +290,13 @@ Initial release: a native R port of the Python package
   other `(L, w, ...)` function in the package (previously `w` sat last, so `identified(L, w)`
   silently bound `w` to `alpha`); confirmed safe since no call site anywhere in the package or
   its tests relied on the old positional order, and `MCS::MCSprocedure()` itself has no `w`-like
-  parameter to stay aligned with. The `NA`-vs-`NULL` "cannot determine" sentinel was NOT
+  parameter to stay aligned with. Confirmed directly against the installed Python 1.0.4
+  (2026-11-18): this reorder is a NEW, previously-undisclosed divergence from the Python
+  original, not a pre-existing one -- Python's `identified()`/`mcs_size()` still put `w` last
+  (`identified(L, alpha=0.10, reps=500, block_size=3, seed=0, w=None)`), so before this fix the
+  two languages' positional order agreed; a positional call written for one language no longer
+  does the same thing in the other (see `README.md`/the vignette's "Relationship to the Python
+  package" sections). The `NA`-vs-`NULL` "cannot determine" sentinel was NOT
   standardized -- it reflects a real, principled split (`NA` for a degenerate-but-computed
   result inside a typed scalar return; `NULL` for a caught error inside a list-returning
   function, with `resolution_report()$identified` specifically also mirroring the Python
@@ -343,3 +349,19 @@ Initial release: a native R port of the Python package
   `report()`'s RESOLUTION section now always prints a one-line, non-conditional disclosure of the
   assumption, rather than relying on it only sometimes surfacing via the VERDICT/RESOLUTION
   disagreement caveat.
+* Both of this round's two new disclosures are R-only; the underlying statistical properties they
+  disclose are NOT -- confirmed by direct live execution against Python v1.0.4 (2026-11-18), not
+  assumed from the prior round's measurement. Python's `mcs()`/`identified()`/`mcs_size()` emit no
+  warning of any kind on a T=12/K=4 panel (`warnings.catch_warnings(record=True)` captured zero
+  warnings calling all three), and Python's `report()` prints no autocorrelation-related text
+  anywhere in its RESOLUTION section (checked directly against the printed output, not the
+  docstrings, which do mention it) -- so a script meant to behave identically across both languages
+  will see R emit both the small-T warning and the autocorrelation line with nothing analogous in
+  Python under the same inputs. But re-measuring directly in live Python (not trusting the prior
+  round's number) confirms the small-T miscalibration ITSELF is shared, not an R defect: running
+  Python's own `mcs()` under a true null for 300 trials each gave a false-elimination rate of 20.7%
+  at T=30/K=3 and 45.7% at T=12/K=4 (alpha=0.10) -- the same order of magnitude as R's own ~18%/
+  ~41%, with the residual gap explained by Monte Carlo sampling noise at this trial count, not a
+  cross-language difference in the underlying procedure. In other words: R's new warning text
+  discloses a property TRUE OF PYTHON TOO, just previously undisclosed there; it is the disclosure
+  that is new and R-only, not the phenomenon.

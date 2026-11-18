@@ -36,7 +36,10 @@ pivot_agreement).
 \examples{
 # Ten years of losses for three models: ar1 is steady, nbeats wins nine of the ten years
 # but one shock-year loss (2.60) is large enough that ar1 wins on the pooled mean anyway,
-# ets is uniformly worse.
+# ets is uniformly worse. T/K=3.3 is below the internal MCS engine's own small-T threshold,
+# so report() below is expected to print its "small-sample regime" warning once (it
+# de-duplicates the same warning firing from its two internal MCS call sites) -- that is
+# disclosure, not a sign report() is broken.
 L <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),

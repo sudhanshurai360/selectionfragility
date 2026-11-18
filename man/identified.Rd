@@ -41,6 +41,10 @@ these together.
 }
 
 \examples{
+# Both panels below are small (T/K well under this engine's own small-T warning threshold)
+# purely for example speed -- expect the "identified()/mcs_size(): ... small-sample regime"
+# warning to print on both calls; that is this diagnostic disclosing its own measured
+# limitation, not a sign either call is broken.
 # Tied pair -> not identified (MCS size 2, not 1).
 L_tied <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),

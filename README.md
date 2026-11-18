@@ -104,6 +104,13 @@ structured identically in both languages. The following do **not** carry over:
   permutation-invariant even then (see `?concentration_share`). `compare()`'s reversed-argument
   guard is R-only, confirmed by execution — Python silently returns a plausible but backwards
   result on swapped arguments.
+- **`identified()`/`mcs_size()`'s positional argument order no longer matches Python's** — R puts
+  `w` second, immediately after `L` (matching every other `(L, w, ...)` function in this package,
+  fixed in this round's expert design review; see `NEWS.md`), while Python's equivalent entry
+  points still put `w` last (`identified(L, alpha=0.10, reps=500, block_size=3, seed=0, w=None)`,
+  confirmed directly against the installed Python 1.0.4). A call written positionally in one
+  language (e.g. `identified(L, w)`) silently binds `w` to a different parameter in the other —
+  pass `w=` by name in code meant to run against both.
 - **`save_loss_panel()`/`load_loss_panel()` round-trip losslessly with Python's `LossPanel.save()`/
   `.load()`**, confirmed by direct cross-language execution (2026-11-18): a 5-model, 24-period
   panel with non-uniform weights and real date-like labels, built and saved in one language,
@@ -144,6 +151,20 @@ structured identically in both languages. The following do **not** carry over:
   moves across seeds, Python's does not. These are the same three fixes made to this R port this
   round (see `NEWS.md`), now confirmed to be genuine R-only enhancements rather than things Python
   already had.
+
+- **Two new R-only runtime disclosures (2026-11-18); the properties they disclose are not R-only**
+  — confirmed by direct live execution against Python v1.0.4, not assumed. `mcs()` and
+  `identified()`/`mcs_size()` now `warning()` whenever `T/K < 10` about small-T false-elimination;
+  Python's equivalents raise no warning at all on a T=12/K=4 panel (`warnings.catch_warnings`
+  captured nothing calling all three). `report()`'s RESOLUTION section now always prints a one-line
+  disclosure that it assumes no autocorrelation in the per-period loss differential; Python's
+  `report()` prints no such text anywhere in its output (its docstrings mention the assumption,
+  but nothing reaches the printed RESOLUTION section). Re-measured directly rather than trusted
+  from an earlier round: running Python's own `mcs()` under a true null (300 trials each, alpha
+  = 0.10) gives a 20.7% false-elimination rate at T=30/K=3 and 45.7% at T=12/K=4 — the same order
+  of magnitude as R's documented ~18%/~41%, confirming the small-T miscalibration is a shared
+  property of the underlying Hansen-Lunde-Nason procedure, not an R-specific defect. What's R-only
+  is the disclosure, not the phenomenon it discloses.
 
 Cite either implementation; they compute the same quantities.
 

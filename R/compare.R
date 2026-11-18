@@ -165,6 +165,9 @@ print.change_report <- function(x, ...) {
 #' @seealso [loss_panel()] to build the `previous`/`current` panels; [mcs()]/[model_confidence_set()]
 #'   for the Model Confidence Set check this uses to assess whether the old champion really left.
 #' @examples
+#' # Small, 10-11 period panel purely for example speed; expect compare()'s internal MCS check
+#' # to print the "small-sample regime" warning below (T/K well under its threshold) -- that is
+#' # the check disclosing its own measured limitation, not a sign this call is broken.
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
 #'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),

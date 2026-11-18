@@ -575,6 +575,9 @@ as.data.frame.loss_panel <- function(x, ...) {
 #' @return A data.frame with columns `model`, `mean_loss`, `periods_won`, `in_mcs`.
 #' @seealso [report()] for the prose summary; [fragility()] for the full set of diagnostic fields.
 #' @examples
+#' # T/K=3.3 is below the internal MCS membership check's own small-T threshold, so the
+#' # summary(panel) call below is expected to print its "small-sample regime" warning --
+#' # disclosure from the check that fills in_mcs, not a sign this call is broken.
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
 #'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),

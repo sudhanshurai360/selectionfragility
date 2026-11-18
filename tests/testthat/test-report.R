@@ -206,6 +206,137 @@ test_that("report() explains a not-identified + resolved panel instead of printi
   expect_match(out, "VERDICT and\\s*\\n\\s*RESOLUTION answer different questions and can legitimately disagree")
 })
 
+test_that("RESOLUTION's autocorrelation disclosure is unconditional across every edge_txt/VERDICT branch (adversarial re-verification, 2026-11-18)", {
+  # The disclosure (added alongside the VERDICT/RESOLUTION disagreement caveat, see R/report.R)
+  # is supposed to print ALWAYS, regardless of which of the edge_txt branches (resolved /
+  # cannot-determine / exact-tie) or VERDICT branches (available / "not available for this
+  # panel") is hit. Exercise all four combinations and confirm it is present, appears exactly
+  # once, and appears AFTER the MCB bound line and BEFORE the PIVOT header in every case.
+  disclosure_line1 <- "  (RESOLUTION assumes no autocorrelation in the per-period loss differential;"
+  disclosure_line2 <- "   see ?resolution_report's Assumption section -- this is NOT checked at runtime)"
+  check_disclosure <- function(out) {
+    lns <- strsplit(out, "\n")[[1]]
+    hits <- which(lns == disclosure_line1)
+    expect_length(hits, 1)
+    expect_equal(lns[hits + 1], disclosure_line2)
+    mcb_idx <- grep("^  MCB bound:", lns)
+    expect_length(mcb_idx, 1)
+    pivot_idx <- grep("^PIVOT$", lns)
+    expect_length(pivot_idx, 1)
+    expect_true(mcb_idx < hits)
+    expect_true(hits + 1 < pivot_idx)
+  }
+
+  # Branch 1: "cannot determine at this sample size" (README quickstart panel).
+  L1 <- list(
+    ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+    nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+    ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+  )
+  check_disclosure(suppressWarnings(report(loss_panel(L1, labels = 2015:2024), alpha = 0.10)))
+
+  # Branch 2: "resolved: no edge exists" (exact tie).
+  L2 <- list(a = rep(1.0, 20), b = rep(1.0, 20))
+  check_disclosure(report(loss_panel(L2, labels = 2000:2019), alpha = 0.10))
+
+  # Branch 3: plain "resolved" (real edge, powered).
+  set.seed(51)
+  Tn <- 40; v <- 0.075
+  champ <- rnorm(Tn, 0, 0.01); rival <- champ
+  idx <- sample(Tn, 3); rival[idx] <- rival[idx] + v
+  check_disclosure(report(loss_panel(list(champ = 1 + champ, rival = 1 + rival))))
+
+  # Branch 4: VERDICT itself errors ("not available for this panel", non-uniform weights) --
+  # RESOLUTION must still print normally, disclosure included, with nothing broken by the
+  # VERDICT-side error path.
+  set.seed(1)
+  L4 <- list(a = 1 + rnorm(10, 0, 0.1), b = 1.2 + rnorm(10, 0, 0.1))
+  out4 <- report(loss_panel(L4, weights = c(5, rep(1, 9))))
+  expect_match(out4, "^VERDICT: not available for this panel")
+  check_disclosure(out4)
+})
+
+test_that("report()'s static autocorrelation disclosure stays consistent with resolution_report()'s documented Assumption (anti-drift regression)", {
+  # report()'s RESOLUTION disclosure is a hardcoded, unconditional string with nothing at runtime
+  # tying it to resolution_report()'s own @section Assumption docs (R/resolution.R) -- the
+  # canonical statement of the same assumption. If a future change to resolution_report()'s
+  # Assumption text (e.g. a methodology change that adds a HAC correction, or drops/reworks the
+  # "no autocorrelation" framing) isn't mirrored in report.R's hardcoded disclosure, the two would
+  # silently drift apart with nothing to catch it. This test pins the core claim's wording in both
+  # places so a future edit to either one that breaks the correspondence fails loudly here instead
+  # of drifting unnoticed.
+  # CRAN-SUBMISSION FIX (2026-11-18): this test reads R/report.R and R/resolution.R by walking up
+  # from getwd() to the package's DESCRIPTION -- a check that only makes sense against this
+  # package's own SOURCE tree during development. `R CMD check` (and a real CRAN check) runs tests
+  # against the INSTALLED package in a check-directory layout with no R/ source files reachable
+  # above tests/testthat at all, so find_pkg_root() below errored out there (confirmed directly: a
+  # fresh `R CMD check --as-cran` failed with exactly this error, 0 ERRORs otherwise) -- not a
+  # real regression, just this source-reading test run somewhere it cannot work. skip_on_cran()
+  # degrades this correctly: it still runs under devtools::test()/devtools::check() (NOT_CRAN=true
+  # in a dev session) where the anti-drift check is meaningful, but is skipped under a true CRAN
+  # check, matching every other CRAN-safe test in this suite.
+  testthat::skip_on_cran()
+  find_pkg_root <- function(start) {
+    d <- normalizePath(start)
+    for (i in 1:10) {
+      if (file.exists(file.path(d, "DESCRIPTION"))) return(d)
+      parent <- dirname(d)
+      if (identical(parent, d)) break
+      d <- parent
+    }
+    stop("could not locate package root (no DESCRIPTION found above ", start, ")")
+  }
+  root <- find_pkg_root(getwd())
+  report_src <- paste(readLines(file.path(root, "R", "report.R"), warn = FALSE), collapse = "\n")
+  resolution_src <- paste(readLines(file.path(root, "R", "resolution.R"), warn = FALSE), collapse = "\n")
+
+  expect_match(report_src,
+    "RESOLUTION assumes no autocorrelation in the per-period loss differential",
+    fixed = TRUE)
+  expect_match(report_src, "resolution_report's Assumption section", fixed = TRUE)
+
+  # resolution_report()'s own @section Assumption roxygen block must still assert the SAME core
+  # claim report.R's disclosure refers readers to.
+  expect_match(resolution_src,
+    "assume no autocorrelation in the\\s*\n#'\\s*per-period loss differential",
+    perl = TRUE)
+})
+
+test_that("report()'s small-T/large-K .run_mcs_arch() warnings fire exactly once, not twice, per call (adversarial re-verification, 2026-11-18)", {
+  # REGRESSION: report() calls .run_mcs_arch() directly for VERDICT, AND calls resolution_report()
+  # (for R2/fragility_read), which itself calls identified() -> mcs_size() -> the SAME
+  # .run_mcs_arch(), with matching T/K/w/alpha/seed. Any warning .run_mcs_arch() raises from T/K/
+  # alpha alone (the small-T warning, the large-K warning) is therefore byte-for-byte identical on
+  # both call sites. Without de-duplication a caller sees the identical warning printed twice for
+  # one logical report() call, which reads as a duplicated/buggy warning rather than one risk
+  # surfaced from two internal call sites. report.R's withCallingHandlers()/muffleWarning
+  # collect-then-emit-unique block (around the two .run_mcs_arch()-reaching calls) is what prevents
+  # this; pin it directly by counting raised warnings, not just checking the text appears.
+  collect <- function(expr) {
+    msgs <- character(0)
+    withCallingHandlers(expr, warning = function(w) {
+      msgs <<- c(msgs, conditionMessage(w))
+      invokeRestart("muffleWarning")
+    })
+    msgs
+  }
+
+  # Small-T: T/K well under the .SMALL_T_RATIO_WARN=10 threshold.
+  L_small <- list(a = c(1, 1.1, 0.9, 1.2, 0.8), b = c(1000, 1001, 999, 1002, 998))
+  msgs_small <- collect(invisible(report(loss_panel(L_small))))
+  small_hits <- msgs_small[grepl("small-sample regime", msgs_small, fixed = TRUE)]
+  expect_length(small_hits, 1)
+
+  # Large-K: K > .LARGE_K_WARN_THRESHOLD=100, fed through the matrix-input mcs() entry point via
+  # .run_mcs_arch() (identify.R) and resolution_report()'s internal identified() call, same way.
+  set.seed(1)
+  K <- 150; Tn <- 2000
+  L_large <- stats::setNames(lapply(1:K, function(i) rnorm(Tn)), paste0("m", 1:K))
+  msgs_large <- collect(invisible(report(loss_panel(L_large))))
+  large_hits <- msgs_large[grepl("models -- the MCS::MCSprocedure", msgs_large, fixed = TRUE)]
+  expect_length(large_hits, 1)
+})
+
 test_that("report() explains a resolved + Prop-2.2-certifies-non-significance panel instead of printing a bare, unqualified contradiction (5-lens round, 2026-11-18)", {
   # REGRESSION: RESOLUTION's "resolved" and PIVOT's "certifies non-significance" can co-occur on
   # the identical rival pair (different variance conventions/critical values -- see R/report.R),

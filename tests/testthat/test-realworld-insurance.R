@@ -146,16 +146,23 @@ test_that("MCS false-elimination risk at the realistic actuarial T (T=12, K=4) i
   # false-elimination rate is dramatically higher than the T=30 figure (confirmed here at ~40%,
   # roughly DOUBLE the T=30/K=3 ~18% figure, and quadruple the nominal alpha=0.10). Heavy tails
   # (lognormal, CoV=1.0) do NOT materially worsen it further versus a Gaussian null at the same
-  # T/K -- the dominant driver is small T itself, not the tail shape. CRITICALLY: this T=12
-  # degradation is NOT surfaced anywhere in report()'s printed output or in any runtime warning
-  # from mcs()/resolution_report() -- it is visible only to a reader of mcs.R's roxygen source,
-  # not to an actuarial user reading report() at the console. A regulator-facing team running
-  # this package at its own, normal T=12 cadence has no in-band signal that the MCS verdict's
-  # reliability is worse here than even the package's own already-conservative T=30 caveat
-  # suggests. Reported for human review/documentation rather than silently patched, since fixing
-  # it (e.g. a dynamic small-T warning in report()) is a design decision about threshold and
-  # wording, not a one-line bug fix.
+  # T/K -- the dominant driver is small T itself, not the tail shape.
+  #
+  # GAP NOW CLOSED (2026-11-18): this T=12 degradation used to be surfaced nowhere at runtime --
+  # visible only to a reader of mcs.R's roxygen source, not to an actuarial user reading report()
+  # at the console. mcs()/identified()/mcs_size() now `warning()` whenever T/K < 10 (this panel's
+  # T/K=3.0 qualifies), and that warning's own text names this exact finding (literally: "~41%
+  # (not ~10%) at T=12/K=4"). A regulator-facing team running this package at its own, normal T=12
+  # cadence now gets an explicit in-band signal, at the console, the first time they call mcs() on
+  # a panel this shape -- confirmed directly below rather than just asserted.
   K <- 4; T <- 12; alpha <- 0.10; n_rep <- 150
+
+  # Confirm the in-band signal exists before relying on it being present (silently) in every
+  # iteration of the two loops below -- every single mcs() call at this T/K triggers it.
+  expect_warning(
+    mcs(matrix(rnorm(T * K, 1, 0.3), nrow = T, ncol = K), alpha = alpha, seed = 0),
+    "T=12 periods for K=4 models \\(T/K=3\\.0\\)"
+  )
 
   false_elim_gaussian <- 0L
   for (i in seq_len(n_rep)) {

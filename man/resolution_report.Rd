@@ -99,7 +99,10 @@ Double-check \code{mcs_alpha}/\code{mcs_seed} are in-range yourself before trust
 # Only 4 periods, and nbeats narrowly beats ar1 on average -- but with this
 # little data, that edge is NOT resolved: it falls short of the significance
 # boundary (R1), and the champion isn't even uniquely identified by the MCS
-# (R2). The report's job is to say so honestly rather than overclaim.
+# (R2). The report's job is to say so honestly rather than overclaim. This T=4/K=2 panel is
+# deliberately tiny -- small enough to trigger the internal MCS engine's own small-sample
+# warning too, which is apt here, not noise: the whole point of this example is a panel too
+# small to trust.
 L <- list(
   ar1    = c(1.00, 0.95, 1.05, 0.90),
   nbeats = c(0.95, 0.97, 0.90, 0.99)

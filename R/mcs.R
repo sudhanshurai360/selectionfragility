@@ -62,15 +62,15 @@
 #'   `surviving={1,2}`/`p=0.257` while `"raw"` gave `surviving={2}`/`p=0.002` at the same seed/B.
 #'
 #' @examples
-#' # A 10-period, 3-model loss panel where models 1 and 2 are tied (identical losses) and
-#' # model 3 is clearly worse -- the MCS should retain the tied pair. No set.seed() call is
-#' # needed here: mcs() saves/restores the caller's RNG state internally, so reproducibility
-#' # comes from the seed= argument below, not from the global RNG.
-#' L <- cbind(
-#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
-#'   ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
-#'   nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
-#' )
+#' # A 30-period, 3-model loss panel (T=30 deliberately -- it matches the T/K=10 anchor this
+#' # function's own small-T warning above cites as its "already-tolerated" boundary, so this
+#' # example does not trigger that warning on itself; a shorter panel would) where models 1 and
+#' # 2 are tied (identical losses) and model 3 is clearly worse -- the MCS should retain the
+#' # tied pair. No set.seed() call is needed here: mcs() saves/restores the caller's RNG state
+#' # internally, so reproducibility comes from the seed= argument below, not from the global RNG.
+#' ar1_ets <- rep(c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98), 3)
+#' nbeats  <- rep(c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18), 3)
+#' L <- cbind(ar1 = ar1_ets, ets = ar1_ets, nbeats = nbeats)
 #' # B kept small here purely for example speed; use the B=2000 default for real analyses.
 #' res <- mcs(L, B = 200, seed = 1)
 #' res$surviving  # columns 1 and 2 (ar1, ets) survive; nbeats is eliminated
@@ -183,6 +183,23 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
       stop(sprintf("mcs(): data.frame column(s) %s are not numeric; mcs() needs a numeric matrix.",
                     paste(bad, collapse = ", ")), call. = FALSE)
     }
+  }
+  # FRESH-EYES ADVERSARIAL FINDING (2026-11-18): the data.frame guard just above (same commit
+  # family) still let any OTHER list straight through -- including the single most natural
+  # misuse of this exact function: calling `mcs(L, ...)` on the named `{model: vector}` list (or
+  # a `loss_panel` object, itself a list) that its own sibling `model_confidence_set()`/
+  # `mcs_size()`/`identified()` take, rather than routing it through `model_confidence_set()`
+  # first as documented. Confirmed directly: `mcs(list(a=rnorm(10), b=rnorm(10), c=rnorm(10)))`
+  # and `mcs(loss_panel(L))` both reached a raw, unworded "'list' object cannot be coerced to
+  # type 'double'" from the bare `storage.mode(L) <- "double"` below instead of this function's
+  # own worded style -- the identical bug class the data.frame check above was just written to
+  # close, missed for the sibling input shape.
+  if (is.list(L) && !is.data.frame(L)) {
+    stop(paste0(
+      "mcs(): L is a list, not a numeric T x K matrix. mcs() takes a plain matrix of losses; a ",
+      "named list `{model: vector}` (or a loss_panel) goes through model_confidence_set() ",
+      "instead, which returns surviving model NAMES rather than column indices."
+    ), call. = FALSE)
   }
   L <- as.matrix(L)
   storage.mode(L) <- "double"
@@ -350,13 +367,13 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
 #'   result (cross-session comparability under a quietly-set global option).
 #'
 #' @examples
-#' # Same tied panel as mcs(), but as a named list -- the surviving set comes back as names.
-#' # No set.seed() call is needed: reproducibility comes from the seed= argument below.
-#' L <- list(
-#'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
-#'   ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
-#'   nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
-#' )
+#' # Same tied panel as mcs() (T=30, matching its T/K=10 "already-tolerated" anchor so this
+#' # example doesn't trigger mcs()'s own small-T warning), but as a named list -- the surviving
+#' # set comes back as names. No set.seed() call is needed: reproducibility comes from the
+#' # seed= argument below.
+#' ar1_ets <- rep(c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98), 3)
+#' nbeats  <- rep(c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18), 3)
+#' L <- list(ar1 = ar1_ets, ets = ar1_ets, nbeats = nbeats)
 #' # B kept small here purely for example speed; use the B=2000 default for real analyses.
 #' res <- model_confidence_set(L, B = 200, seed = 1)
 #' res$surviving  # c("ar1", "ets"); nbeats is eliminated

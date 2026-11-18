@@ -203,9 +203,11 @@ test_that("multi-wave epidemiological panel has extreme, legitimate within-serie
   # The champion by pooled mean need not be the model with the most periods won -- this is the
   # central selection-fragility fact this package exists to diagnose.
   top_periods_won_model <- summ$model[which.max(summ$periods_won)]
-  if (!identical(top_periods_won_model, champ)) {
-    expect_true(TRUE)  # explicit: disagreement observed, confirming a genuinely fragile scenario
-  }
+  # This scenario is specifically built so the pooled-mean champion and the per-period plurality
+  # winner diverge -- assert the disagreement directly rather than merely checking for it, so a
+  # future change that accidentally makes them agree (and thus silently defeats the point of this
+  # test) actually fails instead of being swallowed by a no-op `if` branch.
+  expect_false(identical(top_periods_won_model, champ))
 })
 
 test_that("repeated weekly compare() over a rolling hub window behaves sensibly across ~100 sequential calls", {
