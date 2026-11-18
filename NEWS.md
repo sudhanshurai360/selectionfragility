@@ -11,7 +11,7 @@ Initial release: a native R port of the Python package
   refusal rules), `prop22` (zero-simulation Proposition 2.2 certificate), `pivot` (concentration
   share, pivot agreement), `report` (one-screen summary), `compare` (run-over-run champion-change
   diagnostic).
-* 1157 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
+* 1176 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
   this count will keep moving as hardening continues; check `devtools::test()`'s own output rather
   than treating this number as authoritative), including a dedicated cross-language
   oracle-comparison suite verified against the Python package's live behavior, not just its
@@ -198,3 +198,89 @@ Initial release: a native R port of the Python package
   Python's real save/load) confirmed clean bit-for-bit round-tripping in both directions, with
   both R-only stricter guards (weight cap, NA-label rejection) correctly rejecting real
   Python-produced files that violate them.
+* A dependency-version-floor audit (2026-11-18) found and fixed one real floor-accuracy bug:
+  `DESCRIPTION` declared a bare `jsonlite` import with no version floor at all, but
+  `save_loss_panel()` calls `jsonlite::write_json(..., digits = 17)` and documents a
+  bit-identical round-trip guarantee (`identical(panel$losses, reloaded$losses)`) that depends on
+  that call actually honoring 17 significant digits. Per jsonlite's own published NEWS, its
+  `toJSON()`/`write_json()` digit cap was raised from 15 to 17 only in jsonlite 1.8.5 (confirmed
+  live on the installed jsonlite 2.0.0: `toJSON(1/3, digits=17)` prints 17 significant digits,
+  `digits=15` prints only 15) -- on any jsonlite older than 1.8.5, the same `digits=17` call would
+  have been silently capped at 15 digits with no error, quietly breaking the documented
+  round-trip-identity contract for any installed-at-the-declared-floor user. Fixed by raising the
+  declared floor to `jsonlite (>= 1.8.5)`. The `MCS (>= 0.2.1)` and `R (>= 4.1)` floors were
+  checked the same way and found accurate: the installed `MCS` is exactly 0.2.1, which is also the
+  current (and only) version on CRAN (the CRAN archive tops out at 0.2.0), so the floor is both
+  the minimum and the only version in existence at or above itself -- nothing newer could have
+  been relied on by accident. `identify.R`'s own comments already point out that its defensive
+  guard around `MCS::MCSprocedure()`'s returned `Info$included` field is forward-looking
+  future-proofing, not evidence of a version-specific feature dependency. A full grep of every
+  `R/*.R` file against R's own published NEWS for every "new function"/"new generic" entry from R
+  4.2.0 through 4.6.2 found no match -- no native-pipe placeholder, no `\(x)` lambda shorthand, and
+  none of the handful of genuinely new base functions introduced in that range (e.g. `sort_by()`,
+  `array2DF()`, `chooseOpsMethod()`) appear anywhere in this package's source, so the declared
+  `R (>= 4.1)` floor is not stale either.
+* A round of ten genuinely new review lenses (2026-11-18), never previously applied to this
+  package, found and fixed several more real issues, confirmed the package is safe or clean on
+  several dimensions never tested before, and surfaced two exported-API inconsistencies left for
+  deliberate human decision rather than a unilateral fix:
+  - `compare()` trusted a stale, construction-time-cached `$models` field instead of live
+    `names(losses)` -- the identical "trusts a mutated object" bug class already fixed in
+    `print.loss_panel()`, just never re-checked at this call site. A panel mutated after
+    construction (e.g. a model dropped from `$losses` without updating `$models`) could silently
+    compare mismatched model sets with no error. Fixed to read live model names.
+  - Two bare, non-radix `sort()` calls on model names/labels (in `compare()`'s mismatched-model
+    error text and `loss_panel()`'s duplicate-label error text) contradicted the package's own
+    documented "radix sort everywhere" invariant and were confirmed to actually produce
+    locale-dependent error-message text under `tr_TR.UTF-8`; the `loss_panel()` one could even
+    change *which* duplicate values get shown (via `utils::head()`) depending on locale. Both now
+    use `method="radix"`, matching every other sort site in the package.
+  - `pivot_agreement(frac=NA)` (and NULL/length>1/non-numeric/Inf) crashed with a raw, unworded
+    base-R error -- found by a ~370,000-call pure random (non-hypothesis-driven) fuzzing sweep
+    across every exported function, which otherwise found zero crashes, zero session failures,
+    and zero other silent non-finite leaks. Now validated with the same worded-error pattern used
+    elsewhere. The same sweep also surfaced (and this round documented, not fixed, since it's
+    correct degenerate-ratio handling) that `surprise_concentration()$d_max_over_median` can
+    legitimately be `Inf`/`NaN`/`1.0` on ordinary, non-adversarial input via three explicit,
+    correct sentinel branches that were previously undocumented and untested.
+  - `fragility()`'s `@return` doc had two inaccuracies found by a systematic return-contract
+    audit: `shock_coincidence`'s doc implied a vacuous-truth `TRUE` on an empty `responsible` set
+    that the code actually returns `FALSE` for; and `winner_stability`/`winner_freq`'s doc claimed
+    the degenerate case always warns, when `fragility()`'s own inline degenerate branch (as
+    opposed to calling `winner_stability()` directly) never does. Both corrected.
+  - `resolution.R`'s seventh confirmed issue in as many dedicated rounds: `.validate_one_sided()`
+    reuses `.validate_alpha()` to check `power`, so any invalid `power` (including the exact
+    boundary `power=1.0`) raises an error naming "alpha" instead of "power" -- confirmed identical
+    in the live Python oracle, documented per this file's established fix-vs-document discipline
+    for shared, oracle-pinned behavior.
+  - Confirmed clean for the first time on several previously-untested dimensions: concurrent/
+    parallel execution (stress-tested with 60 concurrent writers and forked workers under both
+    shared and distinct seeds -- safe by construction, with one new documentation section added
+    on avoiding the one real usage risk, reusing a literal seed across workers); security/
+    supply-chain (no code injection, path traversal, unbounded JSON-parsing cost, network egress,
+    or unsafe file permissions); the subnormal/near-`.Machine$double.xmin` floating-point extreme
+    (well-behaved everywhere tested, mirroring the already-extensively-tested large-magnitude
+    extreme); and locale categories beyond the numeric decimal separator (`LC_TIME`, `LC_MESSAGES`,
+    `LC_CTYPE` all clean; `LC_COLLATE` findings are the two radix-sort fixes above).
+  - Two exported-API inconsistencies found and reported for deliberate human review, not fixed
+    unilaterally since either would change public function behavior this close to a stable
+    release: `identified()`/`mcs_size()` place `w` last in their signature while every other
+    function taking both `L` and `w` places it second, immediately after `L` -- a realistic
+    positional-argument footgun; and the package uses `NA` as its "can't determine" sentinel in
+    some fields (`fragility()$fragile`, `prop22_certifies()`, `concentration_share()`) but `NULL`
+    in others (`resolution_report()$identified`, `compare()$old_champion_still_in_mcs`) for the
+    same underlying situation, with no cross-reference anywhere tying the two conventions together
+    for a caller writing generic code against multiple functions.
+  - A documentation gap-analysis against the broader forecast-comparison tooling landscape added
+    brief scope-boundary notes to README/vignette: this package was previously silent on its
+    relationship to the Diebold-Mariano test (likely the most common prior-knowledge anchor for
+    its target users) and on the fact that it ships no plotting methods at all (a real, if minor,
+    surprise for users coming from similar MCS-adjacent tooling that typically ships at least a
+    basic diagnostic plot). A fresh-user, documentation-only walkthrough separately found that
+    `report()` never surfaces or points to `winner_stability()`/`exchangeable_benchmark()` --
+    the package's own calibrated fragility check -- so a user who stops at `report()`'s screen can
+    walk away concluding "undetermined, can't trust this" when the fuller, correct picture from
+    the calibrated check is "not point-identified at this sample size, but also not unusually
+    fragile relative to chance." Flagged for a possible larger documentation-structure
+    improvement; one concrete first-contact jargon gap (an unglossed "R1/R2" reference in
+    README's Quick Start) was fixed directly.

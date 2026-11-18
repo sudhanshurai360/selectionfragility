@@ -193,10 +193,31 @@ compare <- function(previous, current, alpha = 0.10, n_perm = 400, seed = 0) {
     }
   }
   .validate_alpha(alpha)
-  if (!setequal(previous$models, current$models)) {
+  # STRICT-AUDIT FIX (2026-11-18): this guard used to compare the CACHED previous$models/
+  # current$models fields -- the same "trusts a pre-validated object even if it's since been
+  # mutated" blind spot already found and fixed in print.loss_panel(), as.data.frame.loss_panel(),
+  # and summary.loss_panel() (panel.R; all three moved to live names(x$losses) specifically
+  # because $models can silently disagree with a panel's actual losses after a direct field edit).
+  # compare() was the one call site that still trusted the stale cache: confirmed directly
+  # reachable -- mutating `previous$losses <- previous$losses[c("ar1","nbeats")]` after
+  # construction (dropping "ets") leaves `previous$models` at its original, now-stale 3-model
+  # value, so this check silently passed and compare() went on to report a plausible-looking
+  # champion comparison between a 2-model previous panel and a 3-model current panel with no error
+  # at all -- exactly the mismatched-model-set comparison this guard exists to prevent. Reading
+  # the model sets live from names(previous$losses)/names(current$losses) (what pooled_winner()
+  # and every other downstream call in this function actually iterate over) closes the gap the
+  # same way the panel.R methods already did.
+  if (!setequal(names(previous$losses), names(current$losses))) {
+    # LOCALE-AUDIT FIX (2026-11-18): bare sort() on model names here used R's default LC_COLLATE
+    # locale collation -- confirmed to print the SAME two model sets in a DIFFERENT order in this
+    # error message depending on the session's locale (e.g. C orders "Beta_model" < "Zeta_model" <
+    # "alpha_model", en_US/tr_TR order "alpha_model" < "Beta_model" < "Zeta_model"). Doesn't change
+    # whether the error fires, but is exactly the kind of non-reproducible, locale-dependent output
+    # this package's radix-sort hardening elsewhere exists to eliminate. method="radix" throughout.
     stop(sprintf(
       "previous and current panels have different model sets -- cannot compare mismatched models: %s vs %s.",
-      paste(sort(previous$models), collapse = ", "), paste(sort(current$models), collapse = ", ")
+      paste(sort(names(previous$losses), method = "radix"), collapse = ", "),
+      paste(sort(names(current$losses), method = "radix"), collapse = ", ")
     ), call. = FALSE)
   }
   prev_L <- previous$losses; prev_w <- previous$weights

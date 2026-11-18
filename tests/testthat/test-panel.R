@@ -356,3 +356,33 @@ test_that("print.loss_panel() warns instead of silently hiding a report() failur
   expect_output(print(p), "WARNING: report\\(\\) failed")
   expect_output(print(p), "mutated")
 })
+
+test_that("loss_panel()'s duplicate-labels error message lists the duplicates in locale-independent (radix) order", {
+  # LOCALE-AUDIT FIX (2026-11-18): the duplicate-labels stop() sorted the duplicate label set with
+  # a bare sort() -- locale-sensitive LC_COLLATE collation on character vectors. Confirmed
+  # directly: under LC_COLLATE="C" these duplicates sort as c("Beta", "Zeta", "alpha"), but under
+  # "en_US.UTF-8" or "tr_TR.UTF-8" they sort as c("alpha", "Beta", "Zeta") -- the same error listed
+  # the duplicates in a different order (and, with >5 distinct duplicates, head(dupes, 5) could
+  # truncate to a DIFFERENT subset) depending on the session's locale. Doesn't change whether the
+  # error fires, but is the same non-reproducibility class the package's radix-sort hardening
+  # elsewhere exists to eliminate. Fixed with method="radix"; this test pins the message's exact,
+  # locale-independent text under a non-default LC_COLLATE.
+  old <- Sys.getlocale("LC_COLLATE")
+  on.exit(suppressWarnings(Sys.setlocale("LC_COLLATE", old)), add = TRUE)
+  avail <- "tr_TR.UTF-8" %in% suppressWarnings(tryCatch(system("locale -a", intern = TRUE), error = function(e) character(0)))
+  skip_if(!avail, "tr_TR.UTF-8 locale not available on this machine")
+  set_ok <- !is.na(suppressWarnings(Sys.setlocale("LC_COLLATE", "tr_TR.UTF-8")))
+  skip_if(!set_ok, "Sys.setlocale(\"LC_COLLATE\", \"tr_TR.UTF-8\") failed on this machine despite locale -a listing it")
+
+  L <- list(a = rep(1, 5), b = rep(2, 5))
+  labs <- c("Zeta", "alpha", "Beta", "Zeta", "alpha")
+  # Only "Zeta" and "alpha" actually repeat (each twice); "Beta" appears once and is not a
+  # duplicate. Radix (byte/codepoint) order is always "Zeta, alpha" -- uppercase "Z" (90) sorts
+  # before lowercase "a" (97) in codepoint order -- regardless of LC_COLLATE, confirming this
+  # pins the fix, not an accidental locale-dependent match.
+  expect_error(
+    loss_panel(L, labels = labs),
+    "duplicate value\\(s\\) Zeta, alpha ",
+    perl = TRUE
+  )
+})

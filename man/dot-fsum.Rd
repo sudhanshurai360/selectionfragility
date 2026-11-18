@@ -35,4 +35,27 @@ are not expected to produce -- not fixed here (reimplementing Shewchuk's algorit
 is a nontrivial, separate piece of work, not warranted by this failure mode's practical
 likelihood), but the claim of exactness is corrected so a future reader doesn't rely on it.
 }
+\details{
+SMALL-MAGNITUDE EXTREME, CHECKED (2026-11-18): this is NOT a large-magnitude-only failure --
+the identical multi-scale-cancellation structure reproduces at the opposite, small-magnitude
+end, confirming the limitation above is symmetric, not an artifact of \code{.MAX_ABS_LOSS} or of
+overflow specifically. \code{rep(c(1e-300, 1e-150, 1e-300, -1e-150), 5)}, true sum \code{1e-299}, returns
+\code{0} here (identical catastrophic-cancellation failure to the 1e100 case above, same root cause:
+two nested magnitude tiers cancelling at once overwhelms a single compensator). A three-tier
+variant is worse than merely catastrophic-to-zero: \code{c(rep(c(1,-1),3), rep(c(1e-150,-1e-150),3), rep(c(1e-300,-1e-300),3), 1e-300)}, true sum \code{1e-300}, returns a wrong nonzero value
+(\code{-2.7e-166}) -- 134 orders of magnitude off, not just dropped to 0. BY CONTRAST, the
+genuinely-subnormal regime this package had never previously tested (values at or below
+\code{.Machine$double.xmin} ~ 2.2e-308, down to the smallest representable double, 4.9e-324) was
+checked directly and is NOT an additional failure mode: \code{rep(c(4.9e-324, 2.2e-308, 4.9e-324, -2.2e-308), 5)} and \code{rep(c(1e-300, 1, 1e-300, -1), 5)} (a true subnormal/smallest-double value
+swamped by an ordinary-scale value, the mirror image of the large-vs-normal case this package's
+own large-magnitude tests already cover) both come back EXACT, including recovering a true sum
+as tiny as \code{1e-299} that plain \code{sum()} collapses to \code{0} on the same input. So the failure
+documented here is specifically about MULTIPLE DISTINCT CANCELLING MAGNITUDE TIERS present at
+once (whether both tiers are huge, both are small-but-still-normal-range, or one of each) --
+not about proximity to zero, the overflow cap, or subnormal representation specifically. Left
+unfixed for the same reason as the large-magnitude case: a correct fix is Shewchuk's algorithm,
+out of scope here; realistic forecast-loss panels are not expected to carry multiple,
+simultaneously near-exactly-cancelling magnitude tiers regardless of which end of the range
+they sit at.
+}
 \keyword{internal}

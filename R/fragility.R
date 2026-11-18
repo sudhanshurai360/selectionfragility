@@ -856,7 +856,16 @@ exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL
 #'
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @param labels Optional vector of period labels (used only to report `hardest`).
-#' @return A list `list(sci, eff_surprising_periods, hardest, d_max_over_median)`.
+#' @return A list `list(sci, eff_surprising_periods, hardest, d_max_over_median)`. `d_max_over_median`
+#'   is a ratio of the hardest period's best-model loss to the median across periods, so on
+#'   valid-looking input where per-period losses can be negative (e.g. signed loss differentials
+#'   or P&L-style figures, which this package does not restrict to be non-negative), that ratio is
+#'   not always finite by construction: it is `1.0` when both the numerator and denominator are
+#'   exactly `0`, `Inf` when only the denominator is `0`, and `NaN` when the numerator and
+#'   denominator have opposite signs (the ratio's sign, and so its magnitude as a "how much worse"
+#'   multiplier, is undefined). This is a found-by-fuzzing clarification (2026-11-18), not new
+#'   behavior -- the three sentinel branches were already in the code, just undocumented and
+#'   untested for the NaN case.
 #' @seealso [pivot_agreement()] (a related period-sensitivity diagnostic), [decision_breakdown()].
 #' @export
 #' @examples
@@ -990,10 +999,18 @@ surprise_concentration <- function(L, labels = NULL) {
 #'     \item{responsible}{The k* periods (by label if supplied, else 0-based positional index --
 #'       note this differs from `decision_breakdown()$removed`, which is 1-based).}
 #'     \item{shock_coincidence}{`NULL` if `shock_periods` was not supplied; otherwise `TRUE` iff
-#'       every period in `responsible` is also in `shock_periods`.}
+#'       `responsible` is non-empty AND every period in it is also in `shock_periods`. STRICT-
+#'       AUDIT FIX (2026-11-18): this is deliberately NOT vacuous truth -- when `k_star == 0`
+#'       (`responsible` is empty, e.g. the pooled winner's margin is already degenerate), this is
+#'       `FALSE`, not `TRUE`, even though "every period in an empty set satisfies any predicate"
+#'       would suggest otherwise. An empty `responsible` means there is no k*-period evidence to
+#'       check against `shock_periods` at all, not that the (vacuous) check trivially passed.}
 #'     \item{winner_stability, winner_freq}{`winner_stability()`'s bootstrap stability and
-#'       per-model win frequency (`NaN`/a uniform placeholder, with a `warning()`, if degenerate
-#'       -- see [winner_stability()]).}
+#'       per-model win frequency. STRICT-AUDIT FIX (2026-11-18): when the champion-vs-binding-
+#'       opponent pair is degenerate, `fragility()` computes the same `NaN`/uniform-placeholder
+#'       result INLINE rather than calling `winner_stability()` itself, so -- unlike calling
+#'       [winner_stability()] directly on the same panel -- this degenerate branch raises NO
+#'       `warning()` here; the placeholder values are identical, only the warning is absent.}
 #'     \item{fragile}{`TRUE` if degenerate; `NA` if no `benchmark` was supplied to calibrate
 #'       against; otherwise `TRUE` iff `winner_stability` falls below `benchmark`'s p05.}
 #'   }

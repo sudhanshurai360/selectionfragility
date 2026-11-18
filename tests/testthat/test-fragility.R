@@ -129,6 +129,33 @@ test_that("surprise_concentration reports sci = 0 when difficulty is perfectly f
   expect_equal(sc$eff_surprising_periods, 4)
 })
 
+test_that("surprise_concentration()'s d_max_over_median sentinel branches (1.0 / Inf / NaN)", {
+  # REGRESSION (found by pure random fuzzing with ordinary signed/negative losses, 2026-11-18).
+  # d_max_over_median is a ratio of the hardest period's best-model loss (d_max) to the median
+  # of per-period best-model losses (b) across periods, and this package places no non-negativity
+  # restriction on losses anywhere -- so all three of its documented sentinel branches are
+  # reachable on perfectly valid-looking input, not just malformed data.
+
+  # b == 0 and d_max == 0 -> 1.0
+  L_zero <- list(a = c(0, 0, 0), b = c(1, 1, 1))
+  expect_equal(surprise_concentration(L_zero)$d_max_over_median, 1.0)
+
+  # b == 0, d_max != 0 -> Inf
+  L_inf <- list(a = c(0, 0, 5), b = c(1, 1, 1))
+  expect_equal(surprise_concentration(L_inf)$d_max_over_median, Inf)
+
+  # b and d_max have opposite signs -> NaN (ratio's sign/magnitude undefined).
+  # Per-period best-model loss d = (-5, -2, 3): median b = -2 (negative), d_max = 3 (positive).
+  L_nan <- list(a = c(-5, -1, 3), b = c(-4, -2, 4))
+  sc_nan <- surprise_concentration(L_nan)
+  expect_true(is.nan(sc_nan$d_max_over_median))
+
+  # b and d_max share a sign -> an ordinary finite ratio
+  L_finite <- list(a = c(2, 4, 6), b = c(3, 5, 7))
+  sc_finite <- surprise_concentration(L_finite)
+  expect_true(is.finite(sc_finite$d_max_over_median))
+})
+
 test_that("exchangeable_benchmark returns a sane null distribution with p05 <= median <= p95", {
   eb <- exchangeable_benchmark(K = 3, T = 15, n_rep = 15, n_boot = 40, seed = 1)
   expect_true(eb$p05 <= eb$median)

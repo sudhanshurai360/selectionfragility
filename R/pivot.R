@@ -32,6 +32,30 @@
 #' are not expected to produce -- not fixed here (reimplementing Shewchuk's algorithm correctly
 #' is a nontrivial, separate piece of work, not warranted by this failure mode's practical
 #' likelihood), but the claim of exactness is corrected so a future reader doesn't rely on it.
+#'
+#' SMALL-MAGNITUDE EXTREME, CHECKED (2026-11-18): this is NOT a large-magnitude-only failure --
+#' the identical multi-scale-cancellation structure reproduces at the opposite, small-magnitude
+#' end, confirming the limitation above is symmetric, not an artifact of `.MAX_ABS_LOSS` or of
+#' overflow specifically. `rep(c(1e-300, 1e-150, 1e-300, -1e-150), 5)`, true sum `1e-299`, returns
+#' `0` here (identical catastrophic-cancellation failure to the 1e100 case above, same root cause:
+#' two nested magnitude tiers cancelling at once overwhelms a single compensator). A three-tier
+#' variant is worse than merely catastrophic-to-zero: `c(rep(c(1,-1),3), rep(c(1e-150,-1e-150),3),
+#' rep(c(1e-300,-1e-300),3), 1e-300)`, true sum `1e-300`, returns a wrong nonzero value
+#' (`-2.7e-166`) -- 134 orders of magnitude off, not just dropped to 0. BY CONTRAST, the
+#' genuinely-subnormal regime this package had never previously tested (values at or below
+#' `.Machine$double.xmin` ~ 2.2e-308, down to the smallest representable double, 4.9e-324) was
+#' checked directly and is NOT an additional failure mode: `rep(c(4.9e-324, 2.2e-308, 4.9e-324,
+#' -2.2e-308), 5)` and `rep(c(1e-300, 1, 1e-300, -1), 5)` (a true subnormal/smallest-double value
+#' swamped by an ordinary-scale value, the mirror image of the large-vs-normal case this package's
+#' own large-magnitude tests already cover) both come back EXACT, including recovering a true sum
+#' as tiny as `1e-299` that plain `sum()` collapses to `0` on the same input. So the failure
+#' documented here is specifically about MULTIPLE DISTINCT CANCELLING MAGNITUDE TIERS present at
+#' once (whether both tiers are huge, both are small-but-still-normal-range, or one of each) --
+#' not about proximity to zero, the overflow cap, or subnormal representation specifically. Left
+#' unfixed for the same reason as the large-magnitude case: a correct fix is Shewchuk's algorithm,
+#' out of scope here; realistic forecast-loss panels are not expected to carry multiple,
+#' simultaneously near-exactly-cancelling magnitude tiers regardless of which end of the range
+#' they sit at.
 #' @keywords internal
 .fsum <- function(x) {
   x <- sort(x)
@@ -191,6 +215,17 @@ pivot_agreement <- function(L, w = NULL, seed = 0, n_boot = 200, frac = 0.8) {
   n_boot_in <- n_boot
   n_boot <- suppressWarnings(as.integer(n_boot))  # as.integer guards int32 overflow (NA -> if() crash)
   if (length(n_boot) != 1 || is.na(n_boot) || n_boot <= 0) stop(sprintf("pivot_agreement(): n_boot must be a single positive integer; got %s.", paste(format(n_boot_in), collapse = ", ")), call. = FALSE)
+  # Length/NA/non-numeric guard FIRST, matching n_boot/seed just above and .validate_alpha()'s
+  # established pattern elsewhere in the package: `frac > 0 && frac < 1` evaluates && on the raw
+  # input, so a NA/NULL/length>1/non-numeric frac detonated a raw, unworded "missing value where
+  # TRUE/FALSE needed" (or similar) R-internal error before this function's own worded message
+  # could run -- found by random fuzzing (frac=NA), not a targeted hypothesis.
+  if (length(frac) != 1 || !is.numeric(frac) || !is.finite(frac)) {
+    stop(sprintf(
+      "pivot_agreement(): frac must be a single finite number strictly between 0 and 1; got a %s of length %d.",
+      class(frac)[1], length(frac)
+    ), call. = FALSE)
+  }
   if (!(frac > 0.0 && frac < 1.0)) {
     stop(sprintf(
       paste0(

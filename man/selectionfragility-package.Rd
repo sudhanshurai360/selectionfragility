@@ -12,6 +12,24 @@ resolution/power checks (\code{\link[=resolution_report]{resolution_report()}}),
 pivot/concentration analysis (\code{\link[=pivot_agreement]{pivot_agreement()}}), and run-over-run comparison (\code{\link[=compare]{compare()}}).
 Start at \code{\link[=loss_panel]{loss_panel()}} and \code{\link[=report]{report()}}, or read \code{vignette("selectionfragility")} for a guided tour.
 }
+\section{Running this package's bootstrap functions in parallel}{
+
+\code{\link[=mcs]{mcs()}}, \code{\link[=winner_stability]{winner_stability()}}, and \code{\link[=exchangeable_benchmark]{exchangeable_benchmark()}} all require an explicit \verb{seed=}
+rather than drawing one implicitly, which makes them safe to call from
+\code{parallel::mclapply()}/\code{future}/\code{foreach} workers -- but only if each worker is given a
+\emph{different} seed. \code{parallel::mclapply()} on non-Windows forks the current process, and a fork
+gives every child an independent, non-interfering copy of both R's global options (confirmed:
+\code{options(selectionfragility.elimination = ...)} set inside one forked worker is invisible to
+sibling workers and to the parent) and \code{.Random.seed} -- so there is no cross-worker state
+leakage from this package. The one real risk is a \emph{user} mistake, not a package bug: calling
+e.g. \code{parallel::mclapply(1:4, function(i) winner_stability(L, seed=99))} with the SAME literal
+seed in every worker deterministically reproduces the identical bootstrap in all four, silently
+giving you four copies of one result dressed up as four independent ones. Vary the seed per
+worker instead, e.g. \code{parallel::mclapply(seeds, function(s) winner_stability(L, seed=s))} with
+\code{seeds <- 1:4} (or any panel-specific offset), so each worker's bootstrap draws are genuinely
+independent.
+}
+
 \seealso{
 Useful links:
 \itemize{

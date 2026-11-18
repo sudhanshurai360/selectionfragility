@@ -3,6 +3,30 @@
 # in place of scipy.stats.t.ppf (same Student-t quantile function).
 
 #' @keywords internal
+# KNOWN LIMITATION, NOT FIXED HERE (7th-round exhaustive-adversarial pass, 2026-11-18, boundary-
+# value lens on `power`): `power` is range-checked by calling `.validate_alpha(power)` below --
+# reusing the SAME validator written for `alpha` -- but `.validate_alpha()`'s error text hardcodes
+# the literal word "alpha" in every branch (type/length/finiteness AND the (0,1)-range message).
+# So any `power` value that fails at THIS stage (power <= 0, power >= 1, power = NA, power =
+# "x"/a factor/a length>1 vector, power = Inf) raises an error that says "alpha must be ... "
+# instead of naming `power` -- misdirecting a caller who passed a perfectly valid `alpha` but an
+# invalid `power` into re-checking the wrong argument. The power-specific message just below
+# ("power must be > 0.5 ...") is ONLY reached for 0.5 < power is false in the ordinary 0 < power <
+# 1 range (e.g. power = 0.3); it is never reached for power <= 0 or power >= 1, because
+# `.validate_alpha(power)` throws its "alpha"-worded error first. Confirmed reproducible:
+# `minimum_detectable_edge(L, power = 1)`, `power = 0`, `power = 1.5`, `power = NA`, and
+# `power = "x"` all raise an "alpha must be ..." message (see test-resolution.R). CONFIRMED
+# SHARED, oracle-pinned behavior: the Python original's `_validate_one_sided()` (resolution.py)
+# does the identical `_validate_alpha(power)` reuse of the identical "alpha"-worded
+# `_validate_alpha()` (identify.py), so the identical misattributed message reproduces in Python
+# too on `power=1`/`power=0`/etc. -- this is a pre-existing property of the shared validation
+# design (one range-checker written for one named parameter, reused unmodified for a second,
+# differently-named parameter), not something introduced by the R port. Left documented rather
+# than fixed for the same cross-language-parity reason as this file's other known limitations:
+# giving `power` its own distinctly-worded range/type error in R alone would diverge from the
+# Python oracle's current error text on this exact input, a call this package's review discipline
+# leaves to a dedicated, deliberate pass on both sides rather than a unilateral one here. If a
+# `power` argument raises an "alpha must be ..." message, re-check `power`, not `alpha`.
 .validate_one_sided <- function(alpha, power = NULL) {
   .validate_alpha(alpha)
   if (alpha >= 0.5) {
@@ -171,7 +195,11 @@
 #'
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @param w Optional numeric vector of per-period weights.
-#' @param power Target power (> 0.5).
+#' @param power Target power (> 0.5). NOTE: an invalid `power` that is `<= 0` or `>= 1` (or
+#'   non-numeric/`NA`) raises an error worded "alpha must be ..." -- `.validate_one_sided()`
+#'   reuses `.validate_alpha()`'s range check for `power` too, and that checker's message
+#'   hardcodes "alpha"; see the comment above `.validate_one_sided()` in resolution.R. If you see
+#'   that message after passing a bad `power`, the problem is `power`, not `alpha`.
 #' @param alpha One-sided significance level (< 0.5).
 #' @return The minimum detectable edge, as a fraction of the champion's loss level.
 #' @section Assumption: assumes no autocorrelation in the per-period (rival - champion) loss

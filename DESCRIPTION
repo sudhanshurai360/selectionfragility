@@ -19,7 +19,7 @@ BugReports: https://github.com/sudhanshurai360/selectionfragility/issues
 Depends: R (>= 4.1)
 Imports:
     MCS (>= 0.2.1),
-    jsonlite,
+    jsonlite (>= 1.8.5),
     stats,
     utils
 Suggests:

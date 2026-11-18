@@ -53,8 +53,9 @@ noise, and `k*` tells you how many periods' removal it would take to flip the ve
 If the Model Confidence Set comes back larger than 1 model, or `k*` is small (as here), don't
 report a single champion as settled — report the full MCS membership, note the small `k*`
 explicitly, and either collect more evaluation periods or treat the two models as practically
-tied until you have more data. `report()`'s R1/R2 refusal rules already withhold a confident
-`k*` read when the data can't support one; take that refusal as the answer, not an obstacle.
+tied until you have more data. `report()`'s R1/R2 refusal rules (its resolved-edge check and its
+Model Confidence Set check — see `?resolution_report`) already withhold a confident `k*` read
+when the data can't support one; take that refusal as the answer, not an obstacle.
 
 See `?selectionfragility` for a one-page map of every function in the staged pipeline, and
 `vignette("selectionfragility")` for the full walkthrough — installation, interpreting the
@@ -160,6 +161,27 @@ the M3/M4 forecasting-competition literature). It bounds the loss-level edge dir
 Hsu-style multiple-comparisons-with-the-best bound on the mean loss differential, not on average
 ranks. Use `tsutils` if you want the classic rank/Nemenyi MCB plot across many series; use
 `mcb_bound()` if you want a bound on the champion's actual loss-level edge over its binding rival.
+
+This package does not implement or wrap the Diebold-Mariano test (`forecast::dm.test()`,
+`multDM`, or similar) and is not a drop-in substitute for it. DM tests pairwise predictive-accuracy
+equality between exactly two models on one comparison; this package answers the different,
+*selection*-oriented question of how fragile the champion is once you are choosing among two or
+more candidates — the Model Confidence Set already generalizes a pairwise DM-style test to K ≥ 2
+models, and `k*`/`compare()` go further to ask how many periods or how much re-evaluation it would
+take to flip that choice. If you have exactly two models and only want a pairwise equal-accuracy
+test, `dm.test()` is the simpler, right tool; reach for `selectionfragility` once you are
+*selecting* a winner from several candidates and want to know how stable that selection is, not
+just whether two models differ.
+
+## No plotting
+
+`selectionfragility` ships no plotting methods — no `plot.loss_panel()`, no MCS-elimination
+diagram, no bootstrap-distribution histogram. Every diagnostic here returns a number, a
+data.frame (`as.data.frame.loss_panel()`, `summary.loss_panel()`), or `report()`'s printed text;
+visualizing any of it (per-period losses, the `winner_stability()` bootstrap draws, etc.) is
+ordinary `ggplot2`-on-a-data-frame work once you have `as.data.frame(panel)`, and this package
+deliberately does not duplicate that. If you want a ready-made comparison plot across many series,
+see `tsutils::nemenyi()`'s MCB plot above.
 
 ## License
 

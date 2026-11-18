@@ -135,3 +135,54 @@ test_that("print.change_report() escapes a champion model name containing an emb
   # The escaped name (backslash-n, not a real newline) must appear in the single-line output.
   expect_match(out, "evil\\\\nVERDICT", perl = TRUE)
 })
+
+test_that("compare()'s mismatched-model-set error message lists model names in locale-independent (radix) order", {
+  # LOCALE-AUDIT FIX (2026-11-18): the mismatched-model-set stop() sorted previous$models/
+  # current$models with a bare sort() -- locale-sensitive LC_COLLATE collation on character
+  # vectors. Confirmed directly: under LC_COLLATE="C" these three names sort as
+  # c("Beta_model", "Zeta_model", "alpha_model"), but under LC_COLLATE="en_US.UTF-8" or
+  # "tr_TR.UTF-8" they sort as c("alpha_model", "Beta_model", "Zeta_model") -- the same error
+  # printed a different model listing depending on the session's locale. Doesn't change whether
+  # the error fires, but is the same non-reproducibility class the package's radix-sort hardening
+  # elsewhere exists to eliminate. Fixed with method="radix"; this test pins the message's exact,
+  # locale-independent text under a non-default LC_COLLATE.
+  old <- Sys.getlocale("LC_COLLATE")
+  on.exit(suppressWarnings(Sys.setlocale("LC_COLLATE", old)), add = TRUE)
+  avail <- "tr_TR.UTF-8" %in% suppressWarnings(tryCatch(system("locale -a", intern = TRUE), error = function(e) character(0)))
+  skip_if(!avail, "tr_TR.UTF-8 locale not available on this machine")
+  set_ok <- !is.na(suppressWarnings(Sys.setlocale("LC_COLLATE", "tr_TR.UTF-8")))
+  skip_if(!set_ok, "Sys.setlocale(\"LC_COLLATE\", \"tr_TR.UTF-8\") failed on this machine despite locale -a listing it")
+
+  L1 <- list(Zeta_model = c(1, 1, 1), alpha_model = c(2, 2, 2), Beta_model = c(3, 3, 3))
+  L2 <- list(Zeta_model = c(1, 1, 1), Beta_model = c(2, 2, 2))
+  p1 <- loss_panel(L1)
+  p2 <- loss_panel(L2)
+  # Radix (byte/codepoint) order is always "Beta_model, Zeta_model, alpha_model" regardless of
+  # LC_COLLATE -- confirming this pins the fix, not an accidental locale-dependent match.
+  expect_error(
+    compare(p1, p2),
+    "Beta_model, Zeta_model, alpha_model vs Beta_model, Zeta_model",
+    fixed = TRUE
+  )
+})
+
+test_that("compare() detects a mismatched model set even when the cached $models field is stale (cross-function consistency audit, 2026-11-18)", {
+  # REGRESSION: the mismatched-model-set guard compared the CACHED previous$models/current$models
+  # fields -- the same "trusts a pre-validated object even if it's since been mutated" blind spot
+  # already found and fixed in print.loss_panel()/as.data.frame.loss_panel()/summary.loss_panel()
+  # (panel.R), which all moved to live names(x$losses) for exactly this reason. Confirmed directly
+  # reachable: dropping a model from previous$losses by hand (without touching the cached
+  # previous$models) left the guard comparing two IDENTICAL, now-stale $models vectors, so it
+  # silently passed and compare() went on to compare a 2-model previous panel against a 3-model
+  # current panel with no error at all.
+  L <- list(
+    ar1    = c(1.0, 1.0, 1.0, 1.0, 1.0),
+    nbeats = c(0.5, 0.5, 0.5, 0.5, 5.0),
+    ets    = c(2.0, 2.0, 2.0, 2.0, 2.0)
+  )
+  prev <- loss_panel(L)
+  curr <- loss_panel(L)
+  prev$losses <- prev$losses[c("ar1", "nbeats")]  # drop "ets" without touching the cached $models
+  expect_identical(prev$models, c("ar1", "nbeats", "ets"))  # the cache is indeed stale
+  expect_error(compare(prev, curr), "different model sets")
+})

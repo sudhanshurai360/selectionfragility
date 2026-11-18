@@ -38,6 +38,31 @@ test_that("resolution functions validate alpha/power ranges and minimum T", {
   expect_error(selection_regret(list(a = c(1, 2), b = c(2, 3))), "at least 3 periods")
 })
 
+test_that(".validate_one_sided() misattributes out-of-(0,1) `power` errors to 'alpha' (known limitation, documented, not fixed)", {
+  # Found by a 7th-round exhaustive-adversarial pass, 2026-11-18, boundary-value lens on `power`:
+  # `.validate_one_sided()` range-checks `power` by calling `.validate_alpha(power)` -- the SAME
+  # validator written for `alpha` -- whose error text hardcodes the literal word "alpha" in every
+  # branch. `power` values that fail at THAT stage (<= 0, >= 1, NA, non-numeric) therefore raise an
+  # "alpha must be ..." message naming the WRONG parameter; only a `power` strictly inside (0, 1)
+  # but <= 0.5 (e.g. 0.3) reaches the power-specific "power must be > 0.5" message tested above.
+  # CONFIRMED SHARED, oracle-pinned behavior: the Python original's `_validate_one_sided()`
+  # (resolution.py) does the identical `_validate_alpha(power)` reuse of the identical
+  # "alpha"-worded `_validate_alpha()` (identify.py) -- the same misattributed message reproduces
+  # in Python on `power=1`/`power=0` too. Left documented rather than fixed for the same
+  # cross-language-parity reason as this file's other known limitations (see the comment above
+  # `.validate_one_sided()`'s body in resolution.R); this test pins the misattribution itself as a
+  # known, reviewed limitation, not something to be silently "fixed" by a future edit without
+  # re-reviewing the cross-language consequence first.
+  expect_error(minimum_detectable_edge(noisy_L, power = 1.0), "alpha must be")
+  expect_error(minimum_detectable_edge(noisy_L, power = 0), "alpha must be")
+  expect_error(minimum_detectable_edge(noisy_L, power = 1.5), "alpha must be")
+  expect_error(minimum_detectable_edge(noisy_L, power = NA), "alpha must be")
+  # The *valid-alpha-range, below-0.5-power* case still gets the correctly-worded message (not
+  # affected by this limitation) -- confirms the misattribution is specific to the `.validate_alpha`
+  # reuse at the (0,1)/type-guard stage, not a blanket mislabeling of every power error.
+  expect_error(minimum_detectable_edge(noisy_L, power = 0.3), "power must be > 0.5")
+})
+
 test_that("selection_regret() rejects passing both weights and w", {
   expect_error(selection_regret(noisy_L, weights = rep(1, 3), w = rep(1, 3)), "got both")
 })

@@ -12,7 +12,16 @@ surprise_concentration(L, labels = NULL)
 \item{labels}{Optional vector of period labels (used only to report \code{hardest}).}
 }
 \value{
-A list \code{list(sci, eff_surprising_periods, hardest, d_max_over_median)}.
+A list \code{list(sci, eff_surprising_periods, hardest, d_max_over_median)}. \code{d_max_over_median}
+is a ratio of the hardest period's best-model loss to the median across periods, so on
+valid-looking input where per-period losses can be negative (e.g. signed loss differentials
+or P&L-style figures, which this package does not restrict to be non-negative), that ratio is
+not always finite by construction: it is \code{1.0} when both the numerator and denominator are
+exactly \code{0}, \code{Inf} when only the denominator is \code{0}, and \code{NaN} when the numerator and
+denominator have opposite signs (the ratio's sign, and so its magnitude as a "how much worse"
+multiplier, is undefined). This is a found-by-fuzzing clarification (2026-11-18), not new
+behavior -- the three sentinel branches were already in the code, just undocumented and
+untested for the NaN case.
 }
 \description{
 Surprise concentration — how lopsided is irreducible task difficulty across periods?

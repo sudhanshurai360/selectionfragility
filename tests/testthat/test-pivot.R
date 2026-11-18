@@ -28,6 +28,24 @@ test_that("pivot_agreement validates n_boot and frac, and returns a sane fractio
   expect_true(pa >= 0 && pa <= 1)
 })
 
+test_that("pivot_agreement(frac=) rejects NA/non-finite/non-scalar with a worded error, not a raw R crash", {
+  # REGRESSION (found by pure random fuzzing, 2026-11-18). `frac` reached `!(frac > 0 && frac < 1)`
+  # with no prior length/NA/numeric guard, unlike n_boot/seed right next to it (and unlike
+  # .validate_alpha()'s identical pattern elsewhere in the package) -- frac = NA detonated R's own
+  # raw "missing value where TRUE/FALSE needed" instead of this function's worded style.
+  L <- list(
+    champ = c(1.0, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98, 1.05, 0.95, 1.1, 0.9),
+    rival = c(1.10, 1.08, 1.12, 1.11, 1.09, 1.13, 1.07, 1.10, 1.12, 1.08, 2.5, 1.0, 1.1, 0.9),
+    far   = c(3.0, 3.1, 2.9, 3.2, 2.8, 3.0, 3.1, 2.9, 3.0, 3.1, 3.0, 3.1, 2.9, 3.0)
+  )
+  expect_error(pivot_agreement(L, frac = NA), "frac must be a single finite number")
+  expect_error(pivot_agreement(L, frac = NULL), "frac must be a single finite number")
+  expect_error(pivot_agreement(L, frac = c(0.5, 0.6)), "frac must be a single finite number")
+  expect_error(pivot_agreement(L, frac = "0.8"), "frac must be a single finite number")
+  expect_error(pivot_agreement(L, frac = Inf), "frac must be a single finite number")
+  expect_error(pivot_agreement(L, frac = NaN), "frac must be a single finite number")
+})
+
 test_that(".fsum is permutation-invariant (the opponent tie-break summation)", {
   # REGRESSION. pivot.py's own header documents this exact bug class -- order-dependent
   # summation of permutation-tied per-period margin contributions -- being found and fixed FIVE

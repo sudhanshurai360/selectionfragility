@@ -146,6 +146,21 @@ selection-as-election diagnostics, and `compare()`. `mcb_bound()` is **not**
 [`tsutils`](https://cran.r-project.org/package=tsutils)'s `nemenyi()` rank-based "MCB plot" — it
 bounds the loss-level edge directly, not average ranks; see "Honest reporting" below.
 
+This package also does not implement or wrap the **Diebold-Mariano test**
+(`forecast::dm.test()`, `multDM`, or similar) and is not a substitute for it. DM tests pairwise
+predictive-accuracy equality between exactly two models on one comparison; this package's
+diagnostics answer the different, selection-oriented question of how fragile the champion is once
+you are choosing among two or more candidates — the Model Confidence Set already generalizes a
+pairwise DM-style test to K ≥ 2 models, and `k*`/`compare()` go further to ask how many periods or
+how much re-evaluation it would take to flip that choice. Use `dm.test()` directly if you have
+exactly two models and only want a pairwise equal-accuracy test.
+
+Relatedly, `selectionfragility` ships **no plotting methods** — no `plot.loss_panel()`, no
+MCS-elimination diagram, no bootstrap-distribution histogram. Every diagnostic here returns a
+number, a data.frame (`as.data.frame.loss_panel()`, `summary.loss_panel()`), or `report()`'s
+printed text; visualizing any of it is ordinary `ggplot2`-on-a-data-frame work once you have
+`as.data.frame(panel)`, and this package deliberately does not duplicate that work.
+
 ## Core functions, one stage at a time
 
 `report()` is the recommended entry point, but every statistic behind it is also a public

@@ -295,7 +295,12 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
       stop("labels must not contain NA/NULL values -- every period needs a real identity for compare() to match on.", call. = FALSE)
     }
     if (length(unique(str_labels)) != T) {
-      dupes <- sort(unique(str_labels[duplicated(str_labels)]))
+      # LOCALE-AUDIT FIX (2026-11-18): bare sort() on duplicate labels used LC_COLLATE locale
+      # collation -- confirmed to list the same duplicate set in a different order (and, with
+      # more than 5 distinct duplicates, to truncate to a DIFFERENT head(dupes, 5) subset) across
+      # locales. Doesn't change whether the error fires, but same non-reproducibility class this
+      # package's radix-sort hardening elsewhere exists to eliminate. method="radix" throughout.
+      dupes <- sort(unique(str_labels[duplicated(str_labels)]), method = "radix")
       stop(sprintf(
         paste0(
           "labels contains duplicate value(s) %s -- labels must uniquely identify each period, ",
@@ -487,6 +492,18 @@ print.loss_panel <- function(x, ...) {
   # the one place in the package that actively hid that loud failure. Surface the error message
   # instead of discarding it, so a malformed object is visibly flagged rather than silently
   # mis-reported as fine.
+  # SECURITY-AUDIT FIX (2026-11-18): this fallback (reached only when report() itself errors on a
+  # mutated/inconsistent panel) printed x$models raw via paste()+sprintf(), with none of the
+  # control-character escaping report()'s own LEADERBOARD/PIVOT sections and compare()'s print
+  # method already apply to model names/labels (same commit, same injection class: a model name
+  # containing a literal newline/CR/ANSI-escape prints as fake extra "lines," here specifically a
+  # fake "VERDICT: identified ..." line indistinguishable from real output). Confirmed directly
+  # reachable: a model named "evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE\nb" in a panel
+  # mutated to break report() printed that fake VERDICT line via THIS fallback, even though every
+  # other model-name-printing path in the package was already fixed. Escaped through the same
+  # .escape_control_chars() helper (report.R) rather than a new copy, matching the normal
+  # (non-fallback) path above which already goes through report()'s own escaped LEADERBOARD.
+  disp_models <- paste(.escape_control_chars(x$models), collapse = ", ")
   if (!is.null(report_err)) {
     cat(sprintf(
       paste0(
@@ -495,11 +512,11 @@ print.loss_panel <- function(x, ...) {
         "after construction (e.g. a field edited directly) into an inconsistent state. Rebuild ",
         "it with loss_panel() instead of editing its fields by hand.\n"
       ),
-      paste(x$models, collapse = ", "), length(x$labels), report_err
+      disp_models, length(x$labels), report_err
     ))
     return(invisible(x))
   }
-  cat(sprintf("<loss_panel> models=%s, T=%d\n", paste(x$models, collapse = ", "), length(x$labels)))
+  cat(sprintf("<loss_panel> models=%s, T=%d\n", disp_models, length(x$labels)))
   invisible(x)
 }
 
