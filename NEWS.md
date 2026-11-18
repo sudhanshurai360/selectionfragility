@@ -329,3 +329,17 @@ Initial release: a native R port of the Python package
   for every other shape tested) -- itself useful, reportable adoption evidence. 11 new, permanent,
   separately-named test files (`test-realworld-*.R`) encode these scenarios as lasting regression
   coverage, distinct from the existing adversarial/regression test files.
+* Acted on the two statistical-visibility gaps above, per a dedicated expert design review
+  (2026-11-18): `mcs()` and `identified()`/`mcs_size()` now emit a STATIC (non-data-dependent)
+  warning whenever `T/K < 10`, disclosing that the false-elimination rate under a true null runs
+  well above nominal alpha at small T/K (measured ~18% at T=30/K=3, ~41% at T=12/K=4) -- this is
+  a blanket caveat tied to sample size alone, not a diagnosis of any specific panel, since there
+  is no cheap way to tell a genuinely-well-separated small-T panel apart from a genuinely-
+  miscalibrated one without rerunning the bootstrap under a null. For the autocorrelation
+  assumption, a dynamic runtime check was considered and explicitly rejected (see `.weighted_se`'s
+  header comment in resolution.R for the full reasoning: at this package's typical T, lag-1 ACF
+  sampling noise alone would fire on a large fraction of genuinely-fine panels, with no
+  non-uniform-weight gate to narrow it the way the existing weight/volatility guard has) -- instead,
+  `report()`'s RESOLUTION section now always prints a one-line, non-conditional disclosure of the
+  assumption, rather than relying on it only sometimes surfacing via the VERDICT/RESOLUTION
+  disagreement caveat.

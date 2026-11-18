@@ -219,6 +219,20 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
   } else {
     lines <- c(lines, sprintf("  MCB bound: the champion's true edge over the binding rival may be as large as %s, at 95%% confidence", .fmt_pct(bound_res)))
   }
+  # STRICT-AUDIT FIX (2026-11-18, 11-domain-expert real-world round + expert design review):
+  # RESOLUTION's "resolved"/"cannot determine" verdict assumes no autocorrelation in the
+  # per-period loss differential (resolution.R's .weighted_se() comment). A realistic,
+  # uniform-weight, autocorrelated panel (the common case) gets NO runtime signal of this at
+  # all -- the one existing runtime guard (resolution.R's weight/volatility-correlation warning)
+  # is gated on non-uniform weights and structurally cannot fire here, and the VERDICT/RESOLUTION
+  # disagreement caveat above only fires when that disagreement happens to manifest on this
+  # specific data draw, not reliably. A dynamic autocorrelation check was considered and rejected
+  # (see resolution.R's header comment): at this package's typical T, lag-1 ACF sampling noise
+  # alone would fire on a large fraction of genuinely-fine panels with no non-uniform-weight gate
+  # to narrow it, crossing from "screening heuristic" into "noise on nearly every call." An
+  # always-printed, non-conditional disclosure is the honest alternative.
+  lines <- c(lines, "  (RESOLUTION assumes no autocorrelation in the per-period loss differential;",
+             "   see ?resolution_report's Assumption section -- this is NOT checked at runtime)")
   lines <- c(lines, "")
   lines <- c(lines, "PIVOT")
   # NOTE ON MIXED TIE-BREAK RULES IN THIS PARAGRAPH: `db$binding_opponent` below (and the k*/removed-

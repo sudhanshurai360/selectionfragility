@@ -160,6 +160,27 @@
       ), length(models)
     ), call. = FALSE)
   }
+  if (T_eff / length(models) < .SMALL_T_RATIO_WARN) {
+    # STRICT-AUDIT FIX (2026-11-18, 11-domain-expert real-world round + expert design review):
+    # mirrors the identical, identically-worded warning added to mcs() (mcs.R) in the same
+    # commit -- identified()/mcs_size() delegate to a DIFFERENT engine (MCS::MCSprocedure()), but
+    # an independent re-measurement found the SAME class of small-T miscalibration there too
+    # (~41% false-elimination at T=12/K=4 vs. nominal ~10%, confirmed via both this delegated
+    # engine and the native one). See mcs.R's .SMALL_T_RATIO_WARN definition and comment for the
+    # full rationale (static, non-data-dependent; T/K=10 anchored on the two measured points).
+    warning(sprintf(
+      paste0(
+        "identified()/mcs_size(): T=%d periods for K=%d models (T/K=%.1f) is a small-sample ",
+        "regime where this procedure's false-elimination rate runs well above the nominal ",
+        "alpha=%.2g -- measured at ~18%% (not ~10%%) at T=30/K=3, and ~41%% (not ~10%%) at T=12/K=4, ",
+        "under a TRUE null with no real difference among models. This is a blanket caveat tied to ",
+        "T alone, not a diagnosis of THIS panel -- a genuinely well-separated panel at this T can ",
+        "still have a reliable VERDICT; but if the models are close, treat 'not identified' as ",
+        "noisier than alpha=%.2g implies, and an 'identified' singleton with the same suspicion. ",
+        "Not an error -- small-T panels are supported -- but interpret the result accordingly."
+      ), T_eff, length(models), T_eff / length(models), alpha, alpha
+    ), call. = FALSE)
+  }
   if (block_size > 0 && T_eff <= block_size) {
     block_eff <- max(1, T_eff %/% 2)
     warning(sprintf(

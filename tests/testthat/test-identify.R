@@ -149,8 +149,10 @@ test_that("mcs_size()/identified() warn on large K like mcs() does, when called 
   # (100), no warning should fire; above it, mcs_size()/identified() must now warn even when the
   # caller bypasses loss_panel() entirely.
   set.seed(1)
+  # T=60 (not the file's usual T=20) keeps T/K=12 >= .SMALL_T_RATIO_WARN=10, so this case tests
+  # ONLY the K threshold, not colliding with the small-T/K-ratio warning added in a later round.
   K_small <- 5
-  L_small <- stats::setNames(lapply(seq_len(K_small), function(i) rnorm(20, mean = i)), paste0("m", seq_len(K_small)))
+  L_small <- stats::setNames(lapply(seq_len(K_small), function(i) rnorm(60, mean = i)), paste0("m", seq_len(K_small)))
   expect_no_warning(mcs_size(L_small, reps = 500, seed = 1))
 
   K_big <- 110

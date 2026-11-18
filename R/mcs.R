@@ -14,6 +14,7 @@
 .MIN_T_FOR_ZERO_SE <- 8
 .SE_REL_FLOOR <- 1e-12
 .MAX_BOOTSTRAP_B <- 100000
+.SMALL_T_RATIO_WARN <- 10
 
 #' @keywords internal
 .std0 <- function(x) sqrt(mean((x - mean(x))^2))  # population std (ddof=0), matching numpy's default
@@ -237,6 +238,32 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
         "(O(K^3 * B)); expect this to be slow for large K. Not an error -- narrow to a candidate ",
         "shortlist if you don't need the full set."
       ), K
+    ), call. = FALSE)
+  }
+  if (T / K < .SMALL_T_RATIO_WARN) {
+    # STRICT-AUDIT FIX (2026-11-18, 11-domain-expert real-world round + expert design review):
+    # this file's own roxygen already discloses ~18% false-elimination (vs nominal ~10%) at
+    # T=30/K=3 under a true null -- but that number was NEVER surfaced at runtime, so a caller
+    # reading only report()/mcs()'s return value had no in-band signal at all. A domain-expert
+    # review targeting the actuarial-reserving industry's NORMAL (not edge-case) T=12/K=4 annual
+    # cadence re-measured this fresh and found it roughly DOUBLES to ~41%. This is a STATIC,
+    # non-data-dependent warning (unlike resolution.R's weight/volatility-correlation guard,
+    # which IS data-dependent and has its own disclosed false-positive rate) -- there is no cheap
+    # way to tell a genuinely-well-separated small-T panel apart from a genuinely-miscalibrated
+    # one without rerunning the bootstrap under a null, which is out of scope here. T/K < 10 is
+    # anchored on the two actually-measured points (T/K=10 at the already-tolerated T=30/K=3;
+    # T/K=3 at the newly-measured bad T=12/K=4), not an arbitrarily chosen round number.
+    warning(sprintf(
+      paste0(
+        "mcs(): T=%d periods for K=%d models (T/K=%.1f) is a small-sample regime where this ",
+        "procedure's false-elimination rate runs well above the nominal alpha=%.2g -- measured at ",
+        "~18%% (not ~10%%) at T=30/K=3, and ~41%% (not ~10%%) at T=12/K=4, under a TRUE null with no ",
+        "real difference among models. This is a blanket caveat tied to T alone, not a diagnosis of ",
+        "THIS panel -- a genuinely well-separated panel at this T can still have a reliable VERDICT; ",
+        "but if the models are close, treat 'not identified' as noisier than alpha=%.2g implies, and ",
+        "an 'identified' singleton with the same suspicion. Not an error -- small-T panels are ",
+        "supported -- but interpret VERDICT accordingly."
+      ), T, K, T / K, alpha, alpha
     ), call. = FALSE)
   }
   if (as.double(T) * B > 20000000) {  # as.double guards int32 overflow (NA -> if() crash) at large T

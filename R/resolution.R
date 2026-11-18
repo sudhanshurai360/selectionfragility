@@ -111,6 +111,29 @@
 # resolution_report() now warns (see below) when the same conditions that make this likely are
 # present AND it is about to report "resolved" -- a guard clause, not a formula change, so it
 # doesn't touch this shared, oracle-pinned function.
+#
+# WHY THE AUTOCORRELATION ASSUMPTION ITSELF HAS NO RUNTIME GUARD (2026-11-18, considered and
+# rejected, not an oversight): a domain-expert real-world review round found that on realistic,
+# UNIFORM-weight macro/financial panels (the common case), nothing at runtime signals a violation
+# of this function's "no autocorrelation" assumption -- the weight/volatility guard above is
+# gated on NON-uniform weights and structurally cannot fire here, and report()'s own
+# VERDICT/RESOLUTION disagreement caveat only fires when that disagreement happens to manifest on
+# the specific data draw, not reliably. A lightweight lag-1-ACF-threshold runtime check was
+# considered as the obvious fix and rejected: at this package's typical T (~10-60), the sample
+# lag-1 ACF's sampling SD under the TRUE null (no real autocorrelation) is ~1/sqrt(T) -- roughly
+# 0.29 at T=12, 0.18 at T=30, 0.13 at T=60. Any threshold sensitive enough to flag a real rho~0.5
+# case (the kind that actually matters) would also fire on a large fraction of genuinely-fine
+# panels, and -- unlike the weight/volatility guard above, which only fires when weights are
+# non-uniform (a real gating precondition that keeps its own 15-39% false-positive rate scoped to
+# an unusual case) -- this would be exposed on EVERY uniform-weighted call, i.e. the common case,
+# with no gate to narrow it. That crosses from "screening heuristic" into "noise on nearly every
+# call." A statistically proper test (Ljung-Box with correct lag selection, HAC-consistent
+# variance, small-T correction) is a much larger scope addition requiring its own calibration
+# pass, and still would not fix the underlying assumption violation without redesigning this
+# shared, oracle-pinned `.weighted_se()` formula itself. The chosen alternative is an
+# always-printed, non-conditional disclosure in report()'s RESOLUTION section (see R/report.R)
+# instead of a dynamic guard -- do not re-add a naive ACF check later without re-deriving why it
+# was rejected here.
 .weighted_se <- function(diff, w) {
   T <- length(diff)
   if (T < 2) stop(sprintf("need at least 2 periods to estimate a standard error; got T=%d.", T), call. = FALSE)
