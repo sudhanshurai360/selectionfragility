@@ -97,6 +97,19 @@ concentration_share <- function(L, w = NULL) {
 #' @param frac Fraction of periods kept in each subsample (strictly between 0 and 1).
 #' @return The agreement fraction, or `NA` if there is no strict winner, the subsample is too
 #'   small, or every subsample drawn had no strict winner.
+#' @section Limitation: this statistic is weaker evidence than it may appear. Subsampling draws
+#'   WITHOUT replacement from the SAME already-realized loss values (no new noise is drawn), so
+#'   a period's per-period contribution is identical at every kept position; dropping other
+#'   periods can never create a new maximum that exceeds the full sample's actual top contributor.
+#'   `sub_pivot == full_pivot` whenever the top period happens to survive into the subsample,
+#'   which happens with probability close to `frac` BY CONSTRUCTION of this sampling scheme,
+#'   largely independent of whether the panel's true pivot is robust or a noise artifact.
+#'   Measured directly (2026-11-18): on both a maximally-robust panel (one dominant shock,
+#'   `concentration_share` ~0.99) and a maximally-fragile one (evenly spread margin,
+#'   `concentration_share` ~0.11), `pivot_agreement()` returns ~`frac` (the default 0.8) in BOTH
+#'   cases -- the number tracks the `frac` knob, not the panel's actual concentration structure.
+#'   Treat it as a weak signal at best; `concentration_share()` is the more informative diagnostic
+#'   for "is this pivot a real feature of the data."
 #' @seealso [concentration_share()] (how much of the margin a single period accounts for),
 #'   [surprise_concentration()], [report()].
 #' @export

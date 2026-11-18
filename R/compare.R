@@ -69,6 +69,18 @@ print.change_report <- function(x, ...) {
     stop(sprintf("n_perm must be a single positive integer; got %s.",
                   paste(format(n_perm_in), collapse = ", ")), call. = FALSE)
   }
+  # STRICT-AUDIT FIX (2026-11-18): seed was the one parameter in this function passed straight
+  # into set.seed() with no local guard, unlike n_perm just above (same fix commit) -- a bad seed
+  # (NA/non-scalar/out-of-range) reached a raw, unworded "supplied seed is not a valid integer"
+  # error from base R's set.seed() itself. Worse than the n_perm case: compare() wraps its call
+  # into .run_mcs_arch() in a tryCatch that degrades gracefully into mcs_error, but NOT this call,
+  # so the raw error aborted the whole compare() call rather than failing with this package's own
+  # worded style.
+  seed_in <- seed; seed <- suppressWarnings(as.integer(seed))
+  if (length(seed) != 1 || is.na(seed) || seed < 0) {
+    stop(sprintf(".churn_base_rate(): seed must be a single non-negative integer; got %s.",
+                  paste(format(seed_in), collapse = ", ")), call. = FALSE)
+  }
   models <- sort(names(L), method = "radix")
   M <- do.call(cbind, lapply(models, function(m) as.numeric(L[[m]])))  # T x K
   colnames(M) <- models
@@ -109,6 +121,18 @@ print.change_report <- function(x, ...) {
 #'   `n_new_periods=0`/`champion_without_new_periods=NULL` ("cannot attribute"), even though periods
 #'   really did change. Pass `labels=` explicitly to `loss_panel()` for both panels if you need
 #'   accurate new-period attribution on a same-length rolling window.
+#'
+#'   STRICT-AUDIT FIX (2026-11-18): that remedy does NOT cover every real-world labeling
+#'   convention -- it only fixes POSITIONAL labels. A real, non-positional labeling scheme where
+#'   the SAME label strings are reused every run (e.g. a pipeline that numbers "slot 1..24 in
+#'   the trailing window," not calendar date) has `labels_are_positional == FALSE` yet suffers
+#'   the identical defect, because `compare()` matches periods by label-STRING identity: if both
+#'   panels use `labels = paste0("period", 1:24)` again, a genuine rolling window (oldest period
+#'   dropped, one new period appended) is still reported as `n_new_periods=0`, because the label
+#'   SETS are identical even though the underlying periods are not. If your labeling convention
+#'   re-numbers slots rather than carrying a stable per-period identity (a calendar date, a
+#'   period-since-epoch counter), `compare()`'s new-period attribution will be silently wrong
+#'   regardless of whether you pass `labels=`.
 #' @param alpha Significance level passed to the MCS check.
 #' @param n_perm Number of permutations for the churn base rate.
 #' @param seed RNG seed.

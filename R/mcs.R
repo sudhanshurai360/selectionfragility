@@ -30,6 +30,17 @@
 #'   differentials are autocorrelated, raise `block` and report the result across a block sweep
 #'   rather than trusting the default. (This over-elimination is conservative for a tie claim --
 #'   it shrinks the MCS -- but it inflates the apparent identification rate.)
+#'
+#'   STRICT-AUDIT FIX (2026-11-18): the AR(1) figure above is NOT the whole story -- a dedicated
+#'   simulation under a true complete null with ZERO autocorrelation (all K models i.i.d., same
+#'   mean) found the test is still measurably over-sized at ordinary panel sizes using these
+#'   defaults: at T=30, K=3, alpha=0.10, the actual false-elimination rate was ~18% (not ~10%),
+#'   roughly double what `alpha=` implies; at alpha=0.05 it was ~9% (not 5%). This is a genuine
+#'   finite-sample size distortion of the sequential-elimination/equivalence-test procedure
+#'   itself, separate from and additive to the AR(1) effect above, and converges toward nominal
+#'   only as T grows into the low hundreds. A user who checks their losses for autocorrelation,
+#'   finds none, and takes comfort from the AR(1) caveat alone is still running a test whose real
+#'   error rate at a typical T~30 panel can be close to double the number baked into `alpha=`.
 #' @param seed RNG seed.
 #' @param elimination `"studentized"` (Hansen-Lunde-Nason's e_max, default) or `"raw"` (legacy
 #'   mean-based rule). `NULL` reads `getOption("selectionfragility.elimination", "studentized")`.
@@ -126,6 +137,29 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
   block <- suppressWarnings(as.integer(block))
   if (length(block) != 1 || is.na(block) || block < 0) {
     stop(sprintf("mcs(): block must be a single non-negative integer; got %s.", paste(format(block), collapse = ", ")), call. = FALSE)
+  }
+  # STRICT-AUDIT FIX (2026-11-18): seed was the one parameter here passed straight into
+  # set.seed() with no local guard, unlike B/block just above (same fix commit) -- a bad seed
+  # (NA/non-scalar/out-of-range) reached a raw, unworded "supplied seed is not a valid integer"
+  # error from base R's set.seed() itself instead of this file's own worded style.
+  seed_in <- seed
+  seed <- suppressWarnings(as.integer(seed))
+  if (length(seed) != 1 || is.na(seed) || seed < 0) {
+    stop(sprintf("mcs(): seed must be a single non-negative integer; got %s.", paste(format(seed_in), collapse = ", ")), call. = FALSE)
+  }
+  # STRICT-AUDIT FIX (2026-11-18): mcs()'s documented contract is "a numeric matrix," but nothing
+  # stopped a caller from passing a data.frame straight through -- as.matrix()/storage.mode<- ran
+  # unconditionally with no check that the original columns were actually numeric, unlike
+  # loss_panel()'s .from_data_frame() which explicitly rejects logical/non-numeric/list columns.
+  # A data.frame with a length-1-per-row list-column was silently accepted and treated as ordinary
+  # numeric data; one with a length>1-per-row list-column crashed with a raw "'list' object
+  # cannot be coerced to type 'double'" instead of this package's own worded style.
+  if (is.data.frame(L)) {
+    bad <- names(L)[!vapply(L, is.numeric, logical(1))]
+    if (length(bad) > 0) {
+      stop(sprintf("mcs(): data.frame column(s) %s are not numeric; mcs() needs a numeric matrix.",
+                    paste(bad, collapse = ", ")), call. = FALSE)
+    }
   }
   L <- as.matrix(L)
   storage.mode(L) <- "double"

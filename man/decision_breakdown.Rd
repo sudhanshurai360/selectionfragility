@@ -25,6 +25,17 @@ period labels for display; call \code{panel$labels[removed]} yourself if you nee
 See \code{\link[=breakdown_number]{breakdown_number()}} for the pairwise primitive and its robust-statistics lineage
 (Hampel 1971).
 }
+\section{Limitation}{
+ when multiple opponents are tied at the same minimal k*, \code{binding_opponent}
+resolves the tie to the alphabetically-first name. This is a DIFFERENT tie-break rule than
+\code{\link[=concentration_share]{concentration_share()}}/\code{\link[=pivot_agreement]{pivot_agreement()}} use internally for the same "which opponent"
+question (they pick the tied opponent with the largest total margin), and different again
+from \code{resolution_report()}'s own \code{binding_rival} field (closest pooled-mean distance, unrelated
+to k* minimality). \code{\link[=report]{report()}}'s PIVOT paragraph can print text sourced from two of these three
+rules in the same paragraph. In the common case of no tie, all three agree; this only matters
+when several opponents are genuinely tied at k*.
+}
+
 \examples{
 # Same shock-period panel as breakdown_number(): on the full panel, ar1 is the pooled
 # winner (nbeats' one bad period pulls its mean above ar1's), but it only takes deleting

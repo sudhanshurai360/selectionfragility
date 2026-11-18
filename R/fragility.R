@@ -83,6 +83,33 @@
     }
   }
   if (!is.null(w)) {
+    # STRICT-AUDIT FIX (2026-11-18): this validator and panel.R's .validate_weights() are two
+    # independently-written checks for "the same concept" that had silently drifted -- panel.R's
+    # was hardened three separate times (character/factor/logical guards) because
+    # as.numeric(factor(...)) silently returns integer LEVEL CODES, not the labels, and
+    # as.numeric(logical) silently coerces TRUE/FALSE -> 1/0, but this copy (used directly by
+    # pooled_winner()/decision_breakdown()/winner_stability()/fragility()/every resolution.R
+    # function on raw lists, not just loss_panel()) never got the same guards -- confirmed
+    # reachable: decision_breakdown(L, w=factor(c("10","20","30","40"))) used to silently use
+    # weights c(1,2,3,4) with no error. Mirroring panel.R's guards here closes that gap.
+    if (is.character(w)) {
+      stop(sprintf(
+        "weights must be a numeric vector of %d values (one per period), not a string; got %s.",
+        T, paste(w, collapse = ", ")
+      ), call. = FALSE)
+    }
+    if (is.factor(w)) {
+      stop(sprintf(
+        "weights must be a numeric vector of %d values (one per period), not a factor; got levels %s. ",
+        T, paste(levels(w), collapse = ", ")
+      ), call. = FALSE)
+    }
+    if (is.logical(w)) {
+      stop(sprintf(
+        "weights must be a numeric vector of %d values (one per period), not logical (TRUE/FALSE); got %s.",
+        T, paste(w, collapse = ", ")
+      ), call. = FALSE)
+    }
     # Coercion failures (e.g. non-numeric strings) must raise distinctly from a genuine
     # length/finiteness problem -- `as.numeric()` on unconvertible values silently produces NA
     # with only a warning, which `suppressWarnings()` alone would let fall through into the
@@ -115,6 +142,17 @@
     }
     if (all(wa == 0)) {
       stop("weights are all zero; at least one period must carry positive weight.", call. = FALSE)
+    }
+    if (any(wa > .MAX_ABS_LOSS)) {
+      # Same overflow-prevention cap as panel.R's .validate_weights() -- a single "individually
+      # valid" (finite, non-negative) but enormous weight can make sum(weights) overflow to Inf,
+      # producing NaN for every model's weighted mean, which pooled_winner() then fed into
+      # sort()'s NA-dropping default to silently return NA_character_ as the "champion."
+      stop(sprintf(
+        paste0("weights must not exceed %.0e in magnitude -- a weight this large can make ",
+               "sum(weights) overflow to Inf and silently corrupt every weighted statistic downstream."),
+        .MAX_ABS_LOSS
+      ), call. = FALSE)
     }
   }
   T
@@ -289,7 +327,11 @@ condorcet_status <- function(L) {
 #' @keywords internal
 .is_degenerate_pair <- function(k, la, lb, w, T) {
   c_ <- w * (lb - la)
-  M <- sum(c_)
+  # STRICT-AUDIT FIX (2026-11-18): .fsum() (pivot.R) exists specifically because plain sum() is
+  # order-dependent on permutation-tied contribution vectors -- pivot.R's own header says this
+  # exact bug was found and fixed FIVE separate times in the Python original. This computation is
+  # structurally identical to the margin sums .fsum() was built to protect but never got ported.
+  M <- .fsum(c_)
   isTRUE(k == 0 || (M / T) <= .MARGIN_REL_FLOOR * .pair_scale(la, lb, w, T))
 }
 
@@ -341,7 +383,7 @@ breakdown_number <- function(la, lb, w) {
     ), call. = FALSE)
   }
   c_ <- w * (lb - la)
-  M <- sum(c_)
+  M <- .fsum(c_)  # STRICT-AUDIT FIX (2026-11-18): see .is_degenerate_pair()'s comment
   T <- length(w)
   scale <- if (T > 0) (mean(abs(la)) + mean(abs(lb))) / 2.0 else 0.0
   wscale <- if (T > 0) mean(w) else 0.0
@@ -381,6 +423,14 @@ breakdown_number <- function(la, lb, w) {
 #'   POSITION into the loss vectors -- it is NOT resolved against `L`'s period labels even when
 #'   `L` is a `loss_panel` built with `labels=`. Only [report()] resolves `removed` into actual
 #'   period labels for display; call `panel$labels[removed]` yourself if you need them here.
+#' @section Limitation: when multiple opponents are tied at the same minimal k*, `binding_opponent`
+#'   resolves the tie to the alphabetically-first name. This is a DIFFERENT tie-break rule than
+#'   [concentration_share()]/[pivot_agreement()] use internally for the same "which opponent"
+#'   question (they pick the tied opponent with the largest total margin), and different again
+#'   from `resolution_report()`'s own `binding_rival` field (closest pooled-mean distance, unrelated
+#'   to k* minimality). [report()]'s PIVOT paragraph can print text sourced from two of these three
+#'   rules in the same paragraph. In the common case of no tie, all three agree; this only matters
+#'   when several opponents are genuinely tied at k*.
 #' @seealso [breakdown_number()] (the pairwise primitive this searches over), [prop22_certifies()]
 #'   (significance certificate for the resulting k*), [winner_stability()] (a complementary,
 #'   bootstrap-based fragility read).
@@ -547,6 +597,22 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
   la <- as.numeric(L[[obs]])
   lb <- if (!is.null(db$binding_opponent)) as.numeric(L[[db$binding_opponent]]) else la
   if (.is_degenerate_pair(db$k, la, lb, w, T)) {
+    # STRICT-AUDIT FIX (2026-11-18): `freq` here is NOT a computed bootstrap win frequency -- it
+    # is a hardcoded uniform placeholder, because no bootstrap is run on a degenerate (exact-tie
+    # or near-tie) pair. This used to ship with no warning at all: a caller treating `freq` as
+    # real data (e.g. a bar chart of "bootstrap win share per model") saw a plausible-looking but
+    # entirely fabricated uniform distribution across ALL models, including ones whose true means
+    # are nowhere near the champion's. `stability=NaN` alone does flag the degeneracy to a careful
+    # reader, but silently becomes NA under `ifelse(stability > 0.8, ...)` or "NaN%" under
+    # sprintf("%.1f%%", ...) -- both realistic downstream idioms -- with no diagnostic signal.
+    warning(sprintf(
+      paste0(
+        "winner_stability(): the champion-vs-binding-rival pair is degenerate (k*=%d, margin below ",
+        "the degeneracy floor) -- stability=NaN and freq is a hardcoded UNIFORM placeholder, NOT a ",
+        "computed bootstrap win frequency (no bootstrap was run). Treat freq as uninformative here, ",
+        "not as evidence any model is as likely to win as another."
+      ), db$k
+    ), call. = FALSE)
     return(list(stability = NaN, freq = stats::setNames(rep(1 / length(L), length(L)), names(L))))
   }
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
@@ -695,7 +761,48 @@ surprise_concentration <- function(L, labels = NULL) {
 #' @param n_boot,seed Bootstrap settings for `winner_stability()`.
 #' @param stability_block Block length override for the stability bootstrap.
 #' @param benchmark Optional `exchangeable_benchmark()` result (or its p05) to calibrate `fragile`.
-#' @return A named list of diagnostic fields (see `vignette("selectionfragility")` for field-by-field guidance).
+#' @return A named list of 25 diagnostic fields (STRICT-AUDIT FIX, 2026-11-18: this used to point
+#'   to `vignette("selectionfragility")` for "field-by-field guidance" that does not exist there
+#'   -- the vignette itself points back to `?fragility`, a circular reference that left roughly
+#'   15 of the 25 fields never documented in prose anywhere):
+#'   \describe{
+#'     \item{pooled_winner, per_period_winner, condorcet_winner, condorcet_status}{The four
+#'       winner-selection rules this package compares; see their own help pages.}
+#'     \item{screen}{`TRUE` if a cheap screen (degenerate margin, stability < 0.60, or a
+#'       reversal with k/T < 0.25) flags this decision as worth a closer look.}
+#'     \item{binding_opponent, runner_up}{The same value (the pooled winner's closest rival by
+#'       k*); `runner_up` is an alias kept for readability at call sites.}
+#'     \item{pooled_runner_up}{The pooled winner among the remaining models once the champion is
+#'       excluded (i.e. "who would win if the champion didn't exist").}
+#'     \item{binding_opponents}{All opponents tied with `binding_opponent` at the minimal k*
+#'       (length > 1 only on an exact tie).}
+#'     \item{plurality_winners}{All models tied for most per-period wins (length > 1 on a tie).}
+#'     \item{concentration_by_opponent}{Named list of `concentration` (see below), one per entry
+#'       in `binding_opponents`.}
+#'     \item{concentration_range}{`c(min, max)` of `concentration_by_opponent`'s finite values
+#'       (`c(NaN, NaN)` if none are finite).}
+#'     \item{degenerate_margin}{`TRUE` if k*=0 or the margin is below the degeneracy floor --
+#'       `winner_stability`/`winner_freq` are not computed in this case; see their own entries.}
+#'     \item{k_star, k_over_T}{`decision_breakdown()`'s k* and k*/T.}
+#'     \item{concentration}{Share of the champion-vs-binding-opponent margin carried by the single
+#'       largest-contribution period (`NaN` if degenerate); see [concentration_share()].}
+#'     \item{reversal}{`TRUE` if the pooled winner differs from the per-period winner.}
+#'     \item{reversal_condorcet}{`TRUE` if the pooled winner differs from the Condorcet winner
+#'       (always `FALSE` if no Condorcet winner exists).}
+#'     \item{condorcet_cycle, condorcet_undefined}{Whether `condorcet_status` is `"cycle"`, and
+#'       whether no Condorcet winner exists at all (a cycle is one way that can happen).}
+#'     \item{responsible}{The k* periods (by label if supplied, else 0-based positional index --
+#'       note this differs from `decision_breakdown()$removed`, which is 1-based).}
+#'     \item{shock_coincidence}{`NULL` if `shock_periods` was not supplied; otherwise `TRUE` iff
+#'       every period in `responsible` is also in `shock_periods`.}
+#'     \item{winner_stability, winner_freq}{`winner_stability()`'s bootstrap stability and
+#'       per-model win frequency (`NaN`/a uniform placeholder, with a `warning()`, if degenerate
+#'       -- see [winner_stability()]).}
+#'     \item{fragile}{`TRUE` if degenerate; `NA` if no `benchmark` was supplied to calibrate
+#'       against; otherwise `TRUE` iff `winner_stability` falls below `benchmark`'s p05.}
+#'   }
+#'   See `vignette("selectionfragility")` for a worked, narrative example using several of these
+#'   fields together.
 #' @seealso [report()] for the recommended one-screen summary built on top of this function;
 #'   [decision_breakdown()] for k* alone; [winner_stability()] and [exchangeable_benchmark()] for
 #'   the calibrated bootstrap companion to k*; [mcs_size()]/[identified()] for the independent
@@ -735,7 +842,7 @@ fragility <- function(L, w = NULL, shock_periods = NULL, labels = NULL, n_boot =
   la <- as.numeric(L[[a]])
   lb <- if (!is.null(b)) as.numeric(L[[b]]) else la
   c_ <- w * (lb - la)
-  M <- sum(c_)
+  M <- .fsum(c_)  # STRICT-AUDIT FIX (2026-11-18): see .is_degenerate_pair()'s comment
   pscale_ab <- .pair_scale(la, lb, w, T)
   concentration <- if (M > 0 && (M / T) > .MARGIN_REL_FLOOR * pscale_ab) max(c_) / M else NaN
 
@@ -743,7 +850,7 @@ fragility <- function(L, w = NULL, shock_periods = NULL, labels = NULL, n_boot =
   for (m in binding_ties) {
     lm <- as.numeric(L[[m]])
     cm <- w * (lm - la)
-    Mm <- sum(cm)
+    Mm <- .fsum(cm)  # STRICT-AUDIT FIX (2026-11-18): see .is_degenerate_pair()'s comment
     pscale_am <- .pair_scale(la, lm, w, T)
     conc_by_opp[[m]] <- if (Mm > 0 && (Mm / T) > .MARGIN_REL_FLOOR * pscale_am) max(cm) / Mm else NaN
   }

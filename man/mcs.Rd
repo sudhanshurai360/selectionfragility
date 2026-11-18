@@ -19,7 +19,18 @@ is over-sized (retains too few models) under persistent losses with a short bloc
 AR(1)=0.5 the complete-null retain-all rate falls to ~0.62 vs the nominal 0.90). If your loss
 differentials are autocorrelated, raise \code{block} and report the result across a block sweep
 rather than trusting the default. (This over-elimination is conservative for a tie claim --
-it shrinks the MCS -- but it inflates the apparent identification rate.)}
+it shrinks the MCS -- but it inflates the apparent identification rate.)
+
+STRICT-AUDIT FIX (2026-11-18): the AR(1) figure above is NOT the whole story -- a dedicated
+simulation under a true complete null with ZERO autocorrelation (all K models i.i.d., same
+mean) found the test is still measurably over-sized at ordinary panel sizes using these
+defaults: at T=30, K=3, alpha=0.10, the actual false-elimination rate was ~18\% (not ~10\%),
+roughly double what \verb{alpha=} implies; at alpha=0.05 it was ~9\% (not 5\%). This is a genuine
+finite-sample size distortion of the sequential-elimination/equivalence-test procedure
+itself, separate from and additive to the AR(1) effect above, and converges toward nominal
+only as T grows into the low hundreds. A user who checks their losses for autocorrelation,
+finds none, and takes comfort from the AR(1) caveat alone is still running a test whose real
+error rate at a typical T~30 panel can be close to double the number baked into \verb{alpha=}.}
 
 \item{seed}{RNG seed.}
 

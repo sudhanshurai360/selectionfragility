@@ -232,6 +232,16 @@ mcs_size <- function(L, alpha = 0.10, reps = 500, block_size = 3, seed = 0, w = 
 #'
 #' @inheritParams mcs_size
 #' @return `TRUE` iff the MCS contains exactly one model.
+#' @section If this returns FALSE: a bare `FALSE` says only that this bootstrap did not narrow
+#'   to one model -- it carries no information about WHY, or about whether a different diagnostic
+#'   lens would tell a more complete story. [report()] wires this exact signal into guidance
+#'   ("identification alone does not mean the edge is powered," and vice versa); calling
+#'   `identified()`/`mcs_size()` directly skips that guidance entirely. Before concluding "pick
+#'   the lowest mean-loss model and move on," consider [resolution_report()] (is the edge over
+#'   the binding rival even powered at this sample size), [decision_breakdown()]/[fragility()]
+#'   (how many periods would have to change to flip the decision), and [winner_stability()] (does
+#'   the pooled winner survive a block bootstrap) -- or just call [report()], which runs all of
+#'   these together.
 #' @seealso [mcs_size()], which this wraps; [mcs()]/[model_confidence_set()] for this package's
 #'   own independent native MCS engine (a different bootstrap, see their own documentation).
 #'

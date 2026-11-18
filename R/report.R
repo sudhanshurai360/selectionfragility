@@ -129,6 +129,17 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
     if (!isTRUE(res$resolved)) {
       lines <- c(lines, "  (see RESOLUTION below -- identification alone does not mean the edge is",
                  "   powered at this sample size)")
+    } else if (!isTRUE(ident)) {
+      # STRICT-AUDIT FIX (2026-11-18): the opposite-direction caveat was missing. VERDICT (R2,
+      # the MCS bootstrap) and RESOLUTION (R1, a power check against the binding rival alone)
+      # answer different questions and can legitimately disagree -- "not identified" + "resolved"
+      # on the same panel is not a contradiction, but a one-screen reader seeing only the top two
+      # sections (this function is advertised as exactly that) could easily misread "resolved" as
+      # "the edge over the rival is real and the decision is settled," missing that the MCS
+      # bootstrap still can't rule out some OTHER rival not involved in RESOLUTION's calculation.
+      lines <- c(lines, "  (see RESOLUTION below -- a powered edge over the binding rival alone does",
+                 "   not mean the MCS bootstrap can rule out every other model; VERDICT and",
+                 "   RESOLUTION answer different questions and can legitimately disagree)")
     }
   } else {
     lines <- c(lines, sprintf("VERDICT: not available for this panel -- %s", mcs_error))
@@ -219,6 +230,20 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
         }
       }
       lines <- c(lines, sprintf("  %s -- %s", period_txt, cert_txt))
+      if (isTRUE(cert)) {
+        # STRICT-AUDIT FIX (2026-11-18): this line can print "certifies non-significance"
+        # immediately below RESOLUTION's "resolved" with no text connecting the two, which reads
+        # as a flat self-contradiction. It isn't one: RESOLUTION's R1 check (resolution.R) uses
+        # the SAMPLE variance (ddof=1) and a one-sided Student-t critical value, while Prop 2.2's
+        # certificate (prop22.R) is an unconditional, distribution-free bound keyed to the
+        # POPULATION variance (ddof=0) and a fixed two-sided z -- two different, independently
+        # valid tests that use different variance conventions and different critical values, so
+        # they can and sometimes do disagree on the identical rival pair. Neither is wrong.
+        lines <- c(lines, paste0(
+          "    (not a contradiction -- RESOLUTION's \"resolved\" and this certificate use ",
+          "different variance conventions and critical values; see ?prop22_certifies)"
+        ))
+      }
       cs <- concentration_share(L, w)
       # Threaded from report()'s own seed= (STRICT-AUDIT FIX, 2026-11-18): this used to be
       # hardcoded to seed=0 regardless of what the caller passed to report(), which silently

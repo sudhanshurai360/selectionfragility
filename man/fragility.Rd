@@ -35,7 +35,48 @@ is 1-based instead).}
 \item{benchmark}{Optional \code{exchangeable_benchmark()} result (or its p05) to calibrate \code{fragile}.}
 }
 \value{
-A named list of diagnostic fields (see \code{vignette("selectionfragility")} for field-by-field guidance).
+A named list of 25 diagnostic fields (STRICT-AUDIT FIX, 2026-11-18: this used to point
+to \code{vignette("selectionfragility")} for "field-by-field guidance" that does not exist there
+-- the vignette itself points back to \code{?fragility}, a circular reference that left roughly
+15 of the 25 fields never documented in prose anywhere):
+\describe{
+\item{pooled_winner, per_period_winner, condorcet_winner, condorcet_status}{The four
+winner-selection rules this package compares; see their own help pages.}
+\item{screen}{\code{TRUE} if a cheap screen (degenerate margin, stability < 0.60, or a
+reversal with k/T < 0.25) flags this decision as worth a closer look.}
+\item{binding_opponent, runner_up}{The same value (the pooled winner's closest rival by
+k*); \code{runner_up} is an alias kept for readability at call sites.}
+\item{pooled_runner_up}{The pooled winner among the remaining models once the champion is
+excluded (i.e. "who would win if the champion didn't exist").}
+\item{binding_opponents}{All opponents tied with \code{binding_opponent} at the minimal k*
+(length > 1 only on an exact tie).}
+\item{plurality_winners}{All models tied for most per-period wins (length > 1 on a tie).}
+\item{concentration_by_opponent}{Named list of \code{concentration} (see below), one per entry
+in \code{binding_opponents}.}
+\item{concentration_range}{\code{c(min, max)} of \code{concentration_by_opponent}'s finite values
+(\code{c(NaN, NaN)} if none are finite).}
+\item{degenerate_margin}{\code{TRUE} if k*=0 or the margin is below the degeneracy floor --
+\code{winner_stability}/\code{winner_freq} are not computed in this case; see their own entries.}
+\item{k_star, k_over_T}{\code{decision_breakdown()}'s k* and k*/T.}
+\item{concentration}{Share of the champion-vs-binding-opponent margin carried by the single
+largest-contribution period (\code{NaN} if degenerate); see \code{\link[=concentration_share]{concentration_share()}}.}
+\item{reversal}{\code{TRUE} if the pooled winner differs from the per-period winner.}
+\item{reversal_condorcet}{\code{TRUE} if the pooled winner differs from the Condorcet winner
+(always \code{FALSE} if no Condorcet winner exists).}
+\item{condorcet_cycle, condorcet_undefined}{Whether \code{condorcet_status} is \code{"cycle"}, and
+whether no Condorcet winner exists at all (a cycle is one way that can happen).}
+\item{responsible}{The k* periods (by label if supplied, else 0-based positional index --
+note this differs from \code{decision_breakdown()$removed}, which is 1-based).}
+\item{shock_coincidence}{\code{NULL} if \code{shock_periods} was not supplied; otherwise \code{TRUE} iff
+every period in \code{responsible} is also in \code{shock_periods}.}
+\item{winner_stability, winner_freq}{\code{winner_stability()}'s bootstrap stability and
+per-model win frequency (\code{NaN}/a uniform placeholder, with a \code{warning()}, if degenerate
+-- see \code{\link[=winner_stability]{winner_stability()}}).}
+\item{fragile}{\code{TRUE} if degenerate; \code{NA} if no \code{benchmark} was supplied to calibrate
+against; otherwise \code{TRUE} iff \code{winner_stability} falls below \code{benchmark}'s p05.}
+}
+See \code{vignette("selectionfragility")} for a worked, narrative example using several of these
+fields together.
 }
 \description{
 Full ranking-fragility diagnostic for a selection decision

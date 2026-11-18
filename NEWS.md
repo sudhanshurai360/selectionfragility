@@ -11,7 +11,7 @@ Initial release: a native R port of the Python package
   refusal rules), `prop22` (zero-simulation Proposition 2.2 certificate), `pivot` (concentration
   share, pivot agreement), `report` (one-screen summary), `compare` (run-over-run champion-change
   diagnostic).
-* 1032 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
+* 1055 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
   this count will keep moving as hardening continues; check `devtools::test()`'s own output rather
   than treating this number as authoritative), including a dedicated cross-language
   oracle-comparison suite verified against the Python package's live behavior, not just its

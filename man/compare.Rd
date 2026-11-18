@@ -33,6 +33,18 @@ list/matrix), positional labels carry no cross-panel identity, so a same-length 
 \code{n_new_periods=0}/\code{champion_without_new_periods=NULL} ("cannot attribute"), even though periods
 really did change. Pass \verb{labels=} explicitly to \code{loss_panel()} for both panels if you need
 accurate new-period attribution on a same-length rolling window.
+
+STRICT-AUDIT FIX (2026-11-18): that remedy does NOT cover every real-world labeling
+convention -- it only fixes POSITIONAL labels. A real, non-positional labeling scheme where
+the SAME label strings are reused every run (e.g. a pipeline that numbers "slot 1..24 in
+the trailing window," not calendar date) has \code{labels_are_positional == FALSE} yet suffers
+the identical defect, because \code{compare()} matches periods by label-STRING identity: if both
+panels use \code{labels = paste0("period", 1:24)} again, a genuine rolling window (oldest period
+dropped, one new period appended) is still reported as \code{n_new_periods=0}, because the label
+SETS are identical even though the underlying periods are not. If your labeling convention
+re-numbers slots rather than carrying a stable per-period identity (a calendar date, a
+period-since-epoch counter), \code{compare()}'s new-period attribution will be silently wrong
+regardless of whether you pass \verb{labels=}.
 }
 
 \examples{

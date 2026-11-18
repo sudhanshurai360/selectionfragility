@@ -63,9 +63,12 @@ test_that("decision_breakdown() refuses loss magnitudes beyond the float64-overf
   expect_error(decision_breakdown(L), "exceeds")
 })
 
-test_that("winner_stability degenerates to NaN (not 1.0) on an exact tie", {
+test_that("winner_stability degenerates to NaN (not 1.0) on an exact tie, with a warning (strict-regression round, 2026-11-18)", {
+  # REGRESSION: freq on this branch is a hardcoded uniform placeholder, not a computed bootstrap
+  # win frequency -- used to ship with no warning at all, so a caller treating freq as real data
+  # saw a plausible-looking but entirely fabricated uniform distribution across all models.
   L <- list(a = c(1, 2, 3, 4), b = c(1, 2, 3, 4))
-  ws <- winner_stability(L)
+  expect_warning(ws <- winner_stability(L), "degenerate.*UNIFORM placeholder")
   expect_true(is.nan(ws$stability))
 })
 
@@ -87,11 +90,18 @@ test_that("non-numeric weights raise a clear coercion error, not a misleading le
   # anything about the (correct) length.
   L <- list(a = c(1, 2, 3), b = c(2, 3, 1))
   err <- tryCatch(pooled_winner(L, w = c("x", "y", "z")), error = function(e) conditionMessage(e))
-  expect_match(err, "could not be converted|not numeric|non-numeric")
+  expect_match(err, "not a string")
   expect_false(grepl("got length 3", err, fixed = TRUE))
-  # A fully valid numeric-as-string weight vector (e.g. from a CSV read) must still work -- this
-  # fix must not break legitimate numeric coercion.
-  expect_equal(pooled_winner(L, w = c("1", "1", "1")), pooled_winner(L))
+  # STRICT-AUDIT FIX (2026-11-18): this used to assert the OPPOSITE of panel.R's own long-
+  # standing, already-tested behavior -- loss_panel(weights=c("1","1","1")) has always rejected
+  # ANY character weight vector outright (.validate_weights()'s is.character() guard fires
+  # unconditionally, numeric-looking or not), but this copy of the validator (in fragility.R,
+  # used directly by pooled_winner()/decision_breakdown()/winner_stability()/fragility()/every
+  # resolution.R function on raw lists) silently accepted a numeric-looking string. A strict
+  # full-codebase audit found the two entry points contradicted each other for the identical
+  # input. Decided in favor of panel.R's stricter, more-hardened precedent: reject ALL character
+  # weights, not just non-numeric-looking ones, so both entry points now agree.
+  expect_error(pooled_winner(L, w = c("1", "1", "1")), "not a string")
 })
 
 test_that("surprise_concentration reports concentrated difficulty on a single hard period", {
@@ -387,4 +397,40 @@ test_that("decision_breakdown() rejects an a= that isn't one of the models in L,
   expect_error(decision_breakdown(L, a = "doesnotexist"), "not one of the models")
   expect_error(decision_breakdown(L, a = NA), "not one of the models")
   expect_no_error(decision_breakdown(L, a = "ar1"))
+})
+
+test_that("weight-type validation on raw-list entry points matches loss_panel()'s, not a weaker independent copy (5-lens round, 2026-11-18)", {
+  # REGRESSION: panel.R's .validate_weights() was hardened three times (character/factor/logical)
+  # because as.numeric() on a factor/logical silently returns integer level codes / 0-1, not the
+  # intended values. fragility.R's .validate_losses() -- used directly by pooled_winner()/
+  # decision_breakdown()/winner_stability()/fragility()/every resolution.R function on raw lists,
+  # not just via loss_panel() -- had never gotten the same guards, so the identical mistake
+  # (factor/logical weights) was caught at the loss_panel() entry point but silently miscomputed
+  # through every other entry point. Mirrored panel.R's guards here to close the gap.
+  L <- list(a = c(1.1, 2.3, 1.5, 4.2, 5.9), b = c(2.2, 3.1, 1.9, 4.8, 5.1))
+  expect_error(decision_breakdown(L, w = factor(c("10", "20", "30", "40", "50"))), "not a factor")
+  expect_error(decision_breakdown(L, w = c(TRUE, FALSE, TRUE, TRUE, FALSE)), "not logical")
+  expect_error(pooled_winner(L, w = rep(1e308, 5)), "must not exceed")
+})
+
+test_that("breakdown_number()'s margin sum is permutation-invariant like pivot.R's .fsum(), not a raw sum() (5-lens round, 2026-11-18)", {
+  # REGRESSION: pivot.R's .fsum() exists specifically because plain sum() is order-dependent on
+  # permutation-tied contribution vectors (pivot.py's own header: found and fixed FIVE times on
+  # the Python side). breakdown_number()/.is_degenerate_pair()/fragility()'s concentration
+  # computations are structurally identical margin sums but never got the same fix. Confirmed
+  # directly: on this adversarial fixture (one huge value + many tiny ones, two period orderings
+  # of the identical multiset), plain sum() disagrees between the two orderings (sum1 !=
+  # sum2 below) while .fsum() -- now used by breakdown_number() -- does not.
+  set.seed(7)
+  n <- 50
+  base_c <- c(1e6, rexp(n - 1, rate = 1 / 1e-3))
+  perm <- sample(n)
+  w <- rep(1, n)
+  la <- rep(0, n)
+  lb1 <- base_c
+  lb2 <- base_c[perm]
+  expect_false(identical(sum(lb1), sum(lb2)))  # confirms this fixture genuinely stresses order
+  r1 <- breakdown_number(la, lb1, w)
+  r2 <- breakdown_number(la, lb2, w)
+  expect_identical(r1$k, r2$k)
 })

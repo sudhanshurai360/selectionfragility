@@ -46,6 +46,18 @@ test_that("compare()/.churn_base_rate() reject a bad n_perm, and a fractional on
   expect_equal(r_frac$churn_base_rate, r_int$churn_base_rate)
 })
 
+test_that("compare()/.churn_base_rate() reject a bad seed with a worded error, not a raw base-R error that aborts the whole call (5-lens round, 2026-11-18)", {
+  # REGRESSION: seed was the one parameter in .churn_base_rate() passed straight into set.seed()
+  # with no local guard, unlike n_perm (same fix commit, see above) -- a bad seed reached a raw,
+  # unworded "supplied seed is not a valid integer" error from base R's set.seed() itself, and
+  # since this call site (unlike the MCS call just above it in compare()) isn't wrapped in
+  # tryCatch, it aborted the whole compare() call rather than degrading gracefully.
+  pc <- make_prev_curr()
+  expect_error(compare(pc$prev, pc$curr, seed = NA), "single non-negative integer")
+  expect_error(compare(pc$prev, pc$curr, seed = c(1, 2)), "single non-negative integer")
+  expect_error(compare(pc$prev, pc$curr, seed = -1), "single non-negative integer")
+})
+
 test_that("compare() rejects non-loss_panel input and mismatched model sets", {
   pc <- make_prev_curr()
   expect_error(compare(list(a = 1), pc$curr), "loss_panel objects")

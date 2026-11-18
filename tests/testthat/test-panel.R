@@ -85,6 +85,27 @@ test_that("weights rejects a logical vector instead of silently coercing TRUE/FA
   expect_error(loss_panel(L, weights = lw), "not logical")
 })
 
+test_that("weights reject a magnitude that can overflow sum(weights) to Inf (5-lens round, 2026-11-18)", {
+  # REGRESSION: a weight that is individually finite/non-negative (e.g. 1e308) could still make
+  # sum(weights) overflow to Inf inside stats::weighted.mean(), producing NaN for every model's
+  # mean loss, which pooled_winner() then fed into sort()'s NA-dropping default to silently
+  # return NA_character_ as the "champion" -- with no error anywhere. loss_panel() now caps
+  # weight magnitude the same way it already caps loss magnitude.
+  L <- list(a = c(1, 2, 3), b = c(2, 3, 1))
+  expect_error(loss_panel(L, weights = rep(1e308, 3)), "must not exceed")
+  expect_no_error(loss_panel(L, weights = rep(1e50, 3)))
+})
+
+test_that("labels reject NA/NULL -- a lone NA label used to silently defeat compare()'s reversed-argument guard (5-lens round, 2026-11-18)", {
+  # REGRESSION: an NA label passed silently as long as it wasn't duplicated, but NA %in% x is
+  # always FALSE, so an NA label is "unique" by construction -- defeating compare()'s
+  # reversed-argument guard (which relies on label-set matching) by making a genuinely-missing
+  # period look like a genuinely-new one instead. Reachable via load_loss_panel() too, since a
+  # JSON "labels" array can contain null.
+  L <- list(a = c(1.1, 2.3, 1.5, 4.2, 5.9), b = c(2.2, 3.1, 1.9, 4.8, 5.1))
+  expect_error(loss_panel(L, labels = c(NA, "2", "3", "4", "5")), "must not contain NA/NULL")
+})
+
 test_that("save_loss_panel / load_loss_panel round-trips exactly", {
   L <- list(a = c(1.1, 2.2, 3.3, 0.9, 5.5), b = c(1.0, 2.0, 3.5, 4.0, 5.0))
   p <- loss_panel(L)

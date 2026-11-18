@@ -124,6 +124,22 @@ NULL
   if (all(w == 0)) {
     stop("weights are all zero; at least one period must carry positive weight.", call. = FALSE)
   }
+  if (any(w > .MAX_ABS_LOSS)) {
+    # STRICT-AUDIT FIX (2026-11-18): unlike losses, which have had this exact cap since the first
+    # hardening round, weights had none -- each individual weight was only checked for finite/
+    # non-negative, so a weight that is, by itself, "valid" (e.g. 1e308) could still make sum(w)
+    # overflow to Inf inside stats::weighted.mean(), producing Inf/Inf = NaN for every model's
+    # mean loss. pooled_winner() then fed that into sort(), whose default na.last=NA silently
+    # drops all-NaN entries, returning NA_character_ as the "champion" with NO error or warning
+    # -- which then cascaded into wildly misattributed downstream errors (e.g. decision_breakdown()
+    # blaming a "length mismatch" and resolution_report() reporting "T=0" on a real T=2 panel,
+    # because L[[NA_character_]] silently returns NULL rather than erroring).
+    stop(sprintf(
+      paste0("weights must not exceed %.0e in magnitude -- a weight this large can make ",
+             "sum(weights) overflow to Inf and silently corrupt every weighted statistic downstream."),
+      .MAX_ABS_LOSS
+    ), call. = FALSE)
+  }
   w
 }
 
@@ -266,6 +282,18 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
       ), call. = FALSE)
     }
     str_labels <- as.character(final_labels)
+    if (anyNA(str_labels)) {
+      # STRICT-AUDIT FIX (2026-11-18): an NA/null label used to pass silently as long as it
+      # wasn't duplicated -- but labels are compare()'s one identity key for telling a new
+      # period from an old one, and an NA label is unique by %in%-matching semantics (NA %in% x
+      # is always FALSE), so a single NA defeats compare()'s reversed-argument safety guard:
+      # that period gets miscounted as "new" rather than "missing," n_new becomes nonzero, and
+      # the guard's n_new==0 precondition is never met -- compare() then confidently prints a
+      # fully-formed but causally backwards change_report instead of erroring on the swapped
+      # arguments. Reachable through the one file-I/O boundary too: load_loss_panel() accepted a
+      # JSON "labels" array containing null without complaint. Reject outright here instead.
+      stop("labels must not contain NA/NULL values -- every period needs a real identity for compare() to match on.", call. = FALSE)
+    }
     if (length(unique(str_labels)) != T) {
       dupes <- sort(unique(str_labels[duplicated(str_labels)]))
       stop(sprintf(

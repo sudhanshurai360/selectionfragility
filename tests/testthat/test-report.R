@@ -119,3 +119,37 @@ test_that("report()'s seed parameter actually threads through to the MCS bootstr
   # pivot_agreement()) must equal the user's seed with nothing left over.
   expect_equal(seen, rep(77, 3))
 })
+
+test_that("report() explains a not-identified + resolved panel instead of printing a bare, unqualified contradiction (5-lens round, 2026-11-18)", {
+  # REGRESSION: VERDICT only had a caveat for the OPPOSITE direction (identified but unresolved,
+  # "identification alone does not mean the edge is powered"). "Not identified" + "resolved" on
+  # the same panel is not a contradiction -- VERDICT (the MCS bootstrap, R2) and RESOLUTION (a
+  # power check against the binding rival alone, R1) answer different questions -- but a
+  # one-screen reader seeing only the top two sections had nothing telling them that.
+  set.seed(99)
+  Tn <- 12
+  make <- function(base, sd) pmax(base + rnorm(Tn, 0, sd), 0.01)
+  L <- list(arima = make(1.0, 0.12), ets = make(1.08, 0.12), naive = make(1.3, 0.1), lgbm = make(0.98, 0.12))
+  panel <- loss_panel(L, labels = paste0("Q", 1:Tn))
+  out <- report(panel)
+  expect_match(out, "not identified")
+  expect_match(out, "resolved")
+  expect_match(out, "VERDICT and\\s*\\n\\s*RESOLUTION answer different questions and can legitimately disagree")
+})
+
+test_that("report() explains a resolved + Prop-2.2-certifies-non-significance panel instead of printing a bare, unqualified contradiction (5-lens round, 2026-11-18)", {
+  # REGRESSION: RESOLUTION's "resolved" and PIVOT's "certifies non-significance" can co-occur on
+  # the identical rival pair (different variance conventions/critical values -- see R/report.R),
+  # but PIVOT printed nothing connecting the two, reading as a flat self-contradiction.
+  set.seed(51)
+  Tn <- 40
+  v <- 0.075
+  champ <- rnorm(Tn, 0, 0.01)
+  rival <- champ
+  idx <- sample(Tn, 3)
+  rival[idx] <- rival[idx] + v
+  panel <- loss_panel(list(champ = 1 + champ, rival = 1 + rival))
+  out <- report(panel)
+  expect_match(out, "certifies non-significance")
+  expect_match(out, "not a contradiction")
+})

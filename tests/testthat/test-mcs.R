@@ -38,6 +38,32 @@ test_that("mcs() rejects a non-scalar elimination with a worded message, not a r
   expect_error(mcs(L, elimination = NA), "single string")
 })
 
+test_that("mcs() rejects a bad seed with a worded error, not a raw base-R error (5-lens round, 2026-11-18)", {
+  # REGRESSION: seed was the one parameter here passed straight into set.seed() with no local
+  # guard, unlike B/block (same fix commit) -- a bad seed reached a raw, unworded "supplied seed
+  # is not a valid integer" error from base R's set.seed() itself.
+  L <- matrix(c(1, 2, 3, 4, 2, 3, 4, 5), ncol = 2)
+  expect_error(mcs(L, seed = NA), "single non-negative integer")
+  expect_error(mcs(L, seed = c(1, 2)), "single non-negative integer")
+  expect_error(mcs(L, seed = -1), "single non-negative integer")
+})
+
+test_that("mcs() rejects a data.frame with a non-numeric column instead of a raw crash or silent list-coercion (5-lens round, 2026-11-18)", {
+  # REGRESSION: mcs()'s documented contract is "a numeric matrix," but nothing stopped a caller
+  # from passing a data.frame straight through -- as.matrix()/storage.mode<- ran unconditionally
+  # with no check that the original columns were numeric, unlike loss_panel()'s own data.frame
+  # constructor which explicitly rejects this. A length-1-per-row list-column was silently
+  # accepted as ordinary numeric data; a length>1-per-row list-column crashed with a raw
+  # "'list' object cannot be coerced to type 'double'" error instead of a worded one.
+  df1 <- data.frame(a = 1:8, b = c(1, 2, 1, 2, 1, 2, 1, 2) + 0.1)
+  df1$c <- I(list(10, 20, 30, 40, 50, 60, 70, 80))
+  expect_error(mcs(df1, B = 20, seed = 1), "not numeric")
+  df2 <- data.frame(a = 1:8, b = c(1, 2, 1, 2, 1, 2, 1, 2) + 0.1)
+  df2$c <- I(list(c(1, 2), c(3, 4), c(5, 6), c(7, 8), c(9, 10), c(11, 12), c(13, 14), c(15, 16)))
+  expect_error(mcs(df2, B = 20, seed = 1), "not numeric")
+  expect_no_error(mcs(data.frame(a = c(1, 2, 1, 2, 1, 2, 1, 2), b = c(1, 2, 1, 2, 1, 2, 1, 2) + 0.1), B = 20, seed = 1))
+})
+
 test_that("model_confidence_set() wraps mcs() and returns model names", {
   L1 <- matrix(rep(c(1.0, 2.0, 3.0, 1.1, 2.1, 3.1, 0.9, 1.9, 2.9, 1.0, 2.0, 3.0), 3), ncol = 3, byrow = TRUE)
   Ld <- list(a = L1[, 1], b = L1[, 2], c = L1[, 3])

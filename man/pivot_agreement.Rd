@@ -26,6 +26,22 @@ Fraction of \code{frac}*T-sized subsamples of periods (without replacement) that
 pivotal period as the full sample. NOTE: uses R's own RNG, so results are not bit-for-bit
 identical to the Python package's numpy-based subsampling on the same seed.
 }
+\section{Limitation}{
+ this statistic is weaker evidence than it may appear. Subsampling draws
+WITHOUT replacement from the SAME already-realized loss values (no new noise is drawn), so
+a period's per-period contribution is identical at every kept position; dropping other
+periods can never create a new maximum that exceeds the full sample's actual top contributor.
+\code{sub_pivot == full_pivot} whenever the top period happens to survive into the subsample,
+which happens with probability close to \code{frac} BY CONSTRUCTION of this sampling scheme,
+largely independent of whether the panel's true pivot is robust or a noise artifact.
+Measured directly (2026-11-18): on both a maximally-robust panel (one dominant shock,
+\code{concentration_share} ~0.99) and a maximally-fragile one (evenly spread margin,
+\code{concentration_share} ~0.11), \code{pivot_agreement()} returns ~\code{frac} (the default 0.8) in BOTH
+cases -- the number tracks the \code{frac} knob, not the panel's actual concentration structure.
+Treat it as a weak signal at best; \code{concentration_share()} is the more informative diagnostic
+for "is this pivot a real feature of the data."
+}
+
 \examples{
 # Same shock-year panel as concentration_share(): is the single-period pivot stable
 # under subsampling, or an artifact of that one period? This is a resampling-based
