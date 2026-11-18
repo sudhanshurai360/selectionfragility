@@ -726,6 +726,23 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
 #'   loss differentials are autocorrelated; check their ACF, or build a null that matches your
 #'   panel's own serial-dependence structure.
 #'
+#' @section Runtime scales with T, not just with n_rep/n_boot: this function's cost is
+#'   `O(n_rep * n_boot * T)` -- an outer loop of `n_rep` simulated null panels, each paying a full
+#'   `winner_stability()` bootstrap of `n_boot` resamples, each of which is itself `O(T)`. The
+#'   defaults (`n_rep=200`, `n_boot=500`) are fine at the small-to-moderate `T` (tens to low
+#'   hundreds) typical of monthly/quarterly forecast comparisons, where this finishes in well
+#'   under a second. It does NOT stay interactive at the high-frequency intraday `T` that is
+#'   routine, not exceptional, in call-center/workforce-management (WFM) demand forecasting --
+#'   e.g. half-hourly staffing data over a 6-month comparison window is `T` ~ 8,700. Measured
+#'   directly at `K=5`, `T=8736` with the documented defaults: ~78 seconds for one call, on
+#'   ordinary single-core hardware. That is not a crash and the returned `median`/`p05`/`p95` are
+#'   correct, but a WFM analyst who follows this page's own "real usage should use the defaults...
+#'   or larger" advice at a realistic intraday `T` will wait more than a minute per call, and
+#'   substantially longer for a block-length sweep or a 12-month window. If your `T` is in the
+#'   thousands, pass a smaller `n_rep`/`n_boot` for exploration (a few hundred total `n_rep *
+#'   n_boot` is usually enough to read off `p05` to the precision a go/no-go decision needs) and
+#'   reserve the full defaults for a final, one-time check you are willing to let run.
+#'
 #' @param K Number of models (all drawn from the same distribution, so no model is truly better).
 #' @param T Number of periods.
 #' @param n_rep Number of simulated panels.

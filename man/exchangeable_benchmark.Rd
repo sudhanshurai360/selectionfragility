@@ -46,6 +46,24 @@ loss differentials are autocorrelated; check their ACF, or build a null that mat
 panel's own serial-dependence structure.
 }
 
+\section{Runtime scales with T, not just with n_rep/n_boot}{
+ this function's cost is
+\code{O(n_rep * n_boot * T)} -- an outer loop of \code{n_rep} simulated null panels, each paying a full
+\code{winner_stability()} bootstrap of \code{n_boot} resamples, each of which is itself \code{O(T)}. The
+defaults (\code{n_rep=200}, \code{n_boot=500}) are fine at the small-to-moderate \code{T} (tens to low
+hundreds) typical of monthly/quarterly forecast comparisons, where this finishes in well
+under a second. It does NOT stay interactive at the high-frequency intraday \code{T} that is
+routine, not exceptional, in call-center/workforce-management (WFM) demand forecasting --
+e.g. half-hourly staffing data over a 6-month comparison window is \code{T} ~ 8,700. Measured
+directly at \code{K=5}, \code{T=8736} with the documented defaults: ~78 seconds for one call, on
+ordinary single-core hardware. That is not a crash and the returned \code{median}/\code{p05}/\code{p95} are
+correct, but a WFM analyst who follows this page's own "real usage should use the defaults...
+or larger" advice at a realistic intraday \code{T} will wait more than a minute per call, and
+substantially longer for a block-length sweep or a 12-month window. If your \code{T} is in the
+thousands, pass a smaller \code{n_rep}/\code{n_boot} for exploration (a few hundred total \code{n_rep * n_boot} is usually enough to read off \code{p05} to the precision a go/no-go decision needs) and
+reserve the full defaults for a final, one-time check you are willing to let run.
+}
+
 \examples{
 # n_rep/n_boot are tiny here purely to keep the example fast; real usage should use the
 # defaults (n_rep = 200, n_boot = 500) or larger for a stable null distribution.

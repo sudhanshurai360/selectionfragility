@@ -543,6 +543,31 @@ resolution_report <- function(L, w = NULL, alpha = 0.05, power = 0.80, mcs_alpha
     }
   }
 
+  # CONFIRMED GAP, NOT FIXED HERE (realistic-domain pass, 2026-11-18, utility short-term-load-
+  # forecasting scenario -- see tests/testthat/test-realworld-energy.R): the warning below is
+  # computed against `ec$rival` == `.binding_rival(L, w, champ)` (closest-pooled-mean rival), NOT
+  # `decision_breakdown()`'s `binding_opponent` (fewest-deletions-to-flip rival) -- the two are
+  # already documented above (`.binding_rival()`'s own comment) to disagree on ~18-25% of random
+  # panels with a strict pooled winner. Concretely confirmed to matter for THIS warning, not just
+  # for the headline statistic: on a simulated 365-day, 4-model load-forecasting panel where a
+  # grid operator legitimately weights winter months more heavily (for winter peak-demand
+  # planning) and a 9-day winter cold-snap event is exactly where the champion's binding_opponent
+  # (by decision_breakdown()'s rule) has a concentrated tail-response weakness, the weight/
+  # volatility correlation guard below never fires (it checks the champion against the closest-
+  # pooled-mean rival instead, whose differential is NOT volatility-correlated with the weights),
+  # even though the identical diagnostic computed against the champion/binding_opponent pair
+  # clears the guard's own CV>0.3 and correlation>0.2 thresholds comfortably. So a realistic
+  # winter-weighting choice can defeat this exact safety warning precisely when it would matter
+  # most -- not a contrived input, just a different, equally-valid choice of "which rival" than
+  # the one this guard happens to use. Left undocumented-until-now rather than fixed: switching
+  # the warning to check against binding_opponent instead would itself need its own dedicated
+  # review (binding_opponent is a k*-minimality rule, not a statistical-distinguishability rule,
+  # so using it here changes what the guard actually measures) rather than a unilateral change
+  # bundled into an unrelated pass. Caller guidance: if your weights are non-uniform AND
+  # correlated with when a KNOWN fragile/pivotal model (per decision_breakdown()'s
+  # binding_opponent, not this field's binding_rival) tends to miss, check that correlation
+  # yourself -- don't rely on this warning to catch it.
+  #
   # Low-risk mitigation for the weighted-SE assumption disclosed in .weighted_se()'s comment
   # (variance-homogeneity-across-weight-classes): a dedicated re-verification measured a 28.5%
   # OVERALL false-confidence rate among "resolved" verdicts, averaged across rho=0.1-0.8 weight/

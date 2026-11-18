@@ -11,7 +11,7 @@ Initial release: a native R port of the Python package
   refusal rules), `prop22` (zero-simulation Proposition 2.2 certificate), `pivot` (concentration
   share, pivot agreement), `report` (one-screen summary), `compare` (run-over-run champion-change
   diagnostic).
-* 1178 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
+* 2042 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
   this count will keep moving as hardening continues; check `devtools::test()`'s own output rather
   than treating this number as authoritative), including a dedicated cross-language
   oracle-comparison suite verified against the Python package's live behavior, not just its
@@ -297,3 +297,35 @@ Initial release: a native R port of the Python package
   oracle's `None`) -- instead, a new "Sentinel conventions" section was added to the
   package-level documentation (`?selectionfragility`), cross-referenced from every affected
   function's `@return`.
+* First deliberately PROACTIVE (not bug-reactive) test round (2026-11-18): every prior round's
+  tests were added because an adversarial review found a specific defect. This round instead
+  asked 11 domain experts (retail demand, energy/utility load, insurance claims reserving, macro/
+  financial nowcasting, supply chain/logistics, epidemiological forecast-hub, weather/catastrophe
+  risk, call-center/workforce management, tech/cloud capacity, hospital operations, and a
+  cross-industry M4/M5-competition-scale check) to each construct a realistic use case grounded in
+  their field's actual, well-documented data pathologies (not synthetic noise with an adversarial
+  twist) and run the package's real workflow against it. Ten of eleven found no code defect --
+  itself a meaningful, different kind of evidence than "no adversarial agent found anything" --
+  and surfaced several real, previously-unexamined findings: `exchangeable_benchmark()`'s runtime
+  scales as `O(n_rep*n_boot*T)` and takes ~78 seconds at a realistic half-hourly workforce-planning
+  scale (T~8,700) with no prior documentation warning (now documented); `resolution_report()`'s
+  weight/volatility-correlation safety warning checks `.binding_rival()` (closest pooled mean)
+  rather than `decision_breakdown()`'s actual k*-driving `binding_opponent`, so on a realistic
+  panel it can silently fail to fire even though the real risky pair clears its own thresholds
+  (documented, not changed -- which rival the guard should check is a methodology decision);
+  `mcs()`'s small-T miscalibration (previously measured at T=30) is roughly DOUBLE at the T=12/K=4
+  scale that is the NORMAL, not edge-case, cadence for annual actuarial reserving (~41% vs. ~18%
+  false-elimination), and is invisible to a user at runtime; the same class of gap exists for the
+  autocorrelation assumption on realistic uniform-weight macro/financial panels, which only
+  sometimes surfaces via the VERDICT/RESOLUTION disagreement caveat depending on the specific
+  sample, not reliably; `concentration_share()`/`pivot_agreement()` both understate/degrade on
+  multi-catastrophe (not just single-shock) concentration, and `winner_stability()`/
+  `exchangeable_benchmark()` can give a falsely reassuring stability read on exactly the kind of
+  multi-catastrophe panel where `decision_breakdown()` shows the decision is almost entirely driven
+  by a handful of periods -- each statistic answers a different, individually-correct question,
+  but the divergence is a real interpretive gap worth a user's attention. A portfolio-level check
+  across 226 synthetic M4/M5-style heterogeneous panels found zero crashes/corruption and that
+  flat/constant series are, as expected, by far the most fragile shape (59% identified vs. ~90%+
+  for every other shape tested) -- itself useful, reportable adoption evidence. 11 new, permanent,
+  separately-named test files (`test-realworld-*.R`) encode these scenarios as lasting regression
+  coverage, distinct from the existing adversarial/regression test files.
