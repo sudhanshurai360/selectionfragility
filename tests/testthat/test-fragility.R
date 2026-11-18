@@ -365,3 +365,26 @@ test_that("exchangeable_benchmark()'s n_rep is coerced/validated like n_boot=, n
   expect_error(exchangeable_benchmark(K = 3, T = 10, n_rep = NA, n_boot = 5), "n_rep must be a single positive integer")
   expect_no_error(exchangeable_benchmark(K = 3, T = 10, n_rep = 20, n_boot = 20, seed = 1))
 })
+
+test_that("exchangeable_benchmark()'s T is coerced/validated like K, not silently truncated or crashed on (strict-regression round, 2026-11-18)", {
+  # REGRESSION: T is K's identical sibling (same "how big is this problem" role, same signature)
+  # but never got a guard, even after K and n_rep both did. T=-5/NA/"abc" crashed inside base
+  # rep()/rnorm() with a raw "invalid 'times' argument" error; T=10.7 didn't error at all -- it
+  # silently truncated to T=10 with no warning.
+  expect_error(exchangeable_benchmark(K = 3, T = -5, n_rep = 2, n_boot = 5), "T must be a single positive integer")
+  expect_error(exchangeable_benchmark(K = 3, T = NA, n_rep = 2, n_boot = 5), "T must be a single positive integer")
+  expect_error(exchangeable_benchmark(K = 3, T = "abc", n_rep = 2, n_boot = 5), "T must be a single positive integer")
+  expect_error(exchangeable_benchmark(K = 3, T = 0, n_rep = 2, n_boot = 5), "T must be a single positive integer")
+  expect_no_error(exchangeable_benchmark(K = 3, T = 10, n_rep = 5, n_boot = 5, seed = 1))
+})
+
+test_that("decision_breakdown() rejects an a= that isn't one of the models in L, instead of a misattributed length-mismatch error (strict-regression round, 2026-11-18)", {
+  # REGRESSION: decision_breakdown(L, a="typo") used to fall through to L[["typo"]] -> NULL ->
+  # as.numeric(NULL) -> length-0 la, which breakdown_number() then rejected with a length-
+  # MISMATCH error blaming la/lb/w -- true as far as it goes, but misattributed: the real problem
+  # is that a="typo" isn't one of names(L) at all.
+  L <- list(ar1 = c(1, 1, 1, 1, 1, 1), nbeats = c(0.5, 0.5, 0.5, 0.5, 0.5, 5.0))
+  expect_error(decision_breakdown(L, a = "doesnotexist"), "not one of the models")
+  expect_error(decision_breakdown(L, a = NA), "not one of the models")
+  expect_no_error(decision_breakdown(L, a = "ar1"))
+})

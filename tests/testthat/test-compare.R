@@ -26,6 +26,26 @@ test_that("compare() matches the Python oracle on deterministic fields", {
   expect_true(r$churn_base_rate >= 0 && r$churn_base_rate <= 1)
 })
 
+test_that("compare()/.churn_base_rate() reject a bad n_perm, and a fractional one no longer returns a silently wrong statistic (strict-regression round, 2026-11-18)", {
+  # REGRESSION: n_perm never got the overflow-safe coerce-and-check treatment its siblings
+  # n_boot/n_rep/B all received elsewhere in the package -- NA/Inf/non-numeric reached a raw,
+  # unworded crash. Worse: a FRACTIONAL n_perm (e.g. 7.9) used to run seq_len(n_perm) (floor(n_perm)
+  # = 7 real iterations) but divide by the ORIGINAL untruncated 7.9, mismatching numerator and
+  # denominator and silently returning a wrong statistic. The fix coerces n_perm to an integer
+  # ONCE and reuses that same coerced value for both the loop and the final division (matching
+  # the established truncate-consistently convention n_boot/B/block already use elsewhere in the
+  # package) -- a fractional n_perm is accepted, not rejected, but numerator and denominator can
+  # no longer disagree: confirm n_perm=7.9 and n_perm=7 now give IDENTICAL results at a fixed seed.
+  pc <- make_prev_curr()
+  expect_error(compare(pc$prev, pc$curr, n_perm = NA, seed = 2), "single positive integer")
+  expect_error(compare(pc$prev, pc$curr, n_perm = "x", seed = 2), "single positive integer")
+  expect_error(compare(pc$prev, pc$curr, n_perm = Inf, seed = 2), "single positive integer")
+  expect_error(compare(pc$prev, pc$curr, n_perm = 0, seed = 2), "single positive integer")
+  r_frac <- compare(pc$prev, pc$curr, n_perm = 7.9, seed = 2)
+  r_int <- compare(pc$prev, pc$curr, n_perm = 7, seed = 2)
+  expect_equal(r_frac$churn_base_rate, r_int$churn_base_rate)
+})
+
 test_that("compare() rejects non-loss_panel input and mismatched model sets", {
   pc <- make_prev_curr()
   expect_error(compare(list(a = 1), pc$curr), "loss_panel objects")

@@ -133,10 +133,10 @@ pivot_agreement <- function(L, w = NULL, seed = 0, n_boot = 200, frac = 0.8) {
   if (n_sub < 3 || n_sub >= T) return(NA)
 
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
-  set.seed(seed)
   on.exit({
     if (is.null(old_seed)) { if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv) } else assign(".Random.seed", old_seed, envir = .GlobalEnv)
   }, add = TRUE)
+  set.seed(seed)
   agree <- 0L; valid <- 0L
   for (b in seq_len(n_boot)) {
     idx <- sort(sample.int(T, size = n_sub, replace = FALSE))

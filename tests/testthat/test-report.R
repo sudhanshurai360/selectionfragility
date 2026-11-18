@@ -109,10 +109,13 @@ test_that("report()'s seed parameter actually threads through to the MCS bootstr
   }, add = TRUE)
   report(panel, seed = 77)
   seen <- get(".seen_seeds_test_report_seed", envir = globalenv())
-  # Exactly two of the observed set.seed() calls must be 77 (VERDICT's .run_mcs_arch() call and
-  # RESOLUTION's resolution_report(mcs_seed=) -> identified() call); a third, unrelated call at
-  # seed=0 comes from PIVOT's pivot_agreement(L, w, seed=0), which is intentionally independent of
-  # the user's seed= argument and must not be mistaken for a leak of the default.
-  expect_equal(sum(seen == 77), 2)
-  expect_true(0 %in% seen)
+  # STRICT-AUDIT FIX (2026-11-18): a prior version of this test asserted exactly 2 of 3 set.seed()
+  # calls equal the user's seed, with a THIRD call at seed=0 from PIVOT's pivot_agreement(L, w,
+  # seed=0) treated as "intentionally independent" -- that was itself the bug: pivot_agreement()
+  # is just as RNG-dependent (a 200-rep bootstrap) as the two MCS calls, so hardcoding its seed
+  # silently defeated the seed-sensitivity check seed= exists for. pivot_agreement() is now
+  # threaded report()'s own seed, so ALL THREE internal set.seed() calls (VERDICT's
+  # .run_mcs_arch(), RESOLUTION's resolution_report(mcs_seed=) -> identified(), and PIVOT's
+  # pivot_agreement()) must equal the user's seed with nothing left over.
+  expect_equal(seen, rep(77, 3))
 })

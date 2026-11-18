@@ -26,6 +26,18 @@ test_that("mcs() validates alpha, B ceiling, loss magnitude, and finiteness", {
   expect_error(mcs(L, elimination = "bogus"), "studentized.*raw")
 })
 
+test_that("mcs() rejects a non-scalar elimination with a worded message, not a raw base-R error (strict-regression round, 2026-11-18)", {
+  # REGRESSION: elimination sat in the same validation block as alpha/B/block (all hardened for
+  # length/type in 5897e0c) but never got the same length-1 guard -- elimination=character(0) or
+  # a length-2 vector reached the bare `!elimination %in% c(...)` check directly, producing a raw
+  # "argument is of length zero" / "the condition has length > 1" error instead of this package's
+  # own worded message, for both mcs() and model_confidence_set() (which forwards unchecked).
+  L <- matrix(c(1, 2, 3, 4, 2, 3, 4, 5), ncol = 2)
+  expect_error(mcs(L, elimination = character(0)), "single string")
+  expect_error(mcs(L, elimination = c("studentized", "raw")), "single string")
+  expect_error(mcs(L, elimination = NA), "single string")
+})
+
 test_that("model_confidence_set() wraps mcs() and returns model names", {
   L1 <- matrix(rep(c(1.0, 2.0, 3.0, 1.1, 2.1, 3.1, 0.9, 1.9, 2.9, 1.0, 2.0, 3.0), 3), ncol = 3, byrow = TRUE)
   Ld <- list(a = L1[, 1], b = L1[, 2], c = L1[, 3])

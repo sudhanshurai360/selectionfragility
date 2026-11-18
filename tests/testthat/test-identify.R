@@ -125,3 +125,16 @@ test_that("mcs_size()/identified() reject out-of-int32 reps and block_size with 
   expect_error(mcs_size(L, reps = 3e9), "single integer >= 2")
   expect_error(mcs_size(L, block_size = 3e9), "single non-negative integer")
 })
+
+test_that("mcs_size()/identified() reject a bad seed with a worded error, not a raw coercion warning (strict-regression round, 2026-11-18)", {
+  # REGRESSION: seed was the one scalar passed into MCS::MCSprocedure() that never got the same
+  # overflow-safe coerce-and-check treatment as reps/block_size (same fix commit as the test
+  # above) -- NA/out-of-range/non-scalar seed reached a raw "NAs introduced by coercion" warning
+  # from this file's own inline as.integer(seed), with validation entirely load-bearing on
+  # MCS::MCSprocedure()'s own internal check continuing to exist in its current form.
+  L <- list(a = c(1.0, 1.1, 0.9, 1.0), b = c(2.0, 2.1, 1.9, 2.0))
+  expect_error(mcs_size(L, seed = NA), "single non-negative integer")
+  expect_error(mcs_size(L, seed = 3e9), "single non-negative integer")
+  expect_error(mcs_size(L, seed = c(1, 2)), "single non-negative integer")
+  expect_error(mcs_size(L, seed = -1), "single non-negative integer")
+})

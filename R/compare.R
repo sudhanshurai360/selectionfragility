@@ -53,17 +53,32 @@ print.change_report <- function(x, ...) {
 
 #' @keywords internal
 .churn_base_rate <- function(L, w, n_perm = 400, seed = 0) {
-  if (n_perm <= 0) stop(sprintf("n_perm must be a positive integer; got %s.", n_perm), call. = FALSE)
+  # STRICT-AUDIT FIX (2026-11-18): n_perm never got the overflow-safe coerce-and-check treatment
+  # its siblings n_boot/n_rep/B all received elsewhere in the package (including n_rep, fixed in
+  # this exact round). The old `if (n_perm <= 0)` let NA/Inf/character through to crash with a
+  # raw, unworded error, and -- worse -- let a FRACTIONAL n_perm (e.g. 7.9) through silently: the
+  # loop below truncated via seq_len(n_perm) to floor(n_perm) real iterations, but the final
+  # churn_base_rate divided by the ORIGINAL untruncated n_perm, mismatching numerator and
+  # denominator and returning a confidently wrong statistic with no warning. Reassigning n_perm
+  # to its coerced integer value HERE (reused below by both the loop and the final division) fixes
+  # the mismatch outright; a fractional n_perm is still accepted and truncated, matching the
+  # established convention n_boot/B/block already use, but numerator and denominator can no
+  # longer disagree.
+  n_perm_in <- n_perm; n_perm <- suppressWarnings(as.integer(n_perm))
+  if (length(n_perm) != 1 || is.na(n_perm) || n_perm <= 0) {
+    stop(sprintf("n_perm must be a single positive integer; got %s.",
+                  paste(format(n_perm_in), collapse = ", ")), call. = FALSE)
+  }
   models <- sort(names(L), method = "radix")
   M <- do.call(cbind, lapply(models, function(m) as.numeric(L[[m]])))  # T x K
   colnames(M) <- models
   obs_champ <- pooled_winner(stats::setNames(lapply(models, function(m) M[, m]), models), w)
 
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
-  set.seed(seed)
   on.exit({
     if (is.null(old_seed)) { if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv) } else assign(".Random.seed", old_seed, envir = .GlobalEnv)
   }, add = TRUE)
+  set.seed(seed)
 
   T <- nrow(M)
   mean_w <- mean(w)

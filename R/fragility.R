@@ -410,7 +410,18 @@ decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
   L <- .as_loss_dict(L)
   T <- .validate_losses(L, w)
   w <- if (is.null(w)) rep(1, T) else as.numeric(w)
-  if (is.null(a)) a <- pooled_winner(L, w)
+  if (is.null(a)) {
+    a <- pooled_winner(L, w)
+  } else if (length(a) != 1 || is.na(a) || !(a %in% names(L))) {
+    # STRICT-AUDIT FIX (2026-11-18): decision_breakdown(L, a="typo") used to fall straight through
+    # to L[["typo"]] -> NULL -> as.numeric(NULL) -> a length-0 `la`, which breakdown_number() then
+    # rejected with a length-MISMATCH error blaming la/lb/w -- true as far as it goes, but
+    # misattributed: the real problem is that `a` isn't one of names(L) at all. Same failure
+    # class this package's non-numeric-weights fix exists to prevent (see test-fragility.R):
+    # don't let a caller debug the wrong thing.
+    stop(sprintf("decision_breakdown(): a='%s' is not one of the models in L (%s).",
+                  paste(format(a), collapse = ", "), paste(names(L), collapse = ", ")), call. = FALSE)
+  }
   la <- as.numeric(L[[a]])
   best <- NULL  # list(k, opponent, removed)
   ties <- character(0)
@@ -539,10 +550,10 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
     return(list(stability = NaN, freq = stats::setNames(rep(1 / length(L), length(L)), names(L))))
   }
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
-  set.seed(seed)
   on.exit({
     if (is.null(old_seed)) { if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv) } else assign(".Random.seed", old_seed, envir = .GlobalEnv)
   }, add = TRUE)
+  set.seed(seed)
   counts <- stats::setNames(rep(0L, length(L)), names(L))
   for (b in seq_len(n_boot)) {
     idx <- .block_resample_idx(T, block, circular = circular)
@@ -582,6 +593,18 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
 #' eb$median  # typical winner_stability() under "no model is really better"
 exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL, seed = 0, circular = TRUE) {
   if (K < 2) stop(sprintf("exchangeable_benchmark(): need at least 2 models; got K=%s.", K), call. = FALSE)
+  # STRICT-AUDIT FIX (2026-11-18): T is K's identical sibling here -- same "how big is this
+  # problem" role, same signature -- but never got a guard, even after K and n_rep (above/below)
+  # both did. T=-5/NA/"abc" crashed inside base rep()/rnorm() with a raw "invalid 'times'
+  # argument" error; T=10.7 didn't error at all -- it silently truncated to T=10 (rnorm()
+  # truncates its n argument internally), changing the requested panel size with no warning,
+  # unlike n_rep/n_boot/block which are all explicitly coerced with a worded error.
+  T_in <- T
+  T <- suppressWarnings(as.integer(T))
+  if (length(T) != 1 || is.na(T) || T < 1) {
+    stop(sprintf("exchangeable_benchmark(): T must be a single positive integer; got %s.",
+                  paste(format(T_in), collapse = ", ")), call. = FALSE)
+  }
   # n_rep never got the same as.integer()+is.na() coercion/guard n_boot (two lines below, and in
   # winner_stability()) already has -- a sibling gap found by a strict full-history audit. Without
   # it, n_rep=0 or a fractional 0<n_rep<1 silently returned list(median=NA, p05=NA, p95=NA) (empty

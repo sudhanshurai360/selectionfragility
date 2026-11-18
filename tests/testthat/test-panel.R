@@ -74,6 +74,17 @@ test_that("weights rejects a factor instead of silently using level codes (cross
   expect_error(loss_panel(L, weights = fw), "not a factor")
 })
 
+test_that("weights rejects a logical vector instead of silently coercing TRUE/FALSE -> 1/0 (strict-regression round, 2026-11-18)", {
+  # REGRESSION: every model-column constructor in this file (.from_list, .from_data_frame,
+  # .from_matrix) already rejects a logical column with this exact rationale -- a flag/indicator
+  # column silently coerced to 1/0 and crowned a model with no warning. .validate_weights() carries
+  # the identical risk but never got the sibling is.logical() guard: a logical weights vector used
+  # to silently become a 0/1 numeric weight vector with zero warning.
+  L <- list(a = c(1.1, 2.3, 1.5, 4.2, 5.9), b = c(2.2, 3.1, 1.9, 4.8, 5.1))
+  lw <- c(TRUE, FALSE, TRUE, TRUE, FALSE)
+  expect_error(loss_panel(L, weights = lw), "not logical")
+})
+
 test_that("save_loss_panel / load_loss_panel round-trips exactly", {
   L <- list(a = c(1.1, 2.2, 3.3, 0.9, 5.5), b = c(1.0, 2.0, 3.5, 4.0, 5.0))
   p <- loss_panel(L)

@@ -13,12 +13,15 @@ report(panel, alpha = 0.1, full = FALSE, seed = 0)
 
 \item{full}{Accepted for forward compatibility; unused (the default view is the compact one).}
 
-\item{seed}{RNG seed for the Model Confidence Set bootstrap. VERDICT/\code{fragility_read} run a
-bootstrap-based MCS, and on a genuinely borderline panel the identified/not-identified
-verdict can be seed-sensitive (see \code{?mcs}'s "Adversarial use" section for a quantified
-example: identification can swing ~37-42 percentage points across seed=1..300 on one
-borderline panel). Previously silently pinned to \code{seed=0} with no way to check; pass a few
-different seeds yourself near a borderline alpha if this matters for your use case.}
+\item{seed}{RNG seed for every bootstrap this function runs internally: the Model Confidence
+Set bootstrap behind VERDICT/\code{fragility_read}, and the \code{pivot_agreement()} subsample
+bootstrap behind PIVOT's \verb{pivot_agreement:} line. On a genuinely borderline panel the
+identified/not-identified verdict can be seed-sensitive (see \code{?mcs}'s "Adversarial use"
+section for a quantified example: identification can swing ~37-42 percentage points across
+seed=1..300 on one borderline panel), and \code{pivot_agreement()}'s own percentage is similarly
+seed-sensitive on a small/borderline panel. Previously silently pinned to \code{seed=0} with no
+way to check; pass a few different seeds yourself near a borderline alpha if this matters
+for your use case.}
 }
 \value{
 A character string of class \code{selectionfragility_report} (the report text) with a

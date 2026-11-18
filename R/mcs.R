@@ -100,6 +100,16 @@
 #' @export
 mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NULL) {
   if (is.null(elimination)) elimination <- getOption("selectionfragility.elimination", "studentized")
+  # STRICT-AUDIT FIX (2026-11-18): elimination sat in the same validation block as alpha/B/block
+  # (hardened for length/type in 5897e0c) but never got the same length-1 guard -- a length-0 or
+  # length>1 elimination reached a raw, unworded base-R error ("argument is of length zero" /
+  # "the condition has length > 1") from the bare %in% check below instead of this file's own
+  # worded message. model_confidence_set() forwards elimination unchecked, so this also closes
+  # the gap one layer up.
+  if (length(elimination) != 1 || !is.character(elimination) || is.na(elimination)) {
+    stop(sprintf("elimination must be a single string, 'studentized' or 'raw'; got %s.",
+                  paste(format(elimination), collapse = ", ")), call. = FALSE)
+  }
   if (!elimination %in% c("studentized", "raw")) {
     stop(sprintf("elimination must be 'studentized' or 'raw'; got '%s'.", elimination), call. = FALSE)
   }
@@ -189,10 +199,10 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
   }
 
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv)) get(".Random.seed", envir = .GlobalEnv) else NULL
-  set.seed(seed)
   on.exit({
     if (is.null(old_seed)) { if (exists(".Random.seed", envir = .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv) } else assign(".Random.seed", old_seed, envir = .GlobalEnv)
   }, add = TRUE)
+  set.seed(seed)
   boot <- lapply(seq_len(B), function(i) .block_resample_idx(T, block, circular = TRUE))
 
   surv <- seq_len(K)

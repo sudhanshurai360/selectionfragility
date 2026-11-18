@@ -125,6 +125,15 @@
   if (length(block_size) != 1 || is.na(block_size) || block_size < 0) {
     stop(sprintf("identified()/mcs_size(): block_size must be a single non-negative integer; got %s.", paste(format(block_size_in), collapse = ", ")), call. = FALSE)
   }
+  # STRICT-AUDIT FIX (2026-11-18): seed was the one scalar passed into MCS::MCSprocedure() that
+  # never got the same overflow-safe coerce-and-check treatment as reps/block_size above (same
+  # fix commit, same function) -- it reached a raw, unworded "NAs introduced by coercion" warning
+  # from this file's own inline as.integer(seed), with validation entirely load-bearing on
+  # MCS::MCSprocedure()'s own internal CheckScalar() continuing to exist in its current form.
+  seed_in <- seed; seed <- suppressWarnings(as.integer(seed))
+  if (length(seed) != 1 || is.na(seed) || seed < 0) {
+    stop(sprintf("identified()/mcs_size(): seed must be a single non-negative integer; got %s.", paste(format(seed_in), collapse = ", ")), call. = FALSE)
+  }
   M <- .to_matrix_sorted(L)
   models <- colnames(M)
   T_eff <- nrow(M)

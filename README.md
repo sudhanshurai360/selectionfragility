@@ -68,13 +68,19 @@ section before trusting a close "resolved" call).
 Function names and signatures are near-identical 1:1 with the Python package
 (`loss_panel()` ≈ `LossPanel.from_losses()`, `report()`, `decision_breakdown()`, `mcs_size()`,
 `identified()`, `compare()`, `pooled_winner()`), and the one-screen `report()` output is
-structured identically in both languages. Two things do **not** carry over:
+structured identically in both languages. Three things do **not** carry over:
 
 - **No `from_forecasts()` equivalent yet** — this port only takes an already-computed loss panel.
 - **Bootstrap-based numbers are not bit-for-bit identical across languages** — R's RNG and
   NumPy's RNG are different generators, so `winner_stability()`, the MCS bootstrap p-value, and
   `compare()`'s churn rate will not match exactly on "the same" seed. Compare conclusions, not
   decimals.
+- **`resolution_report()` can emit an R-only warning the Python original never raises** — when
+  weights are non-uniform and positively correlate with the per-period differential's volatility
+  while reporting `resolved=TRUE`, the R port `warning()`s (see `?resolution_report`'s
+  "Assumption" section); the Python original's `_weighted_se` documents the same understatement
+  risk in comments but does not act on it. A script meant to behave identically across both
+  languages may see this warning fire in R with nothing analogous in Python under the same inputs.
 
 Cite either implementation; they compute the same quantities.
 

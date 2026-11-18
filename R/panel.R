@@ -98,6 +98,19 @@ NULL
       T, paste(levels(w), collapse = ", ")
     ), call. = FALSE)
   }
+  if (is.logical(w)) {
+    # STRICT-AUDIT FIX (2026-11-18): every model-column constructor in this file (.from_list,
+    # .from_data_frame, and .from_matrix as its own dedicated fix) rejects a logical column with
+    # this exact rationale -- "a flag/indicator column... silently coerced TRUE/FALSE -> 1/0...
+    # crowned a model with no warning." .validate_weights() carries the identical risk (and its
+    # own factor guard above already frames factor-weights as "the same class of silent-wrong-
+    # answer bug") but was never given the sibling is.logical() guard -- a logical weights vector
+    # silently became a 0/1 numeric weight vector with zero warning.
+    stop(sprintf(
+      "weights must be a numeric vector of %d values (one per period), not logical (TRUE/FALSE); got %s.",
+      T, paste(w, collapse = ", ")
+    ), call. = FALSE)
+  }
   w <- suppressWarnings(as.numeric(w))
   if (length(w) != T) {
     stop(sprintf("weights must have length %d (one per period); got length %d.", T, length(w)), call. = FALSE)

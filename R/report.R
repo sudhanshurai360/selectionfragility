@@ -64,12 +64,15 @@
 #' @param panel A `loss_panel` object (not a raw list -- this function reads `$weights`/`$labels`).
 #' @param alpha Significance level for the Model Confidence Set.
 #' @param full Accepted for forward compatibility; unused (the default view is the compact one).
-#' @param seed RNG seed for the Model Confidence Set bootstrap. VERDICT/`fragility_read` run a
-#'   bootstrap-based MCS, and on a genuinely borderline panel the identified/not-identified
-#'   verdict can be seed-sensitive (see `?mcs`'s "Adversarial use" section for a quantified
-#'   example: identification can swing ~37-42 percentage points across seed=1..300 on one
-#'   borderline panel). Previously silently pinned to `seed=0` with no way to check; pass a few
-#'   different seeds yourself near a borderline alpha if this matters for your use case.
+#' @param seed RNG seed for every bootstrap this function runs internally: the Model Confidence
+#'   Set bootstrap behind VERDICT/`fragility_read`, and the `pivot_agreement()` subsample
+#'   bootstrap behind PIVOT's `pivot_agreement:` line. On a genuinely borderline panel the
+#'   identified/not-identified verdict can be seed-sensitive (see `?mcs`'s "Adversarial use"
+#'   section for a quantified example: identification can swing ~37-42 percentage points across
+#'   seed=1..300 on one borderline panel), and `pivot_agreement()`'s own percentage is similarly
+#'   seed-sensitive on a small/borderline panel. Previously silently pinned to `seed=0` with no
+#'   way to check; pass a few different seeds yourself near a borderline alpha if this matters
+#'   for your use case.
 #' @return A character string of class `selectionfragility_report` (the report text) with a
 #'   `print` method, so both `report(panel)` (auto-printed at the console) and
 #'   `print(report(panel))` display the formatted report; `cat(report(panel))` also works.
@@ -217,7 +220,13 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
       }
       lines <- c(lines, sprintf("  %s -- %s", period_txt, cert_txt))
       cs <- concentration_share(L, w)
-      pa <- pivot_agreement(L, w, seed = 0)
+      # Threaded from report()'s own seed= (STRICT-AUDIT FIX, 2026-11-18): this used to be
+      # hardcoded to seed=0 regardless of what the caller passed to report(), which silently
+      # defeated the seed-sensitivity check seed= exists for -- a caller following this file's
+      # own @param seed advice ("pass a few different seeds yourself") would see the PIVOT
+      # line's percentage never move, since pivot_agreement() is just as RNG-dependent (a
+      # 200-rep bootstrap) as the MCS identification check that seed= does correctly control.
+      pa <- pivot_agreement(L, w, seed = seed)
       lines <- c(lines, sprintf("  concentration_share: %s of the margin comes from the single largest-contribution period", .fmt_pct(cs)))
       if (!is.na(pa)) {
         lines <- c(lines, sprintf("  pivot_agreement: %s of subsamples name the same pivotal period", .fmt_pct(pa)))
