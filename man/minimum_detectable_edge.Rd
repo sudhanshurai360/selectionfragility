@@ -28,7 +28,15 @@ what to do instead (prefer \code{mcs()}/\code{model_confidence_set()}'s block bo
 and its binding rival sit at a comparable loss scale -- an extreme scale mismatch between
 them can produce a nonsensical, unbounded percentage (normalization is by the champion's
 own mean only); sanity-check this fraction yourself if your models' loss magnitudes differ
-by many orders of magnitude. In that same pathological regime this value can -- for specific
+by many orders of magnitude. The trigger is actually broader than "extreme scale mismatch":
+normalization divides by the champion's mean with a hard floor at 1e-12, so the SAME-scale,
+non-adversarial case of a champion mean that's merely small relative to its volatility (a
+skill score, a de-meaned metric, or simply two close/tied models -- this package's central
+use case) can also land near that floor, where a sub-measurement-precision input change
+(e.g. one weight shifted by 1e-9) swings this value by 10+ orders of magnitude between two
+superficially plausible-looking answers. Both answers are meaningless near this floor;
+sanity-check whenever your champion's mean is close to zero, not just when scales visibly
+differ. In that same pathological regime this value can -- for specific
 inputs, not as a general rule of the scale mismatch alone -- also differ numerically from the
 Python original by a small constant factor: confirmed reproducible, e.g. champion losses
 \code{c(1e-8, 3e-8, 3e-8)} against a rival \code{c(1e8, 1e8, 1e8)} gives R 1.0378 vs Python 2.5421 (a

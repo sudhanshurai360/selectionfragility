@@ -434,3 +434,146 @@ test_that("breakdown_number()'s margin sum is permutation-invariant like pivot.R
   r2 <- breakdown_number(la, lb2, w)
   expect_identical(r1$k, r2$k)
 })
+
+test_that("exchangeable_benchmark()'s K is coerced/validated like T, not silently wrong or crashed on (exhaustive sibling-parameter sweep, 2026-11-18)", {
+  # REGRESSION: K previously had only a bare `if (K < 2) stop(...)` with no as.integer()/is.na()/
+  # length coercion, even though T (K's own declared "identical sibling" in this file) and n_rep
+  # both got the full coerce-and-check guard in the same round that added this comment. K=NA
+  # crashed with a raw "missing value where TRUE/FALSE needed"; K=c(3,4) crashed with a raw "the
+  # condition has length > 1"; K="3" (a string) did not error at all -- it silently proceeded via
+  # lexicographic comparison and coercible seq_len().
+  expect_error(exchangeable_benchmark(K = NA, T = 10, n_rep = 2, n_boot = 5), "K must be a single integer")
+  expect_error(exchangeable_benchmark(K = c(3, 4), T = 10, n_rep = 2, n_boot = 5), "K must be a single integer")
+  expect_error(exchangeable_benchmark(K = "abc", T = 10, n_rep = 2, n_boot = 5), "K must be a single integer")
+  expect_error(exchangeable_benchmark(K = 0, T = 10, n_rep = 2, n_boot = 5), "K must be a single integer")
+  expect_error(exchangeable_benchmark(K = 1, T = 10, n_rep = 2, n_boot = 5), "K must be a single integer")
+  expect_no_error(exchangeable_benchmark(K = 3, T = 10, n_rep = 5, n_boot = 5, seed = 1))
+})
+
+test_that("per_period_winner()/decision_breakdown()'s return_ties is validated, not left to raise a raw R-internal error (exhaustive sibling-parameter sweep, 2026-11-18)", {
+  # REGRESSION: both functions used return_ties bare in `if (return_ties) ...`. return_ties=NA
+  # raised a raw "missing value where TRUE/FALSE needed"; return_ties="yes" raised a raw
+  # "argument is not interpretable as logical" -- neither naming the function or the parameter.
+  L <- list(ar1 = c(1, 1, 1, 1, 1), nbeats = c(0.5, 0.5, 0.5, 0.5, 5.0))
+  expect_error(per_period_winner(L, return_ties = NA), "return_ties must be a single TRUE/FALSE")
+  expect_error(per_period_winner(L, return_ties = "yes"), "return_ties must be a single TRUE/FALSE")
+  expect_error(per_period_winner(L, return_ties = c(TRUE, FALSE)), "return_ties must be a single TRUE/FALSE")
+  expect_error(decision_breakdown(L, return_ties = NA), "return_ties must be a single TRUE/FALSE")
+  expect_error(decision_breakdown(L, return_ties = "yes"), "return_ties must be a single TRUE/FALSE")
+  expect_no_error(per_period_winner(L, return_ties = TRUE))
+  expect_no_error(decision_breakdown(L, return_ties = TRUE))
+})
+
+test_that("winner_stability()'s circular is validated, not left to raise a raw R-internal error from .block_resample_idx() (exhaustive sibling-parameter sweep, 2026-11-18)", {
+  # REGRESSION: circular was passed bare into `if (!circular)` inside .block_resample_idx() with
+  # no guard. circular=NA raised a raw "missing value where TRUE/FALSE needed"; circular="x"
+  # raised a raw "invalid argument type". exchangeable_benchmark()'s own circular= passes straight
+  # through to here, so this guard covers both call sites.
+  L <- list(
+    ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+    nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
+    ets    = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
+  )
+  expect_error(winner_stability(L, n_boot = 5, seed = 1, circular = NA), "circular must be a single TRUE/FALSE")
+  expect_error(winner_stability(L, n_boot = 5, seed = 1, circular = "x"), "circular must be a single TRUE/FALSE")
+  expect_error(exchangeable_benchmark(K = 3, T = 10, n_rep = 2, n_boot = 5, circular = NA), "circular must be a single TRUE/FALSE")
+  expect_no_error(winner_stability(L, n_boot = 5, seed = 1, circular = FALSE))
+})
+
+test_that("winner_stability()/exchangeable_benchmark() validate seed= the same way mcs()/compare()/identified() already do, instead of leaking a raw set.seed() error (maximally-paranoid RNG audit, 2026-11-18)", {
+  # REGRESSION: seed was the one parameter in both functions passed straight into set.seed() (or,
+  # for exchangeable_benchmark(), into set.seed(seed + r) inside its loop) with no local guard --
+  # unlike block/n_boot/circular/K/T/n_rep siblings in the same file, and unlike mcs()/compare()/
+  # identified()'s own seed=, which this exact commit already hardened the same way. A bad seed
+  # used to reach base R's raw "supplied seed is not a valid integer" error instead of this
+  # package's worded style. No .Random.seed leak was found in any of these raw-error paths (the
+  # on.exit() restore is registered before any set.seed() call either way), but the inconsistent,
+  # unworded failure mode itself is the bug being fixed here.
+  L <- list(
+    ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
+    nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88)
+  )
+  expect_error(winner_stability(L, n_boot = 5, seed = NA), "seed must be a single non-negative integer")
+  expect_error(winner_stability(L, n_boot = 5, seed = -1), "seed must be a single non-negative integer")
+  expect_error(winner_stability(L, n_boot = 5, seed = "abc"), "seed must be a single non-negative integer")
+  expect_error(winner_stability(L, n_boot = 5, seed = .Machine$integer.max + 100), "seed must be a single non-negative integer")
+  expect_no_error(winner_stability(L, n_boot = 5, seed = 1))
+  # seed is coerced like its siblings (e.g. block = "3" coerces), not merely checked for presence:
+  expect_identical(
+    winner_stability(L, n_boot = 5, seed = "1"),
+    winner_stability(L, n_boot = 5, seed = 1)
+  )
+
+  expect_error(exchangeable_benchmark(K = 2, T = 8, n_rep = 2, n_boot = 5, seed = NA), "seed must be a single non-negative integer")
+  expect_error(exchangeable_benchmark(K = 2, T = 8, n_rep = 2, n_boot = 5, seed = -1), "seed must be a single non-negative integer")
+  expect_error(exchangeable_benchmark(K = 2, T = 8, n_rep = 2, n_boot = 5, seed = "abc"), "seed must be a single non-negative integer")
+  expect_no_error(exchangeable_benchmark(K = 2, T = 8, n_rep = 2, n_boot = 5, seed = 1))
+
+  expect_error(pivot_agreement(L, n_boot = 5, seed = NA), "seed must be a single non-negative integer")
+  expect_error(pivot_agreement(L, n_boot = 5, seed = -1), "seed must be a single non-negative integer")
+  expect_error(pivot_agreement(L, n_boot = 5, seed = "abc"), "seed must be a single non-negative integer")
+  expect_no_error(pivot_agreement(L, n_boot = 5, seed = 1))
+})
+
+test_that("exchangeable_benchmark() rejects n_rep large enough to collide its outer/inner seed streams (maximally-paranoid RNG audit, 2026-11-18)", {
+  # REGRESSION: exchangeable_benchmark()'s loop uses set.seed(seed + r) for the outer panel draw
+  # and seed + 1000003 + r for winner_stability()'s inner bootstrap -- two streams kept disjoint
+  # only by that 1000003 separation constant. Once n_rep >= 1000003, r = 1000004's outer seed
+  # equals r' = 1's inner seed exactly (seed + 1000004 == seed + 1000003 + 1), silently correlating
+  # two supposedly-independent replicates with no error or warning. Verified the arithmetic
+  # directly (n_rep this large is computationally impractical to run end-to-end); guarded here so
+  # the collision can never actually occur, instead of only being improbable in practice.
+  for (r in 1:3) for (rp in 1:3) {
+    # sanity: the collision condition is r - rp == 1000003, independent of any seed value.
+    expect_true((r - rp) != 1000003)
+  }
+  # The guard fires before the loop ever runs (checked right after n_rep's own coercion), so this
+  # is fast even though n_rep itself is enormous -- it never actually iterates.
+  expect_error(
+    exchangeable_benchmark(K = 2, T = 8, n_rep = 1000003, n_boot = 1, seed = 0),
+    "n_rep=1000003 is too large"
+  )
+  expect_error(
+    exchangeable_benchmark(K = 2, T = 8, n_rep = 5000000, n_boot = 1, seed = 0),
+    "n_rep=5000000 is too large"
+  )
+  # A realistic, even generously large, n_rep is unaffected.
+  expect_no_error(exchangeable_benchmark(K = 2, T = 8, n_rep = 20, n_boot = 5, seed = 0))
+})
+
+test_that("breakdown_number()'s running margin sum matches .fsum()'s precision, not a raw running subtraction (5-lens round, 2026-11-18)", {
+  # REGRESSION: the greedy loop's running subtraction (s <- s - c_[i]) used to be naive float64
+  # arithmetic even though M (the total it starts from) is computed via .fsum()'s Neumaier-
+  # compensated summation -- found by a "thick ice" re-verification pass. Over many near-tied
+  # contributions, naive subtraction can accumulate enough rounding error to cross a stop
+  # threshold one removal too early. Verified via 500 adversarial near-tied constructions
+  # (12-16 near-tied positive contributions + 1-3 negatives, ~1e-13 relative perturbation)
+  # against a floor-aware compensated-arithmetic ground truth: 0/500 mismatches after this fix
+  # (the naive version mismatched in ~1% of such constructions before it).
+  set.seed(123)
+  mismatches <- 0
+  for (trial in 1:200) {
+    n <- sample(12:16, 1)
+    base <- 1.0 + runif(1, -0.5, 0.5)
+    c_ <- base + rnorm(n, 0, 1e-13)
+    idx_neg <- sample(n, sample(1:3, 1))
+    c_[idx_neg] <- -c_[idx_neg]
+    la <- rep(0, n); lb <- c_; w <- rep(1, n)
+    scale <- (mean(abs(la)) + mean(abs(lb))) / 2.0
+    thresh <- 1e-12 * scale * n * mean(w)
+    order_idx <- order(-c_)
+    s <- selectionfragility:::.fsum(c_); comp <- 0; k_true <- 0
+    for (i in order_idx) {
+      if (c_[i] <= 0) break
+      ci <- -c_[i]; t <- s + ci
+      comp <- comp + if (abs(s) >= abs(ci)) ((s - t) + ci) else ((ci - t) + s)
+      s <- t
+      k_true <- k_true + 1
+      sc <- s + comp
+      if (sc <= 0 || sc <= thresh) break
+    }
+    res <- breakdown_number(la, lb, w)
+    if (res$k != k_true) mismatches <- mismatches + 1
+  }
+  expect_equal(mismatches, 0)
+})

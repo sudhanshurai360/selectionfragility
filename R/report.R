@@ -155,8 +155,31 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
   # `'ar1's '`, i.e. exactly the kind of indistinguishable-looking duplicate this disambiguation
   # branch exists to prevent. encodeString(..., quote="'") backslash-escapes the quote/backslash
   # the same way R's own quoting of strings does, so the wrapped name is always unambiguous.
+  # STRICT-AUDIT FIX (2026-11-18): a model name containing a literal newline/carriage-return (or
+  # any other C0/DEL control character) was embedded into LEADERBOARD's one-row-per-model text
+  # completely unescaped unless it ALSO happened to collide with another name after padding --
+  # loss_panel()'s own name validation (panel.R) only rejects empty/duplicate names, not control
+  # characters, so this was directly reachable. Confirmed directly: a model named
+  # "evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE\nb" printed as three separate lines
+  # inside LEADERBOARD, with the middle line rendering byte-for-byte like a genuine VERDICT
+  # section header -- a one-screen reader (this function's own advertised audience) has no way to
+  # tell that line apart from this function's real prose. This is a strictly worse failure mode
+  # than the quote-collision bug the comment below already guards: it doesn't need a second,
+  # colliding model name to trigger, and it breaks the one-line-per-model invariant the whole
+  # table depends on rather than just looking ambiguous. Escape any name containing a control
+  # character through the SAME encodeString() quoting already used for padding collisions, so a
+  # model name alone can never inject extra "lines" (or anything that reads as a section header)
+  # into the printed report.
+  has_control_char <- grepl("[\\x00-\\x1f\\x7f]", ordered, perl = TRUE)
+  needs_escape <- ordered %in% collisions | has_control_char
+  # Quoted + escaped (not a bare sprintf("'%s'", ...)) so a model name that itself contains a
+  # quote character does not render as an ambiguous run of unescaped quotes once wrapped --
+  # verified directly: two colliding names "ar1's" / "ar1's " used to print as `'ar1's'` /
+  # `'ar1's '`, i.e. exactly the kind of indistinguishable-looking duplicate this disambiguation
+  # branch exists to prevent. encodeString(..., quote="'") backslash-escapes the quote/backslash
+  # the same way R's own quoting of strings does, so the wrapped name is always unambiguous.
   disp <- stats::setNames(
-    ifelse(ordered %in% collisions, encodeString(ordered, quote = "'"), ordered),
+    ifelse(needs_escape, encodeString(ordered, quote = "'"), ordered),
     ordered
   )
   for (mm in ordered) {
@@ -182,6 +205,17 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
   }
   lines <- c(lines, "")
   lines <- c(lines, "PIVOT")
+  # NOTE ON MIXED TIE-BREAK RULES IN THIS PARAGRAPH: `db$binding_opponent` below (and the k*/removed-
+  # periods text built from it) uses decision_breakdown()'s alphabetically-first tie-break; the
+  # concentration_share()/pivot_agreement() calls further down in this same paragraph use a DIFFERENT,
+  # largest-margin tie-break internally (pivot.R's .champ_opp_contributions()) for the same "which
+  # opponent" question. On a panel with a genuine k*-tie (common -- ~38% of random panels with a
+  # strict pooled winner have one), this paragraph can name two different opponents across its own
+  # lines. This is deliberate, not a drift bug: see decision_breakdown()'s @section Limitation
+  # (fragility.R) for why each rule is correct for its own call site and why unifying them would
+  # reintroduce a rename-dependence bug the largest-margin rule exists to prevent. RESOLUTION above
+  # uses a THIRD, independent rule (resolution.R's .binding_rival(), closest pooled-mean distance) --
+  # also documented there, also not unified with either of these.
   db <- decision_breakdown(L, w, a = champ)
   k <- db$k; opp <- db$binding_opponent; removed <- db$removed
   if (k == 0 || is.null(opp)) {

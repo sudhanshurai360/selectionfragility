@@ -95,6 +95,22 @@
   sqrt(var_) / sqrt(n_eff)
 }
 
+#' Closest-pooled-mean rival to the champion -- a DIFFERENT question from `decision_breakdown()`'s
+#' `binding_opponent` (fewest-deletions-to-flip, k*-minimality), not a competing tie-break for the
+#' same one. See the consolidated explanation in `decision_breakdown()`'s `@section Limitation`
+#' (fragility.R) for the full comparison across all three tie-break/selection rules in this package.
+#' This one feeds `minimum_detectable_edge()`/`significance_boundary()`/`mcb_bound()`/
+#' `resolution_report()`'s own `binding_rival` field -- the rival that is hardest to statistically
+#' distinguish from the champion on the pooled mean, which is what matters for a power/MDE
+#' calculation, not which opponent is cheapest to flip to by deleting periods. It is not restricted
+#' to `decision_breakdown()`'s k*-tied set at all, and ties here are broken by sorted name (same
+#' alphabetical convention as `decision_breakdown()`, for the same reason: a stable, citable name,
+#' not a data-invariance property anything downstream of THIS function depends on). Measured
+#' directly: ~18-25% of random panels with a strict pooled winner name a DIFFERENT model here than
+#' `decision_breakdown()`'s `binding_opponent` does -- common, not a contrived edge case. Both
+#' answers are correct for their own question; `report()`'s RESOLUTION paragraph reflects this
+#' function, its PIVOT paragraph reflects `decision_breakdown()`/`concentration_share()` -- see the
+#' inline comment at report.R's PIVOT call site.
 #' @keywords internal
 .binding_rival <- function(L, w, champ) {
   means <- sapply(names(L), function(m) stats::weighted.mean(as.numeric(L[[m]]), w))
@@ -124,13 +140,29 @@
 # some combination of champion and rival scale) can produce a nonsensical, unbounded "percentage"
 # when the champion and rival sit at very different loss scales (both individually valid,
 # unflagged loss magnitudes -- e.g. champion mean ~1e-8, rival mean ~1e8 can print an "observed
-# edge" over 9,999,999,650%, straight into report()'s RESOLUTION line with no guard). This formula
-# is shared, oracle-pinned behavior with the Python original's `_scale(mean_champ)` (identify.py's
-# sibling module resolution.py) -- changing it here alone would create exactly the cross-language
-# divergence this package's review discipline exists to prevent, and changing it in both
-# languages is a statistical-methodology decision outside the scope of a CRAN-submission pass.
-# Left as a documented caveat (see minimum_detectable_edge()/significance_boundary()/mcb_bound()'s
-# @section Assumption) rather than silently redefining the statistic right before submission.
+# edge" over 9,999,999,650%, straight into report()'s RESOLUTION line with no guard).
+#
+# BROADER THAN INITIALLY DOCUMENTED (5-lens round, 2026-11-18): the trigger isn't "extreme
+# cross-model scale mismatch" -- it's simply mean_champ landing close to the +-1e-12 floor below
+# in ABSOLUTE terms, which happens on completely ordinary, SAME-scale, non-adversarial data
+# whenever the champion's own weighted mean is small relative to its volatility (a skill score, a
+# de-meaned/benchmark-relative metric, or -- this package's central use case -- two genuinely
+# close/tied models). Confirmed: a sub-measurement-precision weight perturbation (1e-9 to 1e-11,
+# far below any realistic measurement precision) can swing minimum_detectable_edge()/
+# significance_boundary()/mcb_bound()/resolution_report()$observed_edge by 10+ ORDERS OF
+# MAGNITUDE between two values that both look superficially plausible, because the 1e-12 floor
+# is a hard, unsmoothed discontinuity rather than something that tapers the near-zero problem
+# away. A 2000-trial frequency check on unremarkable, same-scale 8-period panels (no weights, no
+# engineered scale gap) found ~0.1% already producing an observed-edge magnitude over 10,000%
+# from ordinary sampling variation alone.
+#
+# This formula is shared, oracle-pinned behavior with the Python original's `_scale(mean_champ)`
+# (identify.py's sibling module resolution.py) -- changing it here alone would create exactly the
+# cross-language divergence this package's review discipline exists to prevent, and changing it
+# in both languages is a statistical-methodology decision outside the scope of a CRAN-submission
+# pass. Left as a documented caveat (see minimum_detectable_edge()/significance_boundary()/
+# mcb_bound()'s @section Assumption) rather than silently redefining the statistic right before
+# submission.
 .res_scale <- function(mean_champ) {
   if (abs(mean_champ) > 1e-12) abs(mean_champ) else 1.0
 }
@@ -148,7 +180,15 @@
 #'   and its binding rival sit at a comparable loss scale -- an extreme scale mismatch between
 #'   them can produce a nonsensical, unbounded percentage (normalization is by the champion's
 #'   own mean only); sanity-check this fraction yourself if your models' loss magnitudes differ
-#'   by many orders of magnitude. In that same pathological regime this value can -- for specific
+#'   by many orders of magnitude. The trigger is actually broader than "extreme scale mismatch":
+#'   normalization divides by the champion's mean with a hard floor at 1e-12, so the SAME-scale,
+#'   non-adversarial case of a champion mean that's merely small relative to its volatility (a
+#'   skill score, a de-meaned metric, or simply two close/tied models -- this package's central
+#'   use case) can also land near that floor, where a sub-measurement-precision input change
+#'   (e.g. one weight shifted by 1e-9) swings this value by 10+ orders of magnitude between two
+#'   superficially plausible-looking answers. Both answers are meaningless near this floor;
+#'   sanity-check whenever your champion's mean is close to zero, not just when scales visibly
+#'   differ. In that same pathological regime this value can -- for specific
 #'   inputs, not as a general rule of the scale mismatch alone -- also differ numerically from the
 #'   Python original by a small constant factor: confirmed reproducible, e.g. champion losses
 #'   `c(1e-8, 3e-8, 3e-8)` against a rival `c(1e8, 1e8, 1e8)` gives R 1.0378 vs Python 2.5421 (a

@@ -68,7 +68,7 @@ section before trusting a close "resolved" call).
 Function names and signatures are near-identical 1:1 with the Python package
 (`loss_panel()` ≈ `LossPanel.from_losses()`, `report()`, `decision_breakdown()`, `mcs_size()`,
 `identified()`, `compare()`, `pooled_winner()`), and the one-screen `report()` output is
-structured identically in both languages. Three things do **not** carry over:
+structured identically in both languages. The following do **not** carry over:
 
 - **No `from_forecasts()` equivalent yet** — this port only takes an already-computed loss panel.
 - **Bootstrap-based numbers are not bit-for-bit identical across languages** — R's RNG and
@@ -81,6 +81,17 @@ structured identically in both languages. Three things do **not** carry over:
   "Assumption" section); the Python original's `_weighted_se` documents the same understatement
   risk in comments but does not act on it. A script meant to behave identically across both
   languages may see this warning fire in R with nothing analogous in Python under the same inputs.
+- **R is currently stricter than Python v1.0.4 on three input-validation points**, confirmed by
+  direct live-behavioral diffing (2026-11-18), all added in this R port's own hardening and not
+  yet mirrored upstream: (1) `loss_panel()` caps weight magnitude at 1e100 — Python's
+  `_validate_weights()` has no such cap, and the exact silent-corruption failure this guard
+  prevents (a huge weight overflowing `sum(weights)` to `Inf`, producing a `NaN` mean, then an
+  unrelated, misleading crash) was reproduced directly in live Python; (2) `loss_panel()` rejects
+  a logical (`TRUE`/`FALSE`) weights vector — Python silently coerces it to 0/1; (3) `loss_panel()`
+  rejects an empty-string model/column name — Python accepts it and it flows cleanly through
+  `report()`. These are one-directional: Python is more permissive, not differently-behaved, on
+  all three, so an R caller never sees Python's result silently replaced by a different one — they
+  get a clear R-side error instead where Python would have proceeded.
 
 Cite either implementation; they compute the same quantities.
 

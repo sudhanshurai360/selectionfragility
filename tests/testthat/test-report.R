@@ -70,6 +70,36 @@ test_that("LEADERBOARD's collision-disambiguation quoting escapes an internal qu
   expect_false(grepl("'ar1's'", out, fixed = TRUE))
 })
 
+test_that("LEADERBOARD escapes a model name containing an embedded newline (output-injection regression, exhaustive state-space audit 2026-11-18)", {
+  # REGRESSION: a model name containing a literal "\n" was embedded into LEADERBOARD's one-
+  # row-per-model text with NO escaping at all, because the escaping path only triggered on a
+  # padding-equality COLLISION with another model name -- a lone model with a newline in its
+  # name never collides with anything, so it sailed straight through unescaped. Confirmed
+  # directly: a model named "evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE\nb" printed as
+  # THREE separate lines in the report, with the middle line rendering byte-for-byte like a
+  # genuine VERDICT section header -- a one-screen reader has no way to tell a fabricated
+  # section line from this function's own real prose. Fixed by also escaping any model name
+  # containing a C0/DEL control character, independent of whether it collides with another name.
+  set.seed(1)
+  L <- list(a = 1 + rnorm(10, 0, 0.1), b = 1.2 + rnorm(10, 0, 0.1))
+  names(L)[2] <- "evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE INJECTED LINE\nb"
+  panel <- loss_panel(L)
+  out <- report(panel)
+  # The literal injected text must not appear as a bare, line-initial "VERDICT:" -- i.e. it must
+  # not have become a second, fake section header distinguishable from the real one.
+  verdict_lines <- grep("^VERDICT:", strsplit(out, "\n")[[1]])
+  expect_length(verdict_lines, 1)
+  # The escaped name (backslash-n, not a real newline) must appear somewhere in the output.
+  expect_match(out, "evil\\nVERDICT", fixed = TRUE)
+  # A genuine embedded newline must not survive into the LEADERBOARD row for this model -- the
+  # row for model "a" and the row for the pathological model must together be exactly 2 lines,
+  # not 4 (1 "a" line + 3 lines from the unescaped, newline-splitting name).
+  leaderboard_start <- grep("^LEADERBOARD$", strsplit(out, "\n")[[1]])
+  resolution_start <- grep("^RESOLUTION$", strsplit(out, "\n")[[1]])
+  lb_body <- strsplit(out, "\n")[[1]][(leaderboard_start + 1):(resolution_start - 2)]
+  expect_length(lb_body, 2)
+})
+
 test_that("LEADERBOARD's collision-disambiguation quoting is byte-identical to the Python oracle for a plain whitespace collision", {
   L <- list(ar1 = c(1.0, 2.0, 3.0, 1.0, 2.0), `ar1 ` = c(1.1, 2.1, 3.1, 0.9, 1.9))
   out <- report(loss_panel(L))

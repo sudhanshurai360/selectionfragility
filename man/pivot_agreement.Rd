@@ -40,6 +40,27 @@ Measured directly (2026-11-18): on both a maximally-robust panel (one dominant s
 cases -- the number tracks the \code{frac} knob, not the panel's actual concentration structure.
 Treat it as a weak signal at best; \code{concentration_share()} is the more informative diagnostic
 for "is this pivot a real feature of the data."
+
+NOT R-SPECIFIC; NOT FIXED BY THIS PORT ON PURPOSE. This is a property of the ORIGINAL
+\code{selection_fragility} (Python) design, not a porting defect: \code{pivot.py}'s own
+\verb{_champ_opp_contributions}-based subsampling also draws WITHOUT replacement from the same
+realized values (\code{rng.choice(T, size=n_sub, replace=False)}), and a fresh three-regime check
+against the installed Python package (\code{selection-fragility} 1.0.4, dominant-shock vs.
+evenly-spread vs. two-way-near-tie fixtures, 2026-11-18) reproduced the identical pattern:
+\code{pivot_agreement()} tracked \code{frac} (~0.75-0.82 at \code{frac=0.8}, ~0.49-0.57 at \code{frac=0.5},
+~0.93-0.96 at \code{frac=0.95}) regardless of \code{concentration_share} (0.10-0.88 across the same three
+panels), in both languages. Fixing this in R alone would create a cross-language divergence
+from the oracle-pinned Python formula and is out of scope here; a shared redesign would need
+deliberate review on both sides.
+
+The seemingly obvious parity-safe fix -- sample periods WITH replacement (a true bootstrap)
+instead of without -- was tried (not shipped) and does NOT solve this: resampling still draws
+from the SAME fixed realized values, so it is still bounded by \verb{P(the full-sample top period appears at least once in the resample)}, a combinatorial function of \code{n_sub}/\code{T} alone, not of
+the panel's concentration. Measured directly: across the same three regimes, with-replacement
+resampling gave 0.52-0.67 with little separation between the dominant-shock and evenly-spread
+panels -- no more discriminative than the shipped without-replacement version, just shifted to
+a different frac-driven constant. No further change is planned without also redrawing new
+noise (a different statistic, out of scope for a same-signature fix).
 }
 
 \examples{

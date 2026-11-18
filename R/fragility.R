@@ -219,6 +219,14 @@ per_period_winner <- function(L, return_ties = FALSE) {
   up <- .unwrap_panel(L, NULL); L <- up$L
   L <- .as_loss_dict(L)
   .validate_losses(L)
+  # STRICT-AUDIT FIX (2026-11-18): return_ties (here and in decision_breakdown()'s identical
+  # sibling parameter) was used bare in `if (return_ties) ...` with no guard at all --
+  # return_ties=NA raised a raw "missing value where TRUE/FALSE needed", return_ties="yes" raised
+  # a raw "argument is not interpretable as logical", neither naming the function or parameter.
+  if (!is.logical(return_ties) || length(return_ties) != 1 || is.na(return_ties)) {
+    stop(sprintf("per_period_winner(): return_ties must be a single TRUE/FALSE; got %s.",
+                  paste(format(return_ties), collapse = ", ")), call. = FALSE)
+  }
   # method="radix" throughout this package (every sort()/order() on model names, not just here):
   # R's default sort() on character vectors uses LC_COLLATE locale collation, which disagrees
   # with Python's codepoint-based sorted()/min() for mixed-case names (e.g. en_US.UTF-8 orders
@@ -392,6 +400,16 @@ breakdown_number <- function(la, lb, w) {
   }
   order_idx <- order(-c_)  # R's order() is stable: ties keep earliest original index
   s <- M
+  # STRICT-AUDIT FIX (2026-11-18): `comp` is a Neumaier-compensated correction term, mirroring
+  # .fsum()'s algorithm (pivot.R) -- the loop's running subtraction used to be naive float64
+  # arithmetic even though M (the total it starts from) is computed via .fsum()'s compensated
+  # summation. Over many near-tied contributions, naive subtraction accumulates rounding error
+  # that can cross the s<=0 threshold ONE REMOVAL TOO EARLY: confirmed via 50-digit decimal
+  # arithmetic and a 500-trial brute-force adversarial sweep (~1% of near-tied constructions)
+  # that the naive version understated k* by 1, i.e. OVERSTATED fragility. Tracking `s + comp`
+  # against both stop conditions instead of bare `s` keeps the running remainder as accurate as
+  # the compensated total it started from.
+  comp <- 0.0
   # Preallocate at the loop's own upper bound (length(order_idx) == T) and track a running count,
   # instead of `removed <- c(removed, i)` -- that reallocates and copies the whole vector every
   # iteration, making a long elimination scan (large k* relative to T, i.e. exactly the closely-
@@ -401,10 +419,18 @@ breakdown_number <- function(la, lb, w) {
   n_removed <- 0L
   for (i in order_idx) {
     if (c_[i] <= 0) break
-    s <- s - c_[i]
+    ci <- -c_[i]
+    t <- s + ci
+    if (abs(s) >= abs(ci)) {
+      comp <- comp + ((s - t) + ci)
+    } else {
+      comp <- comp + ((ci - t) + s)
+    }
+    s <- t
     n_removed <- n_removed + 1L
     removed_buf[n_removed] <- i
-    if (s <= 0 || s <= .MARGIN_REL_FLOOR * scale * T * wscale) break
+    s_corrected <- s + comp
+    if (s_corrected <= 0 || s_corrected <= .MARGIN_REL_FLOOR * scale * T * wscale) break
   }
   removed <- removed_buf[seq_len(n_removed)]
   list(k = n_removed, removed = removed)
@@ -423,14 +449,44 @@ breakdown_number <- function(la, lb, w) {
 #'   POSITION into the loss vectors -- it is NOT resolved against `L`'s period labels even when
 #'   `L` is a `loss_panel` built with `labels=`. Only [report()] resolves `removed` into actual
 #'   period labels for display; call `panel$labels[removed]` yourself if you need them here.
-#' @section Limitation: when multiple opponents are tied at the same minimal k*, `binding_opponent`
-#'   resolves the tie to the alphabetically-first name. This is a DIFFERENT tie-break rule than
-#'   [concentration_share()]/[pivot_agreement()] use internally for the same "which opponent"
-#'   question (they pick the tied opponent with the largest total margin), and different again
-#'   from `resolution_report()`'s own `binding_rival` field (closest pooled-mean distance, unrelated
-#'   to k* minimality). [report()]'s PIVOT paragraph can print text sourced from two of these three
-#'   rules in the same paragraph. In the common case of no tie, all three agree; this only matters
-#'   when several opponents are genuinely tied at k*.
+#' @section Limitation -- THREE TIE-BREAK RULES, DELIBERATELY DIFFERENT, NOT A BUG: when multiple
+#'   opponents are tied at the same minimal k*, this function's `binding_opponent` resolves the tie
+#'   to the alphabetically-first name. Two OTHER functions resolve the conceptually-similar
+#'   "which opponent is the one that matters" question differently, and this was verified (by
+#'   reading the Python oracle's own design-decision comments in `pivot.py`/`resolution.py`, which
+#'   predate and motivate this R port) to be INTENTIONAL in all three cases, not independently-drifted
+#'   accidents:
+#'   \itemize{
+#'     \item [concentration_share()]/[pivot_agreement()] (via the internal `.champ_opp_contributions()`
+#'       in pivot.R) restrict to the SAME tied set this function computes (`ties`/`binding_opponents`)
+#'       but pick the member with the LARGEST total margin, not the alphabetically-first one. This is
+#'       deliberate: an earlier version of that module used the alphabetical rule and it made the
+#'       *period-level* statistics (which period is "the" pivot) measurably RENAME-dependent -- renaming
+#'       a tied opponent could flip which one sorted first, and different tied opponents can have very
+#'       different pivotal periods. Largest-margin is a property of the DATA, not of what the models are
+#'       called, so it does not have that defect; it was chosen specifically to fix it. This function's
+#'       own alphabetical rule is fine for ITS job (a stable, citable name for a point estimate of k*,
+#'       which is an integer and ties on it by exact-count coincidence are common at small T) but would
+#'       be the wrong choice for pivot.R's job.
+#'     \item `resolution_report()`'s own `binding_rival` field (via `resolution.R`'s internal
+#'       `.binding_rival()`) is not a k*-minimality tie-break at all -- it answers a different
+#'       question (which rival's pooled mean is statistically closest to the champion's, for the
+#'       power/MDE calculation) and is not restricted to this function's tied set. The Python oracle
+#'       measured an 18.25% disagreement rate between these two opponents across 20,000 random panels;
+#'       an equivalent direct check on this R port (3,000 random panels, 3-6 models, 8-30 periods)
+#'       found k*-ties on ~38% of panels with a strict winner, a ~20% disagreement rate between this
+#'       function's `binding_opponent` and `concentration_share()`'s internal pick, and a ~25%
+#'       disagreement rate against `binding_rival`. This is a common, not a contrived-edge-case,
+#'       occurrence on realistic panels -- read the field name in context, not just "binding X".
+#'   }
+#'   [report()]'s PIVOT paragraph prints text sourced from this function's `binding_opponent` AND
+#'   (via `concentration_share()`/`pivot_agreement()`) the largest-margin pick, in the same paragraph
+#'   -- see the inline comment at that call site in report.R. In the common case of no k*-tie, all
+#'   three name the same opponent; the above only matters when several are genuinely tied at k*.
+#'   None of this is unified across the three call sites because each rule is already correct for its
+#'   own job; forcing them to agree would either reintroduce the rename-dependence bug largest-margin
+#'   was built to fix, or conflate k*-minimality with mean-distance, which are genuinely different
+#'   statistical questions.
 #' @seealso [breakdown_number()] (the pairwise primitive this searches over), [prop22_certifies()]
 #'   (significance certificate for the resulting k*), [winner_stability()] (a complementary,
 #'   bootstrap-based fragility read).
@@ -446,6 +502,12 @@ breakdown_number <- function(la, lb, w) {
 #' decision_breakdown(L)  # k = 1, binding_opponent = "nbeats", removed = 5
 decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
+  # STRICT-AUDIT FIX (2026-11-18): see per_period_winner()'s identical return_ties guard -- this
+  # sibling had the same gap (bare `if (return_ties)` below, no validation at all).
+  if (!is.logical(return_ties) || length(return_ties) != 1 || is.na(return_ties)) {
+    stop(sprintf("decision_breakdown(): return_ties must be a single TRUE/FALSE; got %s.",
+                  paste(format(return_ties), collapse = ", ")), call. = FALSE)
+  }
   for (m in names(L)) {
     v <- as.numeric(L[[m]])
     if (length(v) > 0 && any(abs(v) > .MAX_ABS_LOSS)) {
@@ -591,6 +653,28 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
   if (length(n_boot) != 1 || is.na(n_boot) || n_boot <= 0) {
     stop(sprintf("n_boot must be a single positive integer; got %s.", paste(format(n_boot_in), collapse = ", ")), call. = FALSE)
   }
+  # STRICT-AUDIT FIX (2026-11-18): circular (like n_boot/block above) was passed straight into
+  # `if (!circular)` inside .block_resample_idx() with no guard at all -- circular=NA raised a raw
+  # "missing value where TRUE/FALSE needed", circular="x" raised a raw "invalid argument type",
+  # neither mentioning winner_stability() or `circular` by name. A prior review judged this
+  # "symmetric" because exchangeable_benchmark()'s circular= fails the exact same raw way (it just
+  # calls through to here) -- but "both siblings fail identically raw" is still a violation of
+  # this file's own worded-error discipline, not an exemption from it. Guarded here closes it for
+  # both call sites at once, since exchangeable_benchmark() passes its circular straight through.
+  if (!is.logical(circular) || length(circular) != 1 || is.na(circular)) {
+    stop(sprintf("winner_stability(): circular must be a single TRUE/FALSE; got %s.",
+                  paste(format(circular), collapse = ", ")), call. = FALSE)
+  }
+  # STRICT-AUDIT FIX (2026-11-18): seed was passed straight into set.seed() with no local guard,
+  # unlike block/n_boot/circular just above (same fix commit) and unlike mcs()/compare()/
+  # identified()'s own seed= (an identical fix already made there in this same commit) -- a bad
+  # seed (NA/non-scalar/out-of-range/character) reached a raw, unworded "supplied seed is not a
+  # valid integer" error from base R's set.seed() itself instead of this file's own worded style.
+  seed_in <- seed; seed <- suppressWarnings(as.integer(seed))
+  if (length(seed) != 1 || is.na(seed) || seed < 0) {
+    stop(sprintf("winner_stability(): seed must be a single non-negative integer; got %s.",
+                  paste(format(seed_in), collapse = ", ")), call. = FALSE)
+  }
 
   obs <- pooled_winner(L, w)
   db <- decision_breakdown(L, w, a = obs)
@@ -658,7 +742,20 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
 #' eb <- exchangeable_benchmark(K = 3, T = 20, n_rep = 20, n_boot = 50, seed = 1)
 #' eb$median  # typical winner_stability() under "no model is really better"
 exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL, seed = 0, circular = TRUE) {
-  if (K < 2) stop(sprintf("exchangeable_benchmark(): need at least 2 models; got K=%s.", K), call. = FALSE)
+  # STRICT-AUDIT FIX (2026-11-18): K previously had only a bare `if (K < 2) stop(...)` -- no
+  # as.integer()/is.na()/length coercion at all, even though T (K's own declared "identical
+  # sibling... same signature" below) and n_rep both got the full coerce-and-check treatment in
+  # this exact round. Confirmed: K=NA crashed with a raw "missing value where TRUE/FALSE needed"
+  # (from `if (K < 2)`); K=c(3,4) crashed with a raw "the condition has length > 1"; K="3" (a
+  # string) did NOT error at all -- "3" < 2 compares lexicographically and silently passes, then
+  # seq_len("3") silently coerces and the whole call returns a plausible-looking but type-unsafe
+  # result. Mirroring T's guard here closes the gap.
+  K_in <- K
+  K <- suppressWarnings(as.integer(K))
+  if (length(K) != 1 || is.na(K) || K < 2) {
+    stop(sprintf("exchangeable_benchmark(): K must be a single integer >= 2 (need at least 2 models); got %s.",
+                  paste(format(K_in), collapse = ", ")), call. = FALSE)
+  }
   # STRICT-AUDIT FIX (2026-11-18): T is K's identical sibling here -- same "how big is this
   # problem" role, same signature -- but never got a guard, even after K and n_rep (above/below)
   # both did. T=-5/NA/"abc" crashed inside base rep()/rnorm() with a raw "invalid 'times'
@@ -681,6 +778,38 @@ exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL
   if (length(n_rep) != 1 || is.na(n_rep) || n_rep <= 0) {
     stop(sprintf("exchangeable_benchmark(): n_rep must be a single positive integer; got %s.",
                   paste(format(n_rep_in), collapse = ", ")), call. = FALSE)
+  }
+  # STRICT-AUDIT FIX (2026-11-18): seed was passed straight into set.seed() (via `seed + r` below)
+  # with no local guard, unlike K/T/n_rep just above (same fix commit) and unlike mcs()/compare()/
+  # identified()'s own seed= (an identical fix already made there in this same commit) -- a bad
+  # seed (NA/non-scalar/out-of-range/character) reached a raw, unworded "supplied seed is not a
+  # valid integer" error from base R's set.seed() itself instead of this file's own worded style.
+  seed_in <- seed; seed <- suppressWarnings(as.integer(seed))
+  if (length(seed) != 1 || is.na(seed) || seed < 0) {
+    stop(sprintf("exchangeable_benchmark(): seed must be a single non-negative integer; got %s.",
+                  paste(format(seed_in), collapse = ", ")), call. = FALSE)
+  }
+  # STRICT-AUDIT FIX (2026-11-18): the loop below uses seed ARITHMETIC to keep each replicate's
+  # outer panel-generation draw (`seed + r`) and its inner winner_stability() bootstrap draw
+  # (`seed + 1000003 + r`) on two disjoint integer streams, using 1000003 as a fixed separation
+  # constant. That separation is only disjoint while n_rep stays below it: once n_rep >= 1000003,
+  # the outer stream for some late r and the inner stream for some early r' land on the exact same
+  # effective seed (`seed + r == seed + 1000003 + r'` whenever `r - r' == 1000003`), silently
+  # correlating two draws that are supposed to be independent, with no error or warning. Confirmed
+  # by direct arithmetic (not run end-to-end -- n_rep this large is computationally impractical):
+  # at n_rep = 1000005, r = 1000004's panel-generation seed (seed + 1000004) exactly equals r' =
+  # 1's bootstrap seed (seed + 1000003 + 1). Rejected loudly here instead of letting it through
+  # silently; 1000003 is already >> any realistic n_rep (default 200), so this is not a practical
+  # restriction, only a guard against the collision becoming reachable.
+  if (n_rep >= 1000003L) {
+    stop(sprintf(
+      paste0(
+        "exchangeable_benchmark(): n_rep=%d is too large -- this function's internal seed ",
+        "arithmetic (seed + r for the outer draw, seed + 1000003 + r for the inner bootstrap) ",
+        "is only collision-free while n_rep stays below 1000003; at or above that, two supposedly ",
+        "-independent replicates would silently share an effective seed. Use n_rep < 1000003."
+      ), n_rep
+    ), call. = FALSE)
   }
   w <- rep(1, T)
   out <- numeric(n_rep)

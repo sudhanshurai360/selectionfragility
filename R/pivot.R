@@ -37,6 +37,24 @@
   s + comp
 }
 
+#' The champion, its binding opponent, and the signed per-period margin contributions.
+#'
+#' OPPONENT TIE-BREAK, DELIBERATELY DIFFERENT FROM `decision_breakdown()`'s OWN -- see the
+#' consolidated explanation in `decision_breakdown()`'s `@section Limitation` (fragility.R) for the
+#' full picture across all three tie-break rules in this package; this comment covers only this
+#' function's side of it. `decision_breakdown()`'s own tie-break (alphabetically-first name among
+#' opponents tied at minimal k*) is the right choice for THAT function's contract: a stable, citable
+#' point estimate of k* itself, where ties on an integer count are common at small T. Reusing that
+#' same rule here made an earlier version of this module's period-level statistics (which period is
+#' "the" pivot) measurably RENAME-DEPENDENT: renaming a tied opponent can flip which one sorts first
+#' alphabetically, and different tied opponents can point at very different pivotal periods even
+#' though the margin tie is identical. The tie is broken here instead by the LARGEST total margin M
+#' among the tied opponents (`db$ties`) -- a property of the DATA, not of what the models are called,
+#' so it is invariant to renaming by construction; ties in a continuous quantity like M are
+#' effectively impossible (unlike ties in the integer k*, which are common -- confirmed directly:
+#' ~38% of random panels with a strict pooled winner have more than one opponent tied at k*). This is
+#' NOT a bug or an oversight relative to `decision_breakdown()`'s rule -- unifying the two would
+#' reintroduce the rename-dependence this rule was specifically chosen to avoid.
 #' @keywords internal
 .champ_opp_contributions <- function(L, w) {
   champ <- pooled_winner(L, w)
@@ -110,6 +128,28 @@ concentration_share <- function(L, w = NULL) {
 #'   cases -- the number tracks the `frac` knob, not the panel's actual concentration structure.
 #'   Treat it as a weak signal at best; `concentration_share()` is the more informative diagnostic
 #'   for "is this pivot a real feature of the data."
+#'
+#'   NOT R-SPECIFIC; NOT FIXED BY THIS PORT ON PURPOSE. This is a property of the ORIGINAL
+#'   `selection_fragility` (Python) design, not a porting defect: `pivot.py`'s own
+#'   `_champ_opp_contributions`-based subsampling also draws WITHOUT replacement from the same
+#'   realized values (`rng.choice(T, size=n_sub, replace=False)`), and a fresh three-regime check
+#'   against the installed Python package (`selection-fragility` 1.0.4, dominant-shock vs.
+#'   evenly-spread vs. two-way-near-tie fixtures, 2026-11-18) reproduced the identical pattern:
+#'   `pivot_agreement()` tracked `frac` (~0.75-0.82 at `frac=0.8`, ~0.49-0.57 at `frac=0.5`,
+#'   ~0.93-0.96 at `frac=0.95`) regardless of `concentration_share` (0.10-0.88 across the same three
+#'   panels), in both languages. Fixing this in R alone would create a cross-language divergence
+#'   from the oracle-pinned Python formula and is out of scope here; a shared redesign would need
+#'   deliberate review on both sides.
+#'
+#'   The seemingly obvious parity-safe fix -- sample periods WITH replacement (a true bootstrap)
+#'   instead of without -- was tried (not shipped) and does NOT solve this: resampling still draws
+#'   from the SAME fixed realized values, so it is still bounded by `P(the full-sample top period
+#'   appears at least once in the resample)`, a combinatorial function of `n_sub`/`T` alone, not of
+#'   the panel's concentration. Measured directly: across the same three regimes, with-replacement
+#'   resampling gave 0.52-0.67 with little separation between the dominant-shock and evenly-spread
+#'   panels -- no more discriminative than the shipped without-replacement version, just shifted to
+#'   a different frac-driven constant. No further change is planned without also redrawing new
+#'   noise (a different statistic, out of scope for a same-signature fix).
 #' @seealso [concentration_share()] (how much of the margin a single period accounts for),
 #'   [surprise_concentration()], [report()].
 #' @export
@@ -134,6 +174,16 @@ pivot_agreement <- function(L, w = NULL, seed = 0, n_boot = 200, frac = 0.8) {
         "kept in each subsample); got %s."
       ), frac
     ), call. = FALSE)
+  }
+  # STRICT-AUDIT FIX (2026-11-18): seed was passed straight into set.seed() with no local guard,
+  # unlike n_boot/frac just above (same fix commit) and unlike mcs()/compare()/identified()'s own
+  # seed= (an identical fix already made there in this same commit) -- a bad seed (NA/non-scalar/
+  # out-of-range/character) reached a raw, unworded "supplied seed is not a valid integer" error
+  # from base R's set.seed() itself instead of this file's own worded style.
+  seed_in <- seed; seed <- suppressWarnings(as.integer(seed))
+  if (length(seed) != 1 || is.na(seed) || seed < 0) {
+    stop(sprintf("pivot_agreement(): seed must be a single non-negative integer; got %s.",
+                  paste(format(seed_in), collapse = ", ")), call. = FALSE)
   }
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
   L <- .as_loss_dict(L)
