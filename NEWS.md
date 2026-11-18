@@ -11,7 +11,7 @@ Initial release: a native R port of the Python package
   refusal rules), `prop22` (zero-simulation Proposition 2.2 certificate), `pivot` (concentration
   share, pivot agreement), `report` (one-screen summary), `compare` (run-over-run champion-change
   diagnostic).
-* 1146 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
+* 1157 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
   this count will keep moving as hardening continues; check `devtools::test()`'s own output rather
   than treating this number as authoritative), including a dedicated cross-language
   oracle-comparison suite verified against the Python package's live behavior, not just its
@@ -138,3 +138,63 @@ Initial release: a native R port of the Python package
   deliberately bit-for-bit-matched formula) -- documented with a regression test that pins the
   current (known-broken) behavior, not fixed, for the same shared-formula reason as the other
   `resolution.R` limitations above.
+* A dedicated `report()`-vs-Python-`report.py` structural diffing round (2026-11-18, direct
+  execution of 8 constructed panels through both languages, not just a reading of the source)
+  confirmed: both languages' `report()` use the identical four section names and order (VERDICT,
+  LEADERBOARD, RESOLUTION, PIVOT) on every panel tried. Three of this round's own R-side fixes
+  above are confirmed to remain live, unfixed bugs in the Python original as of its current
+  upstream `main` (commit `5be875b`), not merely pre-existing/shared behavior: (1) the "not
+  identified + resolved" VERDICT caveat and the Prop-2.2-"not a contradiction" PIVOT caveat are
+  R-only -- Python's `report()` prints neither, reproduced directly on a panel where RESOLUTION
+  says "resolved" while VERDICT says "not identified" (Python prints VERDICT with no caveat at
+  all); (2) the control-character/ANSI-escape LEADERBOARD injection Python's original has the
+  identical gap -- reproduced directly: a model name containing an embedded newline
+  (`"evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE\nb"`) prints as a literal fake `VERDICT:`
+  line inside Python's LEADERBOARD table, byte-for-byte indistinguishable from a real section
+  header, while R's escaped output renders it as one safely-quoted row; (3) Python's `report()`
+  accepts a `seed=` parameter (added upstream 2026-11-17, the same day as this port's own fix) but
+  does not thread it into the PIVOT section's `pivot_agreement()` call -- hardcoded to `seed=0`
+  there regardless of what the caller passes to `report(seed=...)`, confirmed by running the
+  identical panel at `seed=0..4`: R's `pivot_agreement:` percentage changes across seeds, Python's
+  does not move at all. Purely cosmetic, not worth fixing or further documenting: R's
+  collision-disambiguation wraps a model name in single quotes with backslash-escaping
+  (`encodeString(..., quote="'")`); Python's equivalent uses `repr()`, which for a name containing
+  an apostrophe but no double quote renders in double quotes instead -- same information, different
+  quoting convention.
+* A further fresh-eyes round (2026-11-18) found and fixed several more real gaps, independently
+  of any prior round's specific hypotheses: `fragility()`'s `benchmark=` argument silently
+  accepted a malformed value (a list missing its `p05` key, or an ambiguous multi-element vector)
+  and produced a confidently wrong `fragile` verdict instead of erroring -- now validated via a
+  dedicated `.resolve_benchmark_p05()` helper; `print.loss_panel()`'s fallback path silently
+  discarded `report()`'s own error message on a mutated/inconsistent panel object, printing a
+  falsely-normal-looking summary -- the one place in the file that contradicted its own
+  established "fail loudly on a mutated object" convention (`summary()`/`as.data.frame()` already
+  did this correctly) -- now surfaces the real error with a pointer to rebuild via `loss_panel()`;
+  `identify.R`'s `mcs_size()`/`identified()` had no large-K warning on the direct-list-input path
+  even though `mcs()` and `loss_panel()` both already warn above `K=100` -- now matched. Two more
+  confirmed-shared-with-Python limitations documented (not fixed, same shared-formula rationale as
+  the other `resolution.R` items): `selection_regret()` can raise a misattributed "weights are all
+  zero" error when one period alone carries the panel's entire weight (the caller's own weights
+  are fine; an internal leave-one-out derived vector is what's actually zero); `resolution_report()`
+  silently swallows the caller's own invalid `mcs_alpha`/`mcs_seed` into a fake "undetermined"
+  statistical read indistinguishable from a genuine data-driven MCS refusal. A test-suite
+  flakiness audit (10+ full runs, 45 isolated per-file runs) found one test whose `set.seed(1)`
+  construction only reproduced its intended knife-edge floating-point scenario on 8 of 15 nearby
+  seeds -- fixed by replacing the seed with the literal doubles it produces, making the test
+  RNG-and-R-version-independent. A true fresh-install integration test (building, installing, and
+  running the full suite against the actually-installed package, not `devtools::load_all()`, for
+  the first time in this project's history) found no behavioral blind spot. A performance audit
+  (also the first in this project's history) found no regression from any of this session's many
+  new validation guards and confirmed `exchangeable_benchmark()` is, by design, ~40-50x more
+  expensive than every other function at default settings (200 repeated bootstrap calls), worth
+  knowing before scripting it into a larger pipeline. Two quantified research findings added to
+  `mcs()`'s documentation: the native and `MCS::MCSprocedure()`-delegated engines' exact reported
+  MCS *size* (not the binary identified/not-identified verdict, which stays reliable) agree far
+  less often under a near-complete-null as periods-per-model shrinks (~90% down to ~10%); and the
+  `elimination="raw"` vs `"studentized"` choice, documented as "rarely disagreeing in practice,"
+  actually drops to coin-flip agreement (~50%) at K=16-30 on realistic panels, confirmed across
+  100+ trials -- the "rarely disagree" framing only holds at the small K values it was originally
+  measured on. A cross-language file round-trip check (save_loss_panel()/load_loss_panel() against
+  Python's real save/load) confirmed clean bit-for-bit round-tripping in both directions, with
+  both R-only stricter guards (weight cap, NA-label rejection) correctly rejecting real
+  Python-produced files that violate them.

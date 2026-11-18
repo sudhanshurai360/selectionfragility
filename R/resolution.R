@@ -338,6 +338,31 @@ mcb_bound <- function(L, w = NULL, alpha = 0.05) {
 #' @param weights Optional numeric vector of per-period weights (primary name).
 #' @param w Optional alias for `weights` (keyword-only in the Python original; pass only one).
 #' @return The weighted-average realised regret of the picking rule.
+#' @section Limitation: if a single period carries ALL of the panel's positive weight (every
+#'   other period has weight exactly 0), this crashes with the message "weights are all zero; at
+#'   least one period must carry positive weight" -- even though the WEIGHTS YOU PASSED ARE NOT
+#'   ALL ZERO and pass this same package's own top-level weight validation fine (`loss_panel()`,
+#'   `pooled_winner()`, etc. all accept them without complaint). The message is misleading about
+#'   whose weights are the problem: the leave-one-period-out loop below re-derives a fold weight
+#'   vector (`wv[keep]`) for every held-out period `t`, and when `t` is the single period holding
+#'   all the weight, that fold's weight vector is all-zero, and it is THAT internal, derived
+#'   vector -- not your original `weights`/`w` argument -- that trips the all-zero check inside
+#'   `pooled_winner()`'s own call to `.validate_losses()`. A caller debugging this error by
+#'   re-checking their own weight vector will find nothing wrong with it, because nothing IS wrong
+#'   with it. Confirmed reproducible: `selection_regret(list(a=c(1,2,3,4,5), b=c(2,1,4,3,6)),
+#'   w=c(0,0,0,1,0))` raises this exact message, even via a `loss_panel()`-wrapped call (not just
+#'   the raw-list entry point). CONFIRMED SHARED, oracle-pinned behavior: the identical repro
+#'   against the installed Python original (`selection-fragility` 1.0.4) raises the identical
+#'   `ValueError` with the identical message -- this is a pre-existing property of the shared
+#'   leave-one-out design (re-deriving fold weights via plain subsetting with no degenerate-fold
+#'   guard), not something introduced by the R port. Left undocumented-until-now rather than fixed;
+#'   fixing it (e.g. skipping degenerate folds, or raising a clearer fold-specific message) in R
+#'   alone would diverge from the Python oracle's current behavior on this exact input -- a
+#'   genuine cross-language-parity call this package's review discipline leaves to a dedicated,
+#'   deliberate pass on both sides rather than a unilateral one here. Avoid concentrating 100% of
+#'   a panel's weight on a single period if you intend to call `selection_regret()` on it; spread
+#'   it across at least two periods, or pre-filter the zero-weight periods out of `L`/`w` entirely
+#'   before calling.
 #' @seealso [resolution_report()], [decision_breakdown()].
 #' @examples
 #' L <- list(
@@ -412,6 +437,38 @@ selection_regret <- function(L, weights = NULL, w = NULL) {
 #'   borderline panel the verdict can be seed-sensitive (see `?mcs`'s "Adversarial use" section
 #'   for a quantified example). Previously silently pinned to `seed=0`; pass a few different seeds
 #'   yourself near a borderline alpha if this matters for your use case.
+#' @section Limitation: R1 (`resolved`) and R2 (`identified`/`fragility_read`) CAN refuse
+#'   simultaneously for genuinely different reasons on the same panel (e.g. the edge isn't powered
+#'   AND the weights are non-uniform, which makes the MCS call itself refuse) without producing an
+#'   inconsistent signal -- `resolved` and `identified` are separate fields in the returned list,
+#'   so a caller who inspects both (not just `fragility_read`) can always tell which gate(s)
+#'   actually failed; confirmed directly on a constructed panel where both failed at once. The
+#'   gap found instead is upstream of that: the `tryCatch(..., error = function(e) e)` around the
+#'   internal `identified()` call below catches EVERY error it can raise, with no check on WHAT
+#'   the error actually is, and silently discards the error's own message -- collapsing it into
+#'   the exact same `identified = NULL`, `fragility_read = "undetermined"` result as a genuine,
+#'   data-driven MCS refusal (e.g. non-uniform weights). This means a caller's own INVALID
+#'   ARGUMENT -- e.g. `mcs_alpha` outside (0, 1), or a negative/non-integer `mcs_seed` -- is
+#'   silently absorbed into what looks like an honest "undetermined" statistical read, with no
+#'   way to tell from the returned list alone that the call never actually reached a real MCS
+#'   computation at all. Confirmed reproducible: `resolution_report(L, mcs_alpha = 2)` and
+#'   `resolution_report(L, mcs_seed = -5)` both silently return `identified = NULL`,
+#'   `fragility_read = "undetermined"` -- identical to a genuine non-identification -- instead of
+#'   surfacing `identified()`'s own clear error ("alpha must be strictly between 0 and 1...",
+#'   "seed must be a single non-negative integer..."). CONFIRMED SHARED, oracle-pinned behavior:
+#'   the identical repro against the Python original (`resolution.py`'s own `except ValueError:`
+#'   around the same call -- `identified()`'s own alpha/seed validation also raises `ValueError`
+#'   in Python, so it is caught by the exact same handler) reproduces the identical silent
+#'   swallow, `{'identified': None, 'fragility_read': 'undetermined'}`, on `mcs_alpha=2` in Python
+#'   too -- this is a pre-existing property of the shared refusal-rule design (a blanket catch
+#'   around the MCS call with no distinction between "the data forced a refusal" and "the caller's
+#'   own argument was invalid"), not something introduced by the R port. Left undocumented-until-
+#'   now rather than fixed; narrowing this in R alone (e.g. validating `mcs_alpha`/`mcs_seed`
+#'   before the `tryCatch`, so a bad argument raises immediately instead of being swallowed) would
+#'   diverge from the Python oracle's current behavior on this exact input -- left as a documented
+#'   caveat for the same cross-language-parity reason as this function's other `@section`s above.
+#'   Double-check `mcs_alpha`/`mcs_seed` are in-range yourself before trusting an "undetermined"
+#'   `fragility_read` as a genuine statistical read rather than your own typo.
 #' @examples
 #' # Only 4 periods, and nbeats narrowly beats ar1 on average -- but with this
 #' # little data, that edge is NOT resolved: it falls short of the significance

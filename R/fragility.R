@@ -902,6 +902,48 @@ surprise_concentration <- function(L, labels = NULL) {
   )
 }
 
+#' @keywords internal
+.resolve_benchmark_p05 <- function(benchmark) {
+  # STRICT-AUDIT FIX (2026-11-18): fragility()'s own doc promises benchmark accepts "the full
+  # exchangeable_benchmark() result (or its p05)" -- a list OR a bare scalar -- but the code that
+  # pulled p05 out of it (`if (is.list(benchmark)) benchmark$p05 else benchmark[1]`) never checked
+  # that either form actually produced a usable number. Two confirmed-reachable failure modes:
+  # (1) a named list that is missing the `p05` element (e.g. `list(median=.., p95=..)`, a plausible
+  # typo'd/partial exchangeable_benchmark()-like object) makes `benchmark$p05` silently NULL;
+  # `isTRUE(stability < NULL)` is `isTRUE(logical(0))`, which is FALSE -- so a malformed benchmark
+  # silently reports "not fragile" instead of erroring, the exact opposite of a loud failure for a
+  # safety-relevant calibration input. (2) a length>1 numeric vector (not a list, so the
+  # `benchmark[1]` branch fires) silently takes only its first element with zero indication which
+  # element was used -- a caller who passed e.g. `c(eb$p95, eb$p05)` by mistake gets a confidently
+  # wrong, silently-selected answer rather than an error naming the ambiguity. Both are fixed here
+  # by requiring the resolved p05 to be a single finite number, erroring with the actual value/
+  # shape otherwise rather than letting either case fall through into a fabricated comparison.
+  if (is.list(benchmark)) {
+    if (!("p05" %in% names(benchmark))) {
+      stop(sprintf(
+        paste0(
+          "fragility(): benchmark is a list but has no $p05 element -- pass the full ",
+          "exchangeable_benchmark() result (list(median, p05, p95)) or just its $p05 scalar. ",
+          "Got a list with names: %s."
+        ), paste(names(benchmark), collapse = ", ")
+      ), call. = FALSE)
+    }
+    p05 <- benchmark$p05
+  } else {
+    p05 <- benchmark
+  }
+  if (!is.numeric(p05) || length(p05) != 1 || is.na(p05)) {
+    stop(sprintf(
+      paste0(
+        "fragility(): benchmark must resolve to a single finite numeric p05 value; got %s ",
+        "(class %s, length %d). Pass exchangeable_benchmark()'s result or its $p05 scalar, not an ",
+        "ambiguous multi-element vector or a non-numeric value."
+      ), paste(format(p05), collapse = ", "), class(p05)[1], length(p05)
+    ), call. = FALSE)
+  }
+  p05
+}
+
 #' Full ranking-fragility diagnostic for a selection decision
 #'
 #' @param L A named list `{model: vector}` or a `loss_panel`.
@@ -1039,7 +1081,7 @@ fragility <- function(L, w = NULL, shock_periods = NULL, labels = NULL, n_boot =
   } else if (is.null(benchmark)) {
     fragile <- NA
   } else {
-    p05 <- if (is.list(benchmark)) benchmark$p05 else benchmark[1]
+    p05 <- .resolve_benchmark_p05(benchmark)
     fragile <- isTRUE(stability < p05)
   }
 

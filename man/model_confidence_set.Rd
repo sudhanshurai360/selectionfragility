@@ -42,7 +42,16 @@ error rate at a typical T~30 panel can be close to double the number baked into 
 \item{seed}{RNG seed.}
 
 \item{elimination}{\code{"studentized"} (Hansen-Lunde-Nason's e_max, default) or \code{"raw"} (legacy
-mean-based rule). \code{NULL} reads \code{getOption("selectionfragility.elimination", "studentized")}.}
+mean-based rule). \code{NULL} reads \code{getOption("selectionfragility.elimination", "studentized")}.
+ADVERSARIAL-REVIEW FINDING (2026-11-18): the two rules agree closely at small model counts
+but this does NOT extrapolate to large \code{K} -- stress-tested across 100+ randomly generated
+realistic panels (\code{T} in 20-60, heterogeneous per-model means/variances, \code{alpha=0.10},
+default \code{B}): at \code{K} in 3-9 the surviving sets matched on ~95-97\% of panels (consistent with
+"rarely disagree"), but at \code{K} in 10-15 they matched on only ~77\% (23\% disagreement), and at
+\code{K} in 16-30 they matched on as few as ~47-53\% of panels -- a coin flip, not a rare event.
+Do not generalize a small-\code{K} "the two rules rarely disagree in practice" intuition to a
+large-\code{K} sweep; re-check both rules explicitly (or just always report \code{elimination} alongside
+\code{surviving}, which this function already stamps onto its result for exactly this reason).}
 }
 \value{
 A list \code{list(surviving = surviving_model_names, p = p_at_stop, elimination = elimination_rule_used)} -- see \code{mcs()}'s \verb{@return} for why \code{elimination} is stamped onto the

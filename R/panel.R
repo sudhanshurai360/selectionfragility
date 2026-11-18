@@ -460,12 +460,44 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
 #' @export
 print.loss_panel <- function(x, ...) {
   rep_fn <- tryCatch(get("report", mode = "function"), error = function(e) NULL)
+  report_err <- NULL
   if (!is.null(rep_fn)) {
-    out <- tryCatch(rep_fn(x), error = function(e) NULL)
+    out <- tryCatch(rep_fn(x), error = function(e) {
+      report_err <<- conditionMessage(e)
+      NULL
+    })
     if (!is.null(out)) {
       cat(out, "\n")
       return(invisible(x))
     }
+  }
+  # STRICT-AUDIT FIX (2026-11-18): this fallback used to discard report()'s error entirely
+  # (`error = function(e) NULL`) and print a plain, normal-looking "<loss_panel> models=..., T=..."
+  # line with NO indication anything had gone wrong -- confirmed directly reachable, with no
+  # control characters involved: a panel object is a plain mutable list, and editing a field after
+  # construction (e.g. `p$losses$a <- shorter_vector`, the exact scenario as.data.frame.loss_panel()
+  # and summary.loss_panel() already guard against with a clear "loss_panel is inconsistent" error)
+  # makes report(x) throw a raw, cryptic base-R error ("'x' and 'w' must have the same length").
+  # print(p) -- by far the most common way a user ever actually sees a panel, including bare
+  # auto-print at the console -- swallowed that error completely and showed a falsely reassuring
+  # `<loss_panel> models=a, b, T=5`, even though model 'a' no longer had 5 periods. This directly
+  # contradicted the sibling methods' own stated design intent ("fails as loudly as its siblings
+  # (report/summary) do on a mutated/inconsistent object," per as.data.frame.loss_panel()'s
+  # comment above): report() DOES fail loudly when called directly, but print.loss_panel() was
+  # the one place in the package that actively hid that loud failure. Surface the error message
+  # instead of discarding it, so a malformed object is visibly flagged rather than silently
+  # mis-reported as fine.
+  if (!is.null(report_err)) {
+    cat(sprintf(
+      paste0(
+        "<loss_panel> models=%s, T=%d\n",
+        "WARNING: report() failed on this object (%s) -- this loss_panel may have been mutated ",
+        "after construction (e.g. a field edited directly) into an inconsistent state. Rebuild ",
+        "it with loss_panel() instead of editing its fields by hand.\n"
+      ),
+      paste(x$models, collapse = ", "), length(x$labels), report_err
+    ))
+    return(invisible(x))
   }
   cat(sprintf("<loss_panel> models=%s, T=%d\n", paste(x$models, collapse = ", "), length(x$labels)))
   invisible(x)

@@ -611,3 +611,43 @@ test_that("breakdown_number()'s running margin sum matches .fsum()'s precision, 
   }
   expect_equal(mismatches, 0)
 })
+
+test_that("fragility()'s benchmark= accepts both the full exchangeable_benchmark() result and its bare p05 (fresh-eyes audit, 2026-11-18)", {
+  # REGRESSION: `p05 <- if (is.list(benchmark)) benchmark$p05 else benchmark[1]` never validated
+  # that either branch actually produced a usable number. (1) A list missing $p05 (e.g. a
+  # plausible typo'd/partial exchangeable_benchmark()-like object) made benchmark$p05 silently
+  # NULL; isTRUE(stability < NULL) is isTRUE(logical(0)) == FALSE, so a malformed benchmark
+  # silently reported fragile=FALSE instead of erroring -- confirmed directly before this fix.
+  # (2) A length>1 numeric vector silently took only its first element with no indication which
+  # one was used. Both forms must now error with a clear, worded message instead of silently
+  # misinterpreting the input.
+  L <- quickstart_L
+  eb <- list(median = 0.7, p05 = 0.3, p95 = 0.95)
+
+  f_full <- fragility(L, benchmark = eb, n_boot = 50, seed = 1)
+  f_bare <- fragility(L, benchmark = eb$p05, n_boot = 50, seed = 1)
+  expect_identical(f_full$fragile, f_bare$fragile)
+  expect_identical(f_full$winner_stability, f_bare$winner_stability)
+
+  # Malformed list missing the $p05 key -- must error, not silently resolve to fragile=FALSE.
+  expect_error(
+    fragility(L, benchmark = list(median = 0.7, p95 = 0.95), n_boot = 50, seed = 1),
+    "benchmark is a list but has no \\$p05 element"
+  )
+
+  # Ambiguous multi-element numeric vector -- must error, not silently take the first element.
+  expect_error(
+    fragility(L, benchmark = c(0.3, 0.95), n_boot = 50, seed = 1),
+    "must resolve to a single finite numeric p05 value"
+  )
+
+  # NA/non-numeric p05 -- must error with the same worded message.
+  expect_error(
+    fragility(L, benchmark = list(p05 = NA_real_), n_boot = 50, seed = 1),
+    "must resolve to a single finite numeric p05 value"
+  )
+  expect_error(
+    fragility(L, benchmark = "0.3", n_boot = 50, seed = 1),
+    "must resolve to a single finite numeric p05 value"
+  )
+})

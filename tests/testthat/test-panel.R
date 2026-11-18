@@ -340,3 +340,19 @@ test_that("summary.loss_panel() fails loudly, not with a raw base-R error, on a 
   p$weights <- c(1, 2)  # deliberately inconsistent (same mutation as the as.data.frame test above)
   expect_error(summary(p), "inconsistent")
 })
+
+test_that("print.loss_panel() warns instead of silently hiding a report() failure on a mutated/inconsistent object (fresh-eyes round, 2026-11-18)", {
+  # REGRESSION: print.loss_panel()'s fallback (used when report(x) itself errors) discarded the
+  # error entirely (`error = function(e) NULL`) and printed a plain, normal-looking
+  # "<loss_panel> models=..., T=..." line with NO indication anything was wrong. Confirmed
+  # directly reachable with no control characters involved: mutating a field after construction
+  # (here, shortening one model's loss vector) makes report(p) throw a raw base-R length-mismatch
+  # error, which summary()/as.data.frame() already surface loudly (see the test above) but
+  # print()/auto-print -- by far the most common way a panel is ever actually viewed -- used to
+  # swallow completely. print.loss_panel() must now capture and show that failure.
+  L <- list(a = c(1.1, 2.3, 1.9, 4.4, 3.5), b = c(1.1, 2.1, 2.9, 4.2, 5.3))
+  p <- loss_panel(L)
+  p$losses$a <- c(1.1, 2.3, 1.9)  # deliberately shorten one model's loss vector
+  expect_output(print(p), "WARNING: report\\(\\) failed")
+  expect_output(print(p), "mutated")
+})

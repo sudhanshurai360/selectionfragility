@@ -44,6 +44,15 @@
 #' @param seed RNG seed.
 #' @param elimination `"studentized"` (Hansen-Lunde-Nason's e_max, default) or `"raw"` (legacy
 #'   mean-based rule). `NULL` reads `getOption("selectionfragility.elimination", "studentized")`.
+#'   ADVERSARIAL-REVIEW FINDING (2026-11-18): the two rules agree closely at small model counts
+#'   but this does NOT extrapolate to large `K` -- stress-tested across 100+ randomly generated
+#'   realistic panels (`T` in 20-60, heterogeneous per-model means/variances, `alpha=0.10`,
+#'   default `B`): at `K` in 3-9 the surviving sets matched on ~95-97% of panels (consistent with
+#'   "rarely disagree"), but at `K` in 10-15 they matched on only ~77% (23% disagreement), and at
+#'   `K` in 16-30 they matched on as few as ~47-53% of panels -- a coin flip, not a rare event.
+#'   Do not generalize a small-`K` "the two rules rarely disagree in practice" intuition to a
+#'   large-`K` sweep; re-check both rules explicitly (or just always report `elimination` alongside
+#'   `surviving`, which this function already stamps onto its result for exactly this reason).
 #' @return A list `list(surviving = surviving_column_indices, p = p_at_stop, elimination =
 #'   elimination_rule_used)` (1-based indices). `elimination` is stamped onto the result (not just
 #'   accepted as an argument) because two "identical" calls across sessions are otherwise silently
@@ -97,6 +106,19 @@
 #'     call `report(panel, seed=...)`/`mcs()`/`mcs_size()`/`identified()` across a few different
 #'     seeds yourself near a borderline alpha if this matters for your use case, rather than
 #'     trusting one fixed-seed call.
+#'   \item \strong{The two engines' exact MCS SIZE is far less reliable than their yes/no
+#'     "identified" verdict, and specifically so near a true complete null.} Stress-tested across
+#'     paired runs of this engine and [mcs_size()] on identical panels, identical seed, default
+#'     `alpha`/`B`/`reps`: when there is a genuine single winner, the two engines' exact surviving
+#'     COUNT matched on ~97-100% of panels regardless of how small `T` was relative to `K`. But
+#'     under a true complete null (all models equal in expectation -- nothing to really
+#'     identify), exact-size agreement degraded sharply as `T/K` shrank: ~90% at `T/K=5`, falling
+#'     to ~10% at `T/K=0.33` (e.g. `T=10`, `K=30`). The binary "is it a singleton" question stayed
+#'     reliable throughout (both engines almost always correctly said "not identified" under a
+#'     complete null). Practical guidance: treat the yes/no identification verdict as the robust
+#'     signal across engines; do not lean on the exact reported MCS size as a precise "confidence
+#'     set width" when `T` is small relative to `K` and no model is clearly best -- that number is
+#'     largely bootstrap noise in that regime, and it will not replicate across the two engines.
 #' }
 #' Strategic period-withholding (submitting only "easy" periods to inflate an apparent record) is
 #' only PARTIALLY closed at the input layer: `loss_panel()` requires every model to have the SAME

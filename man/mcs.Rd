@@ -35,7 +35,16 @@ error rate at a typical T~30 panel can be close to double the number baked into 
 \item{seed}{RNG seed.}
 
 \item{elimination}{\code{"studentized"} (Hansen-Lunde-Nason's e_max, default) or \code{"raw"} (legacy
-mean-based rule). \code{NULL} reads \code{getOption("selectionfragility.elimination", "studentized")}.}
+mean-based rule). \code{NULL} reads \code{getOption("selectionfragility.elimination", "studentized")}.
+ADVERSARIAL-REVIEW FINDING (2026-11-18): the two rules agree closely at small model counts
+but this does NOT extrapolate to large \code{K} -- stress-tested across 100+ randomly generated
+realistic panels (\code{T} in 20-60, heterogeneous per-model means/variances, \code{alpha=0.10},
+default \code{B}): at \code{K} in 3-9 the surviving sets matched on ~95-97\% of panels (consistent with
+"rarely disagree"), but at \code{K} in 10-15 they matched on only ~77\% (23\% disagreement), and at
+\code{K} in 16-30 they matched on as few as ~47-53\% of panels -- a coin flip, not a rare event.
+Do not generalize a small-\code{K} "the two rules rarely disagree in practice" intuition to a
+large-\code{K} sweep; re-check both rules explicitly (or just always report \code{elimination} alongside
+\code{surviving}, which this function already stamps onto its result for exactly this reason).}
 }
 \value{
 A list \code{list(surviving = surviving_column_indices, p = p_at_stop, elimination = elimination_rule_used)} (1-based indices). \code{elimination} is stamped onto the result (not just
@@ -80,6 +89,19 @@ same seed sweep) -- only the MCS/identification layer is. \code{\link[=report]{r
 call \code{report(panel, seed=...)}/\code{mcs()}/\code{mcs_size()}/\code{identified()} across a few different
 seeds yourself near a borderline alpha if this matters for your use case, rather than
 trusting one fixed-seed call.
+\item \strong{The two engines' exact MCS SIZE is far less reliable than their yes/no
+"identified" verdict, and specifically so near a true complete null.} Stress-tested across
+paired runs of this engine and \code{\link[=mcs_size]{mcs_size()}} on identical panels, identical seed, default
+\code{alpha}/\code{B}/\code{reps}: when there is a genuine single winner, the two engines' exact surviving
+COUNT matched on ~97-100\% of panels regardless of how small \code{T} was relative to \code{K}. But
+under a true complete null (all models equal in expectation -- nothing to really
+identify), exact-size agreement degraded sharply as \code{T/K} shrank: ~90\% at \code{T/K=5}, falling
+to ~10\% at \code{T/K=0.33} (e.g. \code{T=10}, \code{K=30}). The binary "is it a singleton" question stayed
+reliable throughout (both engines almost always correctly said "not identified" under a
+complete null). Practical guidance: treat the yes/no identification verdict as the robust
+signal across engines; do not lean on the exact reported MCS size as a precise "confidence
+set width" when \code{T} is small relative to \code{K} and no model is clearly best -- that number is
+largely bootstrap noise in that regime, and it will not replicate across the two engines.
 }
 Strategic period-withholding (submitting only "easy" periods to inflate an apparent record) is
 only PARTIALLY closed at the input layer: \code{loss_panel()} requires every model to have the SAME

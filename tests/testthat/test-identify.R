@@ -138,3 +138,23 @@ test_that("mcs_size()/identified() reject a bad seed with a worded error, not a 
   expect_error(mcs_size(L, seed = c(1, 2)), "single non-negative integer")
   expect_error(mcs_size(L, seed = -1), "single non-negative integer")
 })
+
+test_that("mcs_size()/identified() warn on large K like mcs() does, when called directly on a named list (adversarial-review round, 2026-11-18)", {
+  # REGRESSION: mcs()/model_confidence_set() (mcs.R) self-guard with a K > .LARGE_K_WARN_THRESHOLD
+  # warning on EVERY call. This engine only ever got that warning as a side effect of routing
+  # through loss_panel() first (panel.R's .check_K_vs_T) -- a caller who builds a named list
+  # directly, exactly as this file's own @examples do, got NO warning at any K, silently breaking
+  # loss_panel()'s own promise that its large-K warning text covers "the
+  # MCS::MCSprocedure()-backed report()/identified()/mcs_size() path." Below .LARGE_K_WARN_THRESHOLD
+  # (100), no warning should fire; above it, mcs_size()/identified() must now warn even when the
+  # caller bypasses loss_panel() entirely.
+  set.seed(1)
+  K_small <- 5
+  L_small <- stats::setNames(lapply(seq_len(K_small), function(i) rnorm(20, mean = i)), paste0("m", seq_len(K_small)))
+  expect_no_warning(mcs_size(L_small, reps = 500, seed = 1))
+
+  K_big <- 110
+  L_big <- stats::setNames(lapply(seq_len(K_big), function(i) rnorm(20, mean = i * 0.01)), paste0("m", seq_len(K_big)))
+  expect_warning(mcs_size(L_big, reps = 500, seed = 1), "K=110 models")
+  expect_warning(identified(L_big, reps = 500, seed = 1), "K=110 models")
+})

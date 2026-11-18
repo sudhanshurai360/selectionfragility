@@ -103,6 +103,46 @@ structured identically in both languages. The following do **not** carry over:
   permutation-invariant even then (see `?concentration_share`). `compare()`'s reversed-argument
   guard is R-only, confirmed by execution — Python silently returns a plausible but backwards
   result on swapped arguments.
+- **`save_loss_panel()`/`load_loss_panel()` round-trip losslessly with Python's `LossPanel.save()`/
+  `.load()`**, confirmed by direct cross-language execution (2026-11-18): a 5-model, 24-period
+  panel with non-uniform weights and real date-like labels, built and saved in one language,
+  loads in the other with `losses`/`weights` bit-identical to double precision and `labels`
+  identical as text. Both sides write/read the same JSON schema (`losses`/`weights`/`labels`/
+  `labels_are_positional`) regardless of key order. R's locale-safety fix (forcing `LC_NUMERIC="C"`
+  around the write/read) has no Python counterpart because none is needed — Python's `json` module
+  formats floats independent of the active locale (verified directly under `de_DE.UTF-8`: a
+  Python-saved file is still dot-decimal, and R reads it correctly even with R itself run under
+  that same locale). Non-ASCII model names/labels round-trip cleanly too, even though the two
+  languages pick different valid JSON encodings for them (R's `jsonlite` writes literal UTF-8
+  bytes; Python's `json` defaults to `\uXXXX`-escaping — both are standard JSON that the other
+  side's reader decodes correctly). The two newer R-only `loss_panel()` guards documented above
+  were checked specifically at this file boundary with real Python-produced files: a weight of
+  `1e200` saved by Python's `.save()` is correctly rejected by `load_loss_panel()` on read
+  (`"weights must not exceed 1e+100 in magnitude"`); a `None` label is accepted by Python's
+  `LossPanel.from_losses()` at construction time but `.save()` always stringifies labels
+  (`str(label)`), so it reaches the JSON file as the literal string `"None"`, not a JSON `null` —
+  R's NA/NULL-label rejection can never actually be reached through Python's real `.save()`, only
+  through a hand-crafted file.
+
+- **`report()`'s own structure matches across languages; three of its newest caveats/fixes do
+  not** — confirmed by direct execution (2026-11-18), not just reading the source. Both languages'
+  `report()` print the identical four sections, same names, same order (VERDICT, LEADERBOARD,
+  RESOLUTION, PIVOT), on every constructed panel tried. But: (1) R's VERDICT prints a "these answer
+  different questions" caveat when "not identified" and "resolved" co-occur, and PIVOT prints a
+  "not a contradiction" line when Prop. 2.2's certificate and RESOLUTION's "resolved" disagree —
+  Python's `report()` has neither, confirmed on a live panel where Python prints "not identified"
+  with no caveat at all even though RESOLUTION says "resolved" on the same panel. (2) R escapes
+  control characters/ANSI escapes in model names and period labels before printing them into
+  LEADERBOARD/PIVOT; Python's original has the identical unfixed vulnerability — a model name with
+  an embedded newline (reproduced directly) prints as a literal fake `VERDICT:` line inside
+  Python's LEADERBOARD, indistinguishable from a real section header, where R prints one
+  safely-quoted row. (3) R's `report(seed=...)` threads into the PIVOT section's
+  `pivot_agreement()` bootstrap; Python's `report()` (as of upstream commit `5be875b`, which does
+  have a `seed=` parameter) does not — it is hardcoded to `seed=0` inside that one internal call,
+  confirmed by running the same panel at `seed=0..4`: R's printed `pivot_agreement:` percentage
+  moves across seeds, Python's does not. These are the same three fixes made to this R port this
+  round (see `NEWS.md`), now confirmed to be genuine R-only enhancements rather than things Python
+  already had.
 
 Cite either implementation; they compute the same quantities.
 

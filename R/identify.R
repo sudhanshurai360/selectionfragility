@@ -137,6 +137,29 @@
   M <- .to_matrix_sorted(L)
   models <- colnames(M)
   T_eff <- nrow(M)
+  # ADVERSARIAL-REVIEW FIX (2026-11-18): mcs()/model_confidence_set() (mcs.R) self-guards with a
+  # K > .LARGE_K_WARN_THRESHOLD warning on EVERY call, regardless of how the caller got there.
+  # This engine only ever got that warning as a side effect of routing through loss_panel() first
+  # (panel.R's .check_K_vs_T, whose own wording already promises to cover "the
+  # MCS::MCSprocedure()-backed report()/identified()/mcs_size() path") -- a caller who builds a
+  # named list directly (skipping loss_panel(), exactly as mcs_size()'s/identified()'s own
+  # @examples do) got NO warning at any K, including K in the hundreds, silently breaking that
+  # promise. Measured this is not a correctness/stability problem in practice -- K=500, T=30,
+  # block_size=15, reps=500 still ran in ~3.5s with a sane result -- but the warning asymmetry
+  # itself (one engine always warns, the sibling never does on this call path) is real and worth
+  # closing for consistency with mcs()'s guarantee. Reuses loss_panel()'s own text/threshold
+  # rather than inventing new wording.
+  if (length(models) > .LARGE_K_WARN_THRESHOLD) {
+    warning(sprintf(
+      paste0(
+        "identify: K=%d models -- the MCS::MCSprocedure()-backed identified()/mcs_size() engine's ",
+        "cost grows with model count too (though more gently than the native mcs()/",
+        "model_confidence_set() engine's measured super-cubic O(K^3 * B)); this is not an error -- ",
+        "large model sweeps are supported -- but expect it to be slower and more memory-heavy. If ",
+        "you don't need per-model MCS membership, consider narrowing to a candidate shortlist first."
+      ), length(models)
+    ), call. = FALSE)
+  }
   if (block_size > 0 && T_eff <= block_size) {
     block_eff <- max(1, T_eff %/% 2)
     warning(sprintf(
