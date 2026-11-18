@@ -61,7 +61,20 @@ correct, but a WFM analyst who follows this page's own "real usage should use th
 or larger" advice at a realistic intraday \code{T} will wait more than a minute per call, and
 substantially longer for a block-length sweep or a 12-month window. If your \code{T} is in the
 thousands, pass a smaller \code{n_rep}/\code{n_boot} for exploration (a few hundred total \code{n_rep * n_boot} is usually enough to read off \code{p05} to the precision a go/no-go decision needs) and
-reserve the full defaults for a final, one-time check you are willing to let run.
+reserve the full defaults for a final, one-time check you are willing to let run. DO NOT use
+the single \code{T=8736}/~78s figure above for precise linear extrapolation to a different \code{T}
+(e.g. "my \code{T} is a sixth of that, so it should take ~13 seconds") -- re-measured at daily-
+granularity airline-crew-scheduling scale (\code{T} ~ 1,460, four years of daily data) with the
+documented defaults, repeated full-default calls varied by several-fold run to run and did
+not track that naive proportional prediction, because (a) each of the \code{n_rep} replicates pays
+a fixed per-replicate setup cost (seeding, drawing the \code{T}-length null panel, entering
+\code{winner_stability()}) that is NOT part of the \code{O(T)} inner-loop term and is a proportionally
+larger share of the total at smaller \code{T}, and (b) wall-clock time on a real, shared machine is
+sensitive to whatever else is competing for the CPU at the time -- this is an ordinary
+measurement-noise/overhead caveat, not a change to the \code{O(n_rep * n_boot * T)} complexity
+itself (confirmed correct by inspection: there is no hidden higher-order term in the block-
+resampling inner loop). Treat the ~78s figure as an order-of-magnitude anchor, not an
+arithmetic one, and always re-time at your own \code{T} on your own machine before relying on it.
 }
 
 \examples{

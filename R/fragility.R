@@ -741,7 +741,20 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
 #'   substantially longer for a block-length sweep or a 12-month window. If your `T` is in the
 #'   thousands, pass a smaller `n_rep`/`n_boot` for exploration (a few hundred total `n_rep *
 #'   n_boot` is usually enough to read off `p05` to the precision a go/no-go decision needs) and
-#'   reserve the full defaults for a final, one-time check you are willing to let run.
+#'   reserve the full defaults for a final, one-time check you are willing to let run. DO NOT use
+#'   the single `T=8736`/~78s figure above for precise linear extrapolation to a different `T`
+#'   (e.g. "my `T` is a sixth of that, so it should take ~13 seconds") -- re-measured at daily-
+#'   granularity airline-crew-scheduling scale (`T` ~ 1,460, four years of daily data) with the
+#'   documented defaults, repeated full-default calls varied by several-fold run to run and did
+#'   not track that naive proportional prediction, because (a) each of the `n_rep` replicates pays
+#'   a fixed per-replicate setup cost (seeding, drawing the `T`-length null panel, entering
+#'   `winner_stability()`) that is NOT part of the `O(T)` inner-loop term and is a proportionally
+#'   larger share of the total at smaller `T`, and (b) wall-clock time on a real, shared machine is
+#'   sensitive to whatever else is competing for the CPU at the time -- this is an ordinary
+#'   measurement-noise/overhead caveat, not a change to the `O(n_rep * n_boot * T)` complexity
+#'   itself (confirmed correct by inspection: there is no hidden higher-order term in the block-
+#'   resampling inner loop). Treat the ~78s figure as an order-of-magnitude anchor, not an
+#'   arithmetic one, and always re-time at your own `T` on your own machine before relying on it.
 #'
 #' @param K Number of models (all drawn from the same distribution, so no model is truly better).
 #' @param T Number of periods.

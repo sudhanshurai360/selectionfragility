@@ -11,7 +11,7 @@ Initial release: a native R port of the Python package
   refusal rules), `prop22` (zero-simulation Proposition 2.2 certificate), `pivot` (concentration
   share, pivot agreement), `report` (one-screen summary), `compare` (run-over-run champion-change
   diagnostic).
-* 2077 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
+* 2947 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
   this count will keep moving as hardening continues; check `devtools::test()`'s own output rather
   than treating this number as authoritative), including a dedicated cross-language
   oracle-comparison suite verified against the Python package's live behavior, not just its
@@ -365,3 +365,47 @@ Initial release: a native R port of the Python package
   cross-language difference in the underlying procedure. In other words: R's new warning text
   discloses a property TRUE OF PYTHON TOO, just previously undisclosed there; it is the disclosure
   that is new and R-only, not the phenomenon.
+* A 10-agent verification round (2026-11-18) re-checked the small-T/autocorrelation fixes above and
+  caught a genuine `R CMD check --as-cran` ERROR before it reached CRAN: a `test-report.R`
+  regression test located package source via a `getwd()` walk-up to `DESCRIPTION`, which only
+  resolves under `devtools::test()` (source tree), not under `R CMD check` (installed package, no
+  `R/` source reachable) -- fixed with `skip_on_cran()`. Also fixed in that round: `mcs()`'s
+  data.frame guard missed the sibling case of a plain list/`loss_panel` passed directly to `mcs()`
+  (raised a raw, unworded crash); `report()` double-fired its own new small-T/large-K warnings
+  through its two internal MCS-engine call sites (found independently by two review agents,
+  de-duplicated); 8 of the package's own `@examples` self-inflicted the new small-T warning,
+  including `mcs()`'s own example warning about itself; a new, previously-undisclosed Python
+  divergence from the earlier `w`-parameter reorder (R and Python no longer agree on
+  `identified()`/`mcs_size()`'s positional argument order); and one vacuous
+  `expect_true(TRUE)` assertion in a real-world test file that always passed regardless of the
+  phenomenon it claimed to test for.
+* A 28-agent real-world/proactive test expansion (2026-11-18) constructed domain-grounded use
+  cases across 28 additional industries and sub-domains -- catastrophe reinsurance pricing,
+  renewable generation forecasting, corporate credit risk, a deeper multi-catastrophe weather-risk
+  pass, airline crew scheduling at extreme scale, telecom network traffic, agriculture, airline
+  passenger demand, manufacturing predictive maintenance, education enrollment, government budget
+  revenue, real estate, litigation settlement forecasting, sports analytics, streaming demand,
+  pharmaceutical demand, e-commerce fraud, carbon emissions, fashion-retail markdown, ocean
+  freight, foodborne-illness surveillance, gaming-platform capacity, population health, a
+  competition-benchmark extension to K=50-80 and hierarchical aggregation, hotel occupancy, mining
+  output, water-utility demand, and semiconductor fab demand -- adding 26 new permanent
+  `test-realworld-*.R` files (~870 new assertions) and extending 2 existing ones. No new package
+  defects were found; the round's value was independent confirmation that the small-T warning,
+  the autocorrelation disclosure, the warning-deduplication fix, and the `concentration_share()`/
+  `winner_stability()`-vs-`decision_breakdown()` divergence all generalize correctly across
+  domains, plus several non-bug characterization findings worth knowing before relying on this
+  package in production: `concentration_share()`'s known understatement of multi-event
+  concentration reproduces (and sometimes sharpens) under at least five distinct causal mechanisms
+  (weather catastrophes, binary rare-failure events, adversarial fraud waves, point-source
+  outbreaks, heavy-tailed litigation) and gets proportionally worse as the number of distinct
+  events grows (5->9 comparable catastrophes roughly halved the fraction of true concentration
+  `concentration_share()` captures); at extreme autocorrelation (rho~0.73-0.85, e.g. a housing-
+  price panel), a block-bootstrap re-estimate of the champion-vs-rival SE can run ~2x the naive
+  estimate `resolution_report()` actually uses -- enough to flip "resolved" to "not resolved" on
+  the identical panel, and `mcs()`'s VERDICT can flip non-monotonically (not just monotonically
+  understate) as block size is swept across a plausible cycle-length range; and
+  `exchangeable_benchmark()`'s previously-documented ~78s-at-T=8736 timing figure should not be
+  linearly extrapolated to other T (fixed per-replicate overhead and machine-load sensitivity
+  dominate at smaller T) -- its roxygen docs now say so explicitly. 2947 tests, `R CMD check
+  --as-cran`: 0 errors, 0 warnings, 2 NOTEs (re-confirmed after this round, independently, not
+  just via agent self-report).

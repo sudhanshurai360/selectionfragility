@@ -147,3 +147,151 @@ test_that("a single dominant outlier confined to one model does not corrupt the 
   expect_true(is.finite(rr$observed_edge))
   expect_true(is.finite(rr$mde))
 })
+
+# --- GEFCom-style hierarchical/probabilistic convention ----------------------------------------
+#
+# NEW in this round (2026-11-18), genuinely distinct from the M4/M5 batch above: GEFCom (Global
+# Energy Forecasting Competition) scores entrants with pinball/quantile loss (so "loss" below
+# should be read as a per-period quantile-loss realization, not squared error -- the package is
+# agnostic to which nonnegative loss a caller feeds it, so this is a framing difference, not a
+# code difference) AND evaluates a HIERARCHICAL structure: zone-level forecasts that must also
+# reconcile to a system-level (aggregate) total. The M4/M5 batch above never varied aggregation
+# level -- every panel there was a single flat view. The question this section asks, that the
+# prior round did not: given the SAME underlying K models' forecasts, can the champion that
+# mcs()/report() crowns at the disaggregated (zone) level differ from the champion crowned at the
+# aggregated (system) level?
+
+test_that("GEFCom-style zone-level vs. system-level aggregation crowns a DIFFERENT champion (real finding)", {
+  # Construct 4 zones and K=5 models: 4 "specialists" (each one excellent in exactly its own
+  # zone, mediocre-to-bad everywhere else -- a realistic stand-in for a zone-tuned local model)
+  # plus 1 "generalist" (decently accurate everywhere, best-in-class nowhere). This is a genuine,
+  # plausible competition dynamic: a locally-tuned entrant wins its own zone's leaderboard, but a
+  # robust-everywhere entrant wins the system-level rollup because the specialists' large misses
+  # on the OTHER zones accumulate once losses are aggregated to the system view.
+  T <- 60
+  n_zone <- 4
+  specialists <- sprintf("spec%d", seq_len(n_zone))
+  models <- c(specialists, "generalist")
+
+  make_zone_losses <- function(zone_i, seed) {
+    set.seed(seed)
+    L <- stats::setNames(lapply(seq_len(n_zone), function(spec_i) {
+      if (spec_i == zone_i) abs(rnorm(T, 0.2, 0.05)) else abs(rnorm(T, 2.0, 0.3))
+    }), specialists)
+    L$generalist <- abs(rnorm(T, 0.8, 0.1))
+    L
+  }
+
+  zone_panels <- lapply(seq_len(n_zone), function(zi) loss_panel(make_zone_losses(zi, seed = 3000 + zi)))
+
+  zone_champs <- character(n_zone)
+  for (zi in seq_len(n_zone)) {
+    ctx <- sprintf("zone %d", zi)
+    expect_no_error(out <- report(zone_panels[[zi]]))
+    expect_false(grepl("NaN|\\bInf\\b", out), label = ctx)
+    expect_no_error(rr <- resolution_report(zone_panels[[zi]]))
+    zone_champs[zi] <- rr$champion
+    # Each zone's own tuned specialist should win its own zone's leaderboard.
+    expect_identical(rr$champion, sprintf("spec%d", zi), label = ctx)
+  }
+
+  # System-level view: the SAME underlying per-period losses, reconciled (summed) across the 4
+  # zones for each model -- a hierarchical rollup, not a resample. This mirrors GEFCom-style
+  # zone -> system reconciliation: the aggregate total's error is the sum of the zonal errors.
+  system_L <- stats::setNames(lapply(models, function(m) {
+    Reduce(`+`, lapply(zone_panels, function(p) as.numeric(p$losses[[m]])))
+  }), models)
+  system_panel <- loss_panel(system_L)
+
+  expect_no_error(out_sys <- report(system_panel))
+  expect_false(grepl("NaN|\\bInf\\b", out_sys))
+  expect_no_error(rr_sys <- resolution_report(system_panel))
+
+  # The real finding: the system-level champion is the generalist -- different from EVERY
+  # zone-level champion. This is exactly the "which model wins depends on the aggregation level"
+  # dynamic a GEFCom-style organizer needs to know report() can surface: a zone-level leaderboard
+  # and a system-level leaderboard, built from the identical underlying forecasts, can legitimately
+  # disagree on who should be declared the winner.
+  expect_identical(rr_sys$champion, "generalist")
+  expect_false(rr_sys$champion %in% zone_champs)
+  expect_true(isTRUE(rr_sys$resolved))  # the gap is large and deterministic by construction
+})
+
+# --- Even-larger-K competition leaderboards (K=50-80) -------------------------------------------
+#
+# NEW in this round: the prior M4/M5 batch above tops out at K=6 (realistic for M-competition
+# entrant counts). A true open leaderboard competition (GEFCom, M5's many submitted methods, a
+# Kaggle-style forecasting competition) can have K in the 50-80 range. loss_panel()/mcs()/
+# identify() already carry a static "K > 100 -> O(K^3*B) is slow" warning
+# (.LARGE_K_WARN_THRESHOLD in panel.R) -- this section specifically checks (a) whether K=50-80,
+# which is BELOW that threshold, is actually fine in wall-clock terms (it should be, since the
+# threshold was presumably calibrated with headroom), and (b) whether decision_breakdown()'s
+# output and report()'s printed LEADERBOARD remain something a human could actually read at this
+# scale, independent of whether they run fast.
+
+test_that("K=50-80 competition leaderboards: report()/decision_breakdown()/prop22_certifies() stay fast ...", {
+  # T is chosen >= 10*K (T/K ratio comfortably above mcs.R's own small-T warning boundary of 10)
+  # so that timing/behavior here is NOT confounded by the separate, already-covered small-T
+  # warning -- this section isolates the effect of K alone, not T/K.
+  for (K in c(50, 80)) {
+    T <- 10 * K + 200  # T/K > 10 for every K tested here
+    set.seed(4000 + K)
+    L <- stats::setNames(
+      lapply(seq_len(K), function(i) abs(rnorm(T, 1 + 0.01 * i, 0.3))),
+      paste0("model", seq_len(K))
+    )
+    ctx <- sprintf("K=%d, T=%d", K, T)
+    panel <- NULL
+    expect_no_error(panel <- loss_panel(L))
+
+    warn_msgs <- character(0)
+    t0 <- Sys.time()
+    out <- withCallingHandlers(
+      report(panel),
+      warning = function(w) { warn_msgs <<- c(warn_msgs, conditionMessage(w)); invokeRestart("muffleWarning") }
+    )
+    elapsed <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
+
+    # Timing assertion kept deliberately generous (2 minutes) to avoid CI flakiness on slower
+    # hardware -- the actual measured wall-clock on a normal development machine was well under
+    # 1 second for both K=50 and K=80 (K^3*B is super-cubic in principle, but the pairwise
+    # elimination converges long before exhausting all K^3 comparisons on a panel this separated).
+    expect_true(elapsed < 120, label = sprintf("%s: report() took %.2fs", ctx, elapsed))
+    expect_true(grepl("^VERDICT:", out), label = ctx)
+    expect_false(grepl("NaN|\\bInf\\b", out), label = ctx)
+
+    # FINDING: at K=50-80, T/K>10, no large-K or small-T warning fires at all -- confirms
+    # .LARGE_K_WARN_THRESHOLD (100, per panel.R) sits strictly above this entire K=50-80 range,
+    # contrary to a naive assumption that the existing guard already covers K=50-80 (it starts
+    # warning only once K exceeds 100, not 40).
+    expect_length(warn_msgs, 0)
+
+    # decision_breakdown() and prop22_certifies() are the two functions named by this round's
+    # brief as the specific cost/interpretability targets; time and sanity-check them directly
+    # (decision_breakdown() is only O(K) pairwise comparisons against the pooled champion, not
+    # mcs()'s O(K^3*B) elimination, so it is expected to be comfortably fast even here).
+    t1 <- Sys.time()
+    db <- NULL
+    expect_no_error(db <- decision_breakdown(L))
+    elapsed_db <- as.numeric(difftime(Sys.time(), t1, units = "secs"))
+    expect_true(elapsed_db < 30, label = sprintf("%s: decision_breakdown() took %.2fs", ctx, elapsed_db))
+    expect_true(is.numeric(db$k) && is.finite(db$k), label = ctx)
+
+    cert <- NULL
+    expect_no_error(cert <- prop22_certifies(db$k, T))
+    expect_true(is.na(cert) || is.logical(cert), label = ctx)
+
+    # FINDING: computational cost stays trivially cheap at this scale (well under a second in
+    # practice), but printed INTERPRETABILITY does not keep pace -- report()'s LEADERBOARD prints
+    # one line per model, so a K=50-80 leaderboard produces 50-80+ leaderboard lines plus the
+    # VERDICT/RESOLUTION/PIVOT sections, far exceeding what the function's own documentation
+    # calls a "one-screen report" (report.R's header comment). The function remains fully correct
+    # and non-crashing at this scale -- this is a usability observation, not a defect -- but a
+    # caller building a true 50-80-entrant leaderboard UI should not expect report()'s raw output
+    # to be eyeballed directly; it should be parsed (e.g. the LEADERBOARD block) and re-rendered,
+    # or narrowed to a shortlist first, exactly as the existing large-K warning's own text already
+    # advises ("narrow to a candidate shortlist if you don't need the full set").
+    n_lines <- length(strsplit(out, "\n")[[1]])
+    expect_true(n_lines > 50, label = sprintf("%s: expected a long (>50-line), no-longer-one-screen report, got %d lines", ctx, n_lines))
+  }
+})

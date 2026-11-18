@@ -226,3 +226,209 @@ test_that("winner_stability()/exchangeable_benchmark() give a REASSURING read th
   # (prior tests) show the decision is almost entirely dependent on 5 specific catastrophe weeks.
   expect_gt(ws$stability, bench$p05)
 })
+
+# =============================================================================================
+# SECOND, DEEPER PASS (2026-11-18) -- extends the round above, does not re-litigate it.
+#
+# The prior round's central finding (winner_stability()/exchangeable_benchmark() give a
+# reassuring read that decision_breakdown()/concentration_share() contradict) is ACCEPTED and
+# UNCHANGED here. This pass checks three NEW things the prior round did not measure, now that
+# the package has also grown (a) a static small-T warning in mcs()/identified() (T/K<10), (b) an
+# always-printed autocorrelation disclosure line in report(), and (c) a dedup fix for warnings
+# that used to double-fire from report()'s two internal MCS call sites.
+# =============================================================================================
+
+# --- NEW SCENARIO for check (1): a realistic SHORT-HISTORY, ANNUAL-CADENCE cat panel -----------
+# Many real catastrophe-bond / cat-reinsurance programs reset and re-score ANNUALLY (one
+# aggregate seasonal loss-ratio observation per year), not weekly -- and the "usable" history for
+# catastrophe modeling is itself short (insurers/modelers generally trust detailed hurricane-loss
+# history back to roughly the early 2000s, not multiple centuries). A 24-year annual panel
+# (2001-2024, K=4 models) gives T/K = 6.0 -- BELOW this package's own newly-added small-T
+# threshold (T/K<10) -- while ALSO being a genuine multi-catastrophe-concentrated panel (4 of the
+# 24 years are historically catastrophic seasons: 2005/Katrina, 2008/Ike, 2017/Harvey,
+# 2021/Ida). This combination (small-T AND multi-catastrophe-concentrated) is realistic, not
+# adversarial: cat-risk data is routinely both.
+years_annual <- 2001:2024
+T_annual <- length(years_annual)  # 24; T/K = 24/4 = 6.0 < the package's T/K=10 small-T threshold
+cat_years_annual <- c(2005, 2008, 2017, 2021)
+
+build_annual_smallT_panel <- function(seed = 42L) {
+  set.seed(seed)
+  L <- stats::setNames(
+    lapply(models, function(m) pmax(stats::rnorm(T_annual, mean = 1.0, sd = 0.05), 0.1)),
+    models
+  )
+  for (y in cat_years_annual) {
+    i <- which(years_annual == y)
+    L$climatology[i]  <- stats::runif(1, 11, 14)
+    L$ar1_regional[i] <- stats::runif(1, 10, 13)
+    L$ensemble_nwp[i] <- stats::runif(1, 1.0, 1.6)
+    L$ml_nowcast[i]   <- stats::runif(1, 12, 15)
+  }
+  loss_panel(L, labels = as.character(years_annual))
+}
+
+test_that("CHECK (1), NEW: the small-T warning and the already-documented winner_stability-vs-decision_breakdown divergence COEXIST sensibly (not overwhelmingly/contradictorily) on a realistic short-history annual cat panel", {
+  panel <- build_annual_smallT_panel()
+
+  # report() fires the small-T warning exactly once (dedup holds even in this NEW small-T +
+  # multi-catastrophe combination, not just in the single-mechanism cases the dedup fix targeted).
+  warns <- testthat::capture_warnings(rpt <- report(panel, alpha = 0.10, seed = 1))
+  expect_length(warns, 1)
+  expect_match(warns, "T=24 periods for K=4 models \\(T/K=6\\.0\\).*small-sample regime")
+
+  # The small-T caveat (a WARNING, side-channel) and the printed report body are cleanly
+  # SEPARATED -- the small-T language never bleeds into the printed VERDICT/PIVOT text itself, so
+  # a reader of just the printed report is not confronted with two overlapping disclosures mashed
+  # into one paragraph. This is the comprehensibility question the task asks: the two caveats
+  # layer (warning channel vs. print-body channel) rather than collide.
+  expect_false(grepl("small-sample", rpt))
+  expect_match(rpt, "VERDICT: identified \\(MCS size 1 of 4\\)")
+  # PIVOT correctly names all 4 catastrophe years as the k* set -- and on this SHORTER, annual
+  # panel k* lands EXACTLY on the named catastrophes (a cleaner mapping than the weekly panel
+  # above, where k*=9 took the 5 catastrophes plus 4 ordinary weeks). This is itself a new,
+  # genuine (non-bug) observation: the gap between "k*" and "count of named catastrophes" that the
+  # prior round flagged is panel-specific, not a fixed property of this statistic.
+  expect_match(rpt, "k\\*=4 of 24 periods \\(2005, 2008, 2017, 2021\\)")
+  # The always-on autocorrelation disclosure is present exactly once, and not duplicated by the
+  # small-T warning's own text (the two caveats are about different things -- MCS false-elimination
+  # rate vs. the RESOLUTION SE's independence assumption -- and say so without overlapping wording).
+  expect_equal(lengths(gregexpr("assumes no autocorrelation", rpt)), 1L)
+
+  # Now reconfirm, on THIS small-T panel, that the already-documented reassuring-vs-concentrated
+  # divergence from the prior round still holds -- i.e. the small-T warning does not somehow
+  # replace or resolve it, it just adds an orthogonal caveat about VERDICT reliability.
+  champ <- pooled_winner(panel$losses, panel$weights)
+  expect_identical(champ, "ensemble_nwp")
+  db <- suppressWarnings(decision_breakdown(panel, a = champ, return_ties = TRUE))
+  expect_identical(db$k, 4L)
+  expect_identical(sort(db$removed), sort(vapply(cat_years_annual, function(y) which(years_annual == y), integer(1))))
+
+  ws <- suppressWarnings(winner_stability(panel, seed = 1, n_boot = 2000))
+  bench <- suppressWarnings(exchangeable_benchmark(K = length(models), T = T_annual, n_rep = 200, n_boot = 500, seed = 1))
+  # The reassuring bootstrap read survives small-T too: the champion wins (essentially) every
+  # resample, well above the pure-chance null's 5th percentile -- the SAME divergence from
+  # decision_breakdown()'s own k*=4/24 concentrated read as in the weekly panel above. A
+  # practitioner relying on winner_stability() alone would get a falsely reassuring signal here
+  # on top of (not instead of) the separate small-T VERDICT caveat -- the two signals are
+  # comprehensible together (they answer different questions) but a user would need to know to
+  # check BOTH decision_breakdown() and winner_stability(), since neither alone tells the full
+  # story and report() only surfaces the decision_breakdown()-side one.
+  expect_gt(ws$stability, 0.99)
+  expect_gt(ws$stability, bench$p05)
+})
+
+# --- NEW SCENARIO for check (2): an 8-10 catastrophe, longer multi-decade panel ----------------
+# A 16-season (2009-2024), weekly-cadence panel gives T = 352 (comfortably in the "large T, small
+# catastrophic fraction" regime the task asks for -- T/K = 88, nowhere near the small-T
+# threshold) with 9 distinct, named historical Atlantic hurricanes spread across the window
+# (Irene 2011, Sandy 2012, Matthew 2016, Harvey 2017, Michael 2018, Dorian 2019, Laura 2020, Ida
+# 2021, Ian 2022) -- nearly double the prior round's 5-event panel, to see whether
+# concentration_share()'s already-confirmed "understates multi-event concentration" limitation
+# gets proportionally WORSE as the catastrophe count grows, which the prior round (fixed at
+# exactly 5 events) could not measure.
+years9 <- 2009:2024
+weeks_per_season9 <- weeks_per_season
+T9 <- length(years9) * weeks_per_season9  # 352
+labels9 <- unlist(lapply(years9, function(y) paste0(y, "-W", sprintf("%02d", 1:weeks_per_season9))))
+idx_of9 <- function(year, week) as.integer((which(years9 == year) - 1L) * weeks_per_season9 + week)
+
+catastrophes9 <- list(
+  list(year = 2011, week = 14, name = "Hurricane Irene (2011)"),
+  list(year = 2012, week = 20, name = "Hurricane Sandy (2012)"),
+  list(year = 2016, week = 15, name = "Hurricane Matthew (2016)"),
+  list(year = 2017, week = 12, name = "Hurricane Harvey (2017)"),
+  list(year = 2018, week = 18, name = "Hurricane Michael (2018)"),
+  list(year = 2019, week = 13, name = "Hurricane Dorian (2019)"),
+  list(year = 2020, week = 13, name = "Hurricane Laura (2020)"),
+  list(year = 2021, week = 13, name = "Hurricane Ida (2021)"),
+  list(year = 2022, week = 17, name = "Hurricane Ian (2022)")
+)
+cat_idx9 <- sort(vapply(catastrophes9, function(cc) idx_of9(cc$year, cc$week), integer(1)))
+
+build_weather_panel9 <- function(seed = 20261118L) {
+  set.seed(seed)
+  L <- stats::setNames(
+    lapply(models, function(m) pmax(stats::rnorm(T9, mean = 1.0, sd = 0.05), 0.1)),
+    models
+  )
+  for (cc in catastrophes9) {
+    i <- idx_of9(cc$year, cc$week)
+    L$climatology[i]  <- stats::runif(1, 11, 14)
+    L$ar1_regional[i] <- stats::runif(1, 10, 13)
+    L$ensemble_nwp[i] <- stats::runif(1, 1.0, 1.6)
+    L$ml_nowcast[i]   <- stats::runif(1, 12, 15)
+  }
+  loss_panel(L, labels = labels9)
+}
+
+test_that("CHECK (2), NEW: concentration_share()'s already-confirmed understatement of multi-event concentration gets WORSE, proportionally, as the catastrophe count grows from 5 to 9", {
+  panel9 <- build_weather_panel9()
+  champ9 <- pooled_winner(panel9$losses, panel9$weights)
+  expect_identical(champ9, "ensemble_nwp")
+
+  db9 <- suppressWarnings(decision_breakdown(panel9, a = champ9, return_ties = TRUE))
+  # On this longer, 9-catastrophe panel, k* lands EXACTLY on the 9 named catastrophes -- a
+  # cleaner, 1-to-1 mapping than the prior round's 5-event weekly panel (which needed 9 periods,
+  # 5 catastrophes + 4 ordinary weeks, to flip the decision). Both are legitimate: k* answers an
+  # adversarial-removal question, not "how many named catastrophes are there," and here they
+  # happen to coincide exactly.
+  expect_identical(db9$k, 9L)
+  expect_identical(sort(db9$removed), cat_idx9)
+
+  la9 <- panel9$losses[[champ9]]; lb9 <- panel9$losses[[db9$binding_opponent]]
+  contrib9 <- lb9 - la9
+  cs9 <- concentration_share(panel9)
+  multi_ratio9 <- sum(abs(contrib9[cat_idx9])) / sum(abs(contrib9))
+
+  # Same qualitative pattern as the prior round's 5-event panel: concentration_share() (looking
+  # only at the single largest period) reports a modest number, while the 9 catastrophes TOGETHER
+  # account for the large majority of gross margin dispersion.
+  expect_lt(cs9, 0.15)
+  expect_gt(multi_ratio9, 0.75)
+
+  # --- THE NEW MEASUREMENT: does the understatement get worse as catastrophe count grows? ------
+  # Recompute the SAME ratio -- concentration_share() / (true multi-event dispersion share) -- on
+  # the prior round's own 5-event panel (reusing its exact `build_weather_panel()`/`cat_idx`/
+  # champion-vs-ar1_regional construction, unchanged) for a like-for-like comparison.
+  panel5 <- build_weather_panel()
+  champ5 <- pooled_winner(panel5$losses, panel5$weights)
+  la5 <- panel5$losses[[champ5]]; lb5 <- panel5$losses[["ar1_regional"]]
+  contrib5 <- lb5 - la5
+  cs5 <- concentration_share(panel5)
+  multi_ratio5 <- sum(abs(contrib5[cat_idx])) / sum(abs(contrib5))
+
+  ratio5 <- cs5 / multi_ratio5  # ~0.22: how much of the TRUE multi-event concentration a reader
+  ratio9 <- cs9 / multi_ratio9  # ~0.12: sees via concentration_share() alone, at 5 vs. 9 events
+
+  # Going from 5 to 9 roughly-comparable catastrophes, concentration_share() captures a SMALLER
+  # fraction of the true multi-event concentration, not the same fraction -- i.e. the
+  # already-known understatement is not a fixed-size blind spot, it widens as the book of
+  # business accumulates more distinct catastrophe types. This is new information the prior
+  # round's single fixed-N=5 construction could not have revealed, and it matters practically:
+  # the MORE historically catastrophe-exposed a cat program's loss history is, the LESS
+  # representative concentration_share() becomes of its true concentration.
+  expect_lt(ratio9, ratio5)
+  expect_lt(ratio9, 0.75 * ratio5)  # not just smaller -- at least a 25% relative widening of the gap
+})
+
+test_that("CHECK (3), NEW: report()'s warning-dedup fix correctly handles both new panels (no literal duplicate warning text, no duplicated disclosure lines)", {
+  # The small-T + multi-catastrophe annual panel: dedup already checked above (exactly 1 warning
+  # fires even though .run_mcs_arch() is called from two internal sites in report()). Reconfirmed
+  # here with an explicit no-duplicates assertion in the dedup-focused idiom.
+  warns_annual <- testthat::capture_warnings(report(build_annual_smallT_panel(), alpha = 0.10, seed = 1))
+  expect_equal(length(warns_annual), length(unique(warns_annual)))
+  expect_length(warns_annual, 1)
+
+  # The 9-catastrophe, T=352 panel is NOT small-T (T/K=88), so no small-T warning is expected at
+  # all here -- but report() still runs two internal MCS call sites, so this is a genuine,
+  # different check of the same dedup mechanism: whatever warnings (if any) DO fire are not
+  # duplicated word-for-word.
+  warns9 <- testthat::capture_warnings(rpt9 <- report(build_weather_panel9(), alpha = 0.10, seed = 1))
+  expect_equal(length(warns9), length(unique(warns9)))
+
+  # And the always-printed autocorrelation disclosure in the report BODY (a separate mechanism
+  # from the warning dedup -- it isn't a `warning()` at all, it's unconditionally appended text)
+  # is itself not duplicated within one report() call on this new, larger panel.
+  expect_equal(lengths(gregexpr("assumes no autocorrelation", rpt9)), 1L)
+})
