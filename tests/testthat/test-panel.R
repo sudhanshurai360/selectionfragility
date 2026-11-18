@@ -205,6 +205,61 @@ test_that("loss_panel() from a LOGICAL matrix is rejected, matching the list/dat
   expect_error(loss_panel(M), "logical")
 })
 
+test_that("loss_panel() rejects an NA or empty-string model/column name consistently across all three construction paths, without crashing (strict-audit round, 2026-11-18)", {
+  # A prior round found that an empty-string name is only rejected in .from_list() by a
+  # deliberate, explicit check; .from_matrix()/.from_data_frame() happened to reject it too, but
+  # only by accident -- R's `[[` returns NULL for a lookup by name "" or NA_character_ even when
+  # a same-named element exists (confirmed: `setNames(list(1:2), "")[[""]]` is NULL, not 1:2), so
+  # the real rejection came from a later, unrelated, confusingly-worded check ("has 0 periods,
+  # expected N" / "is not numeric (class NULL)"), not from any deliberate "empty name" guard.
+  # Worse, .from_list()'s own check (`any(nm == "")`) silently assumed no name could be NA: an NA
+  # name made `nm == ""` produce NA, any(c(FALSE, NA)) resolve to NA, and `if (is.null(nm) || NA)`
+  # crash with a raw, unworded "missing value where TRUE/FALSE needed" -- bypassing this file's
+  # entire stop()-with-a-clear-message policy. All three paths now reject both empty-string and
+  # NA names explicitly, with the same deliberate wording, and none of them crash.
+  a <- c(1.0, 1.1, 0.9, 1.05, 0.95, 1.02)
+  b <- c(1.2, 1.15, 1.25, 1.18, 1.22, 1.19)
+
+  # empty-string name
+  expect_error(loss_panel(stats::setNames(list(a, b), c("", "b"))), "named|empty|NA")
+  M1 <- matrix(c(a, b), ncol = 2)
+  colnames(M1) <- c("", "b")
+  expect_error(loss_panel(M1), "empty|NA")
+  df1 <- data.frame(x = a, y = b)
+  colnames(df1) <- c("", "b")
+  expect_error(loss_panel(df1), "empty|NA")
+
+  # NA name -- must raise this package's own worded error, NOT a raw base-R
+  # "missing value where TRUE/FALSE needed" crash.
+  L2 <- stats::setNames(list(a, b), c("x", "b"))
+  names(L2)[1] <- NA
+  err2 <- tryCatch(loss_panel(L2), error = function(e) e)
+  expect_s3_class(err2, "error")
+  expect_false(grepl("missing value where", conditionMessage(err2), fixed = TRUE))
+  expect_match(conditionMessage(err2), "named|empty|NA")
+
+  M2 <- matrix(c(a, b), ncol = 2)
+  colnames(M2) <- c(NA, "b")
+  expect_error(loss_panel(M2), "empty|NA")
+
+  df2 <- data.frame(x = a, y = b)
+  colnames(df2) <- c(NA, "b")
+  expect_error(loss_panel(df2), "empty|NA")
+
+  # whitespace-only names and the literal two-character string "NA" are NOT empty/NA and must
+  # still be accepted consistently across all three paths (unchanged by this fix).
+  for (nm in c(" ", "\t", "NA")) {
+    p1 <- loss_panel(stats::setNames(list(a, b), c(nm, "b")))
+    expect_identical(p1$models, c(nm, "b"))
+    M3 <- matrix(c(a, b), ncol = 2); colnames(M3) <- c(nm, "b")
+    p2 <- loss_panel(M3)
+    expect_identical(p2$models, c(nm, "b"))
+    df3 <- data.frame(x = a, y = b); colnames(df3) <- c(nm, "b")
+    p3 <- loss_panel(df3)
+    expect_identical(p3$models, c(nm, "b"))
+  }
+})
+
 test_that("load_loss_panel() gives a package message for a missing file, not a raw connection error", {
   expect_error(load_loss_panel(file.path(tempdir(), "definitely-not-here-xyz.json")), "does not exist")
 })

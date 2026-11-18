@@ -22,22 +22,45 @@
   ), class = "change_report")
 }
 
+#' @keywords internal
+.escape_champion_name <- function(name) {
+  # STRICT-AUDIT FIX (2026-11-18): sibling bug to report.R's LEADERBOARD control-character fix
+  # (same commit). print.change_report() interpolates previous_champion/current_champion into
+  # its one-line sprintf() summary with a bare %s, with no escaping at all -- unlike
+  # LEADERBOARD's per-model rows, there isn't even a collision-triggered escaping path here, so
+  # ANY model name containing a literal newline/carriage-return (or other C0/DEL control
+  # character) sails straight through unescaped. Confirmed directly: a model named
+  # "evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE_INJECTED_LINE\nact=TRUE" used as the
+  # previous_champion printed as three separate lines, with the middle line rendering
+  # byte-for-byte like a genuine VERDICT section header and a genuine "act=TRUE" -- a reader of
+  # this one-line summary has no way to tell a fabricated line from this function's real prose.
+  # loss_panel()'s own name validation (panel.R) only rejects empty/duplicate names, not control
+  # characters, so this is directly reachable the same way the LEADERBOARD bug was. Fixed with
+  # the SAME escaping approach already established in report.R: encodeString(..., quote = "'")
+  # whenever the name contains a control character, so a champion name alone can never inject
+  # extra "lines" into the printed summary.
+  if (is.null(name) || length(name) != 1 || is.na(name)) return(name)
+  if (grepl("[\\x00-\\x1f\\x7f]", name, perl = TRUE)) encodeString(name, quote = "'") else name
+}
+
 #' @export
 print.change_report <- function(x, ...) {
+  prev_disp <- .escape_champion_name(x$previous_champion)
+  curr_disp <- .escape_champion_name(x$current_champion)
   if (!x$champion_changed) {
-    head <- sprintf("no champion change (%s); act=FALSE", x$current_champion)
+    head <- sprintf("no champion change (%s); act=FALSE", curr_disp)
   } else if (is.null(x$champion_without_new_periods)) {
     head <- sprintf(
       "champion changed %s -> %s; current shares no periods with previous -- cannot attribute the change; act=%s",
-      x$previous_champion, x$current_champion, x$act
+      prev_disp, curr_disp, x$act
     )
   } else if (identical(x$champion_without_new_periods, x$previous_champion)) {
     head <- sprintf(
       "champion changed %s -> %s, entirely due to the %d new period(s) (removing them reverts to the old champion); act=%s",
-      x$previous_champion, x$current_champion, x$n_new_periods, x$act
+      prev_disp, curr_disp, x$n_new_periods, x$act
     )
   } else {
-    head <- sprintf("champion changed %s -> %s; act=%s", x$previous_champion, x$current_champion, x$act)
+    head <- sprintf("champion changed %s -> %s; act=%s", prev_disp, curr_disp, x$act)
   }
   mcs_desc <- if (!is.null(x$mcs_error)) {
     sprintf("MCS undetermined (%s)", x$mcs_error)

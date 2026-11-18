@@ -113,6 +113,40 @@ test_that(".res_scale()'s champion-only normalization stays finite under an extr
   expect_true(is.finite(mcb_bound(L)))
 })
 
+test_that("mcb_bound()'s 'never tighter than observed_edge' guarantee can break under extreme magnitude + weight concentration + near-zero true variance (known limitation, documented, not fixed)", {
+  # Found by an exhaustive-adversarial round, 2026-11-18, `.edge_components()` self-consistency
+  # lens: `mcb_bound()`'s `point` is `weighted.mean(ec$diff, w)` (the per-period rival-minus-champion
+  # differential, weighted-averaged); `resolution_report()`'s `observed_edge` numerator is
+  # `ec$mean_rival - ec$mean_champ` (two SEPARATELY weighted-averaged means, then subtracted). Both
+  # are the identical quantity in exact arithmetic but round differently in double precision once the
+  # champion/rival sit at large loss magnitude (both individually valid, within `.MAX_ABS_LOSS`)
+  # combined with weight concentration on one period -- see the inline comment directly above
+  # `mcb_bound()`'s body in resolution.R for the full mechanism. Confirmed SHARED, oracle-pinned
+  # behavior: the identical repro against the Python original reproduces the exact same violation
+  # bit-for-bit -- NOT an R porting bug, and not fixed here (switching `point` to `mean_rival -
+  # mean_champ` would silently diverge mcb_bound()'s ordinary-case output from the Python oracle,
+  # which deliberately computes `point` this same way "to preserve the exact prior floating-point
+  # computation path bit-for-bit"). This test pins the violation itself as a known, reviewed
+  # limitation -- not something to be silently "fixed" by a future edit without re-reviewing the
+  # cross-language consequence first.
+  set.seed(1)
+  n <- 8
+  base <- rnorm(n)
+  champ <- 1e12 + base
+  rival <- champ + 0.0007 + rnorm(n, 0, 1e-7)
+  L <- list(champ = champ, rival = rival)
+  w <- c(1e8, rep(1, n - 1))
+
+  bound <- mcb_bound(L, w)
+  observed_edge <- resolution_report(L, w)$observed_edge
+  expect_true(is.finite(bound))
+  expect_true(is.finite(observed_edge))
+  # The documented invariant ("bound by construction never tighter than the observed point-estimate
+  # edge") is VIOLATED at this specific, constructed combination of inputs -- pinning that this is
+  # the case, not that it is correct.
+  expect_lt(bound, observed_edge)
+})
+
 test_that("resolution_report() warns on a 'resolved' verdict driven by weight/volatility correlation (strict-regression round, 2026-11-18)", {
   # REGRESSION: a dedicated verification agent measured a 15-39% false-confidence rate among
   # "resolved" verdicts under realistic (non-adversarial) weight/volatility correlation -- not a

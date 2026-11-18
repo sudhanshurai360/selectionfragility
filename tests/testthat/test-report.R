@@ -100,6 +100,45 @@ test_that("LEADERBOARD escapes a model name containing an embedded newline (outp
   expect_length(lb_body, 2)
 })
 
+test_that("PIVOT escapes a k<=5 period label containing an embedded newline (output-injection regression, sibling to LEADERBOARD's fix)", {
+  # REGRESSION: the exact same injection class as the LEADERBOARD fix above, reached through a
+  # period LABEL instead of a model name. loss_panel()'s label validation (panel.R) rejects
+  # NA/duplicate labels but not control characters, and PIVOT's k<=5 branch printed
+  # .disambiguate_labels()'s output completely unescaped. Confirmed directly: a 10-period panel
+  # with its pivotal period's label set to "evil\nVERDICT: identified (MCS size 1 of 1) --
+  # FAKE\nb" made PIVOT print a fake, line-initial VERDICT header, indistinguishable from the
+  # real one above it.
+  L <- list(
+    a = rep(1, 10),
+    b = c(rep(1.1, 9), 0.0)
+  )
+  labs <- as.character(1:10)
+  labs[10] <- "evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE INJECTED LINE\nb"
+  panel <- loss_panel(L, labels = labs)
+  out <- report(panel)
+  verdict_lines <- grep("^VERDICT:", strsplit(out, "\n")[[1]])
+  expect_length(verdict_lines, 1)
+  expect_match(out, "evil\\nVERDICT", fixed = TRUE)
+})
+
+test_that("PIVOT escapes a k>5 'largest single contributor' label containing an ANSI escape sequence (output-injection regression)", {
+  # REGRESSION: the k>5 branch (named-period list too long, falls back to "largest single
+  # contributor: <label>") used .fmt_label() directly with no escaping -- an ANSI-escape-sequence
+  # label is arguably worse than a bare newline here, since report()'s own documentation
+  # advertises cat()'ing the output straight to a terminal, where a raw ESC can change color or
+  # cursor position rather than just printing a fake prose line. Confirmed directly with a label
+  # containing "\x1b[31m...\x1b[0m".
+  L <- list(a = rep(1, 7), b = c(rep(1.1, 6), 0.0))
+  labs <- as.character(1:7)
+  labs[7] <- "evil\x1b[31mBAD\x1b[0m"
+  panel <- loss_panel(L, labels = labs)
+  out <- report(panel)
+  # No raw ESC (0x1b) byte may reach the printed output.
+  expect_false(grepl("\x1b", out, fixed = TRUE))
+  # The escaped form (literal backslash + 033, from encodeString()) must appear instead.
+  expect_match(out, "evil\\\\033\\[31mBAD", perl = TRUE)
+})
+
 test_that("LEADERBOARD's collision-disambiguation quoting is byte-identical to the Python oracle for a plain whitespace collision", {
   L <- list(ar1 = c(1.0, 2.0, 3.0, 1.0, 2.0), `ar1 ` = c(1.1, 2.1, 3.1, 0.9, 1.9))
   out <- report(loss_panel(L))

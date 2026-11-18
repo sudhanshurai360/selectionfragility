@@ -92,6 +92,17 @@ structured identically in both languages. The following do **not** carry over:
   `report()`. These are one-directional: Python is more permissive, not differently-behaved, on
   all three, so an R caller never sees Python's result silently replaced by a different one — they
   get a clear R-side error instead where Python would have proceeded.
+- **Five more confirmed divergences from a second round of live-behavioral diffing (2026-11-18)**:
+  `identify()`/`mcs_size()`'s `block_size=0` (iid resampling) works in R but errors in Python's
+  equivalent; conversely R requires `reps>=2` where Python's equivalent silently accepts `reps=1`.
+  `winner_stability()`'s new degenerate-pair warning and new seed validation are both R-only —
+  Python's equivalent stays silent on a degenerate pair and accepts any seed (including `None`)
+  on that code path. `.fsum()` (R's permutation-invariant tie-break summation) is not provably
+  exact the way Python's `math.fsum()` is — confirmed to return a catastrophically wrong answer
+  on a contrived input at this package's own weight/loss magnitude cap, though it remains
+  permutation-invariant even then (see `?concentration_share`). `compare()`'s reversed-argument
+  guard is R-only, confirmed by execution — Python silently returns a plausible but backwards
+  result on swapped arguments.
 
 Cite either implementation; they compute the same quantities.
 

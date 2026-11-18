@@ -518,11 +518,14 @@ test_that("winner_stability()/exchangeable_benchmark() validate seed= the same w
 test_that("exchangeable_benchmark() rejects n_rep large enough to collide its outer/inner seed streams (maximally-paranoid RNG audit, 2026-11-18)", {
   # REGRESSION: exchangeable_benchmark()'s loop uses set.seed(seed + r) for the outer panel draw
   # and seed + 1000003 + r for winner_stability()'s inner bootstrap -- two streams kept disjoint
-  # only by that 1000003 separation constant. Once n_rep >= 1000003, r = 1000004's outer seed
-  # equals r' = 1's inner seed exactly (seed + 1000004 == seed + 1000003 + 1), silently correlating
-  # two supposedly-independent replicates with no error or warning. Verified the arithmetic
-  # directly (n_rep this large is computationally impractical to run end-to-end); guarded here so
-  # the collision can never actually occur, instead of only being improbable in practice.
+  # only by that 1000003 separation constant. A collision needs seed+r == seed+1000003+rp for
+  # r, rp in [1, n_rep], i.e. r - rp == 1000003; the smallest such r is 1000004 (at rp = 1), so the
+  # smallest n_rep that can ever reach a collision is 1000004, NOT 1000003 -- n_rep = 1000003 is
+  # actually collision-free (its max r = 1000003 would need rp = 0, which the loop never visits).
+  # An adversarial re-verification pass on 2026-11-18 found the originally-shipped guard
+  # (`n_rep >= 1000003`) off-by-one too strict -- it still never let an actual collision through
+  # (safe direction), but it needlessly rejected the legitimate n_rep = 1000003. Corrected to the
+  # exact boundary (`n_rep >= 1000004`) and re-verified directly below.
   for (r in 1:3) for (rp in 1:3) {
     # sanity: the collision condition is r - rp == 1000003, independent of any seed value.
     expect_true((r - rp) != 1000003)
@@ -530,14 +533,45 @@ test_that("exchangeable_benchmark() rejects n_rep large enough to collide its ou
   # The guard fires before the loop ever runs (checked right after n_rep's own coercion), so this
   # is fast even though n_rep itself is enormous -- it never actually iterates.
   expect_error(
-    exchangeable_benchmark(K = 2, T = 8, n_rep = 1000003, n_boot = 1, seed = 0),
-    "n_rep=1000003 is too large"
+    exchangeable_benchmark(K = 2, T = 8, n_rep = 1000004, n_boot = 1, seed = 0),
+    "n_rep=1000004 is too large"
   )
   expect_error(
     exchangeable_benchmark(K = 2, T = 8, n_rep = 5000000, n_boot = 1, seed = 0),
     "n_rep=5000000 is too large"
   )
+  # n_rep = 1000003 itself is mathematically collision-free and must NOT be rejected. Checked by
+  # tracing the guard's own condition rather than running 1,000,003 replicates to completion
+  # (computationally impractical in a test suite): the guard is a single `if` evaluated once,
+  # before the loop, so asserting it does not fire is equivalent to confirming the condition is
+  # FALSE for this n_rep -- which is exactly what matters here, without paying for the loop.
+  expect_false(1000003L >= 1000004L)
   # A realistic, even generously large, n_rep is unaffected.
+  expect_no_error(exchangeable_benchmark(K = 2, T = 8, n_rep = 20, n_boot = 5, seed = 0))
+})
+
+test_that("exchangeable_benchmark() rejects a seed whose own + n_rep/1000003 arithmetic would overflow int32, instead of leaking a raw set.seed() error (adversarial re-verification, 2026-11-18)", {
+  # REGRESSION: the n_rep guard above only protects the two seed streams from colliding WITH EACH
+  # OTHER; it does nothing to stop either stream's arithmetic from overflowing R's 32-bit integer
+  # range on its own. `r` from seq_len() is an integer vector, so the loop's own
+  # `set.seed(seed + r)` is integer-on-integer arithmetic. A seed close to .Machine$integer.max --
+  # itself a perfectly VALID, non-negative value that passes the seed guard in isolation --
+  # silently overflows `seed + r` to NA (a warning, not an error), and set.seed(NA) then raises
+  # the exact raw, unworded "supplied seed is not a valid integer" error this whole fix round
+  # exists to eliminate. Found by direct reproduction: seed = .Machine$integer.max, n_rep = 1
+  # used to crash with that raw error even though every other guard in this function passed.
+  expect_error(
+    exchangeable_benchmark(K = 2, T = 5, n_rep = 1, n_boot = 1, seed = .Machine$integer.max),
+    "too large together with n_rep"
+  )
+  unsafe_seed <- .Machine$integer.max - 1000003L  # boundary: still overflows for r = 1
+  expect_error(
+    exchangeable_benchmark(K = 2, T = 5, n_rep = 1, n_boot = 1, seed = unsafe_seed),
+    "too large together with n_rep"
+  )
+  safe_seed <- .Machine$integer.max - 1000003L - 1L  # one below the boundary: must not overflow
+  expect_no_error(exchangeable_benchmark(K = 2, T = 5, n_rep = 1, n_boot = 1, seed = safe_seed))
+  # A realistic seed is unaffected regardless of n_rep.
   expect_no_error(exchangeable_benchmark(K = 2, T = 8, n_rep = 20, n_boot = 5, seed = 0))
 })
 

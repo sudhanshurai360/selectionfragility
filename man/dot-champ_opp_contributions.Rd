@@ -24,4 +24,17 @@ effectively impossible (unlike ties in the integer k*, which are common -- confi
 NOT a bug or an oversight relative to \code{decision_breakdown()}'s rule -- unifying the two would
 reintroduce the rename-dependence this rule was specifically chosen to avoid.
 }
+\details{
+TIE WITHIN THE TIE (verified 2026-11-18, not a bug): if two or more of the M-tied opponents ALSO
+have an EXACTLY tied M (adversarially constructible -- e.g. two opponents whose per-period losses
+are permutations of each other, as in the regression test below), the \verb{if (M > best_M)} loop
+below keeps the FIRST one encountered and does not replace it on an exact tie. "First encountered"
+is the first name in \code{db$ties}, which \code{decision_breakdown()} builds by iterating
+\code{sort(..., method = "radix")} over model names -- i.e. this secondary tie-break falls back to
+alphabetically-first-by-byte-order, independent of the ORIGINAL list's insertion order and of
+locale (\code{method = "radix"} is explicitly non-locale-dependent per R's own \code{?sort} docs). Confirmed
+directly: swapping two exactly-margin-tied opponents' position in the input list left the chosen
+opponent unchanged (always the alphabetically-first of the two), across 5 repeated calls and two
+different insertion orders.
+}
 \keyword{internal}

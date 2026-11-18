@@ -265,6 +265,10 @@ significance_boundary <- function(L, w = NULL, alpha = 0.05) {
 #'   differential -- see `.weighted_se`'s comment in resolution.R. Also assumes the champion and
 #'   its binding rival sit at a comparable loss scale -- see [minimum_detectable_edge()]'s
 #'   Assumption section for why an extreme scale mismatch can produce a nonsensical percentage.
+#'   The "never tighter than the observed edge" guarantee below additionally assumes `point` and
+#'   `resolution_report()$observed_edge` agree to floating-point precision; see the inline comment
+#'   above this function's body for a constructed combination (extreme loss magnitude + weight
+#'   concentration + near-zero true variance) where that guarantee is confirmed to break.
 #' @seealso [minimum_detectable_edge()], [significance_boundary()], [resolution_report()],
 #'   [prop22_certifies()] (contrast: NOT multiple-comparisons-corrected, for a single
 #'   pre-specified rival rather than an adaptively-searched one).
@@ -280,6 +284,39 @@ significance_boundary <- function(L, w = NULL, alpha = 0.05) {
 #' # large as this fraction of its own loss level, at the stated confidence."
 #' mcb_bound(panel)
 #' @export
+# KNOWN LIMITATION, NOT FIXED HERE (exhaustive-adversarial round, 2026-11-18, `.edge_components()`
+# self-consistency lens): `point` below is computed as `weighted.mean(ec$diff, w)` -- the per-period
+# (rival - champion) differential, weighted-averaged -- while `resolution_report()$observed_edge` is
+# computed from the SAME underlying data as `(ec$mean_rival - ec$mean_champ) / .res_scale(...)` --
+# two SEPARATELY weighted-averaged means, then subtracted. Both are the exact same quantity in exact
+# arithmetic (`weighted.mean(lb, w) - weighted.mean(la, w) == weighted.mean(lb - la, w)` algebraically),
+# but NOT bit-identical in double precision: the two paths round differently when the champion/rival
+# sit at large loss magnitude (both individually valid, within `.MAX_ABS_LOSS`) combined with weight
+# concentration on one period, because `mean_rival - mean_champ` subtracts two already-rounded huge
+# weighted sums (losing precision on the order of the champion's own magnitude's ulp), while
+# `weighted.mean(diff, w)` is built from the per-period `diff = lb - la` computed BEFORE any
+# weighted-averaging (an exact, Sterbenz-lemma subtraction when `la`/`lb` are close in magnitude).
+# This is not merely cosmetic: the same regime can ALSO round the true per-period noise in `diff` away
+# entirely (the noise is smaller than the ulp at that magnitude), making `.weighted_se()`'s `se`
+# round to exactly 0 -- removing the one term (`crit * se`, both non-negative) this function's own
+# docstring relies on to guarantee `bound` is "by construction never tighter than the observed
+# point-estimate edge." Confirmed reproducible: champion losses `1e12 + rnorm(8)` (seed 1), rival =
+# champion + 0.0007 + rnorm(8, 0, 1e-7), weight `c(1e8, rep(1, 7))` gives `se == 0` and `point ==
+# 0.000732421875` against `mean_rival - mean_champ == 0.0008544921875` for the identical panel --
+# `mcb_bound(L, w)` (7.3242e-16) comes out strictly SMALLER than `resolution_report(L, w)
+# $observed_edge` (8.5449e-16) on the exact same data, directly violating the "never tighter" claim
+# above. CONFIRMED SHARED, oracle-pinned behavior: the identical repro against the Python original
+# (resolution.py's own `point = float(np.average(diff, weights=w))`, which its own comment says is
+# "kept... not mean_rival - mean_champ, to preserve the exact prior floating-point computation path
+# bit-for-bit") reproduces the exact same violation bit-for-bit in Python too -- this is a pre-existing
+# property of the shared formula, not something introduced by the R port. Switching `point` to
+# `ec$mean_rival - ec$mean_champ` here alone would fix THIS specific invariant at this specific input
+# but silently diverge mcb_bound()'s ordinary-case numeric output from the Python oracle (the whole
+# reason `point` is NOT already computed that way, per the Python comment above) -- exactly the
+# cross-language divergence this package's review discipline exists to prevent. Left undisclosed-
+# until-now rather than fixed; both `mcb_bound()` and `resolution_report()$observed_edge` are
+# individually finite and well-defined in this regime, just not mutually consistent with each other
+# at this specific combination of extreme magnitude, weight concentration, and near-zero true signal.
 mcb_bound <- function(L, w = NULL, alpha = 0.05) {
   .validate_one_sided(alpha)
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w

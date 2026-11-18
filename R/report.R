@@ -37,6 +37,22 @@
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
+# STRICT-AUDIT FIX (2026-11-18): factored out of LEADERBOARD's own disambiguation block so the
+# SAME control-character escaping it introduced for model names also covers PIVOT's printed
+# period labels and compare.R's printed champion names -- both were found to have the identical
+# injection gap LEADERBOARD's fix closed (a model/label/champion name containing a literal
+# newline/CR/tab/DEL/ANSI-escape-sequence character prints verbatim into the one-screen report,
+# indistinguishable from real prose, or alters a real terminal's rendering via an embedded ANSI
+# escape). Centralizing avoids a 4th copy of this exact regex drifting out of sync like the
+# K/T sibling-gap pattern already documented elsewhere in this package.
+#' @keywords internal
+.has_control_char <- function(x) grepl("[\\x00-\\x1f\\x7f]", x, perl = TRUE)
+
+#' @keywords internal
+.escape_control_chars <- function(x) {
+  ifelse(.has_control_char(x), encodeString(x, quote = "'"), x)
+}
+
 #' @keywords internal
 .fmt_pct <- function(x) {
   if (is.null(x) || is.na(x) || !is.finite(x)) return("n/a")
@@ -170,7 +186,7 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
   # character through the SAME encodeString() quoting already used for padding collisions, so a
   # model name alone can never inject extra "lines" (or anything that reads as a section header)
   # into the printed report.
-  has_control_char <- grepl("[\\x00-\\x1f\\x7f]", ordered, perl = TRUE)
+  has_control_char <- .has_control_char(ordered)
   needs_escape <- ordered %in% collisions | has_control_char
   # Quoted + escaped (not a bare sprintf("'%s'", ...)) so a model name that itself contains a
   # quote character does not render as an ambiguous run of unescaped quotes once wrapped --
@@ -222,13 +238,28 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
     lines <- c(lines, "  k*=0 -- no strict pooled winner (an exact or effective tie); nothing is pivotal")
   } else {
     if (k <= 5) {
-      resp <- paste(.disambiguate_labels(labels[sort(removed)]), collapse = ", ")
+      # STRICT-AUDIT FIX (2026-11-18): same injection class as LEADERBOARD's model-name fix
+      # above, reached through period LABELS instead of model names -- loss_panel()'s own label
+      # validation (panel.R) rejects NA/duplicate labels but not control characters, so a label
+      # containing a literal newline/CR/tab/DEL/ANSI-escape character printed completely
+      # unescaped into PIVOT's one-line period_txt. Confirmed directly: a 10-period panel with
+      # labels[10] <- "evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE\nb" made the pivotal
+      # period print a fake VERDICT line inside PIVOT, byte-for-byte indistinguishable from a
+      # real section header -- the exact failure mode the LEADERBOARD fix was written to close,
+      # just through the other printed identifier this function has. Escaped through the same
+      # .escape_control_chars() helper (factored out of that fix) rather than a second copy.
+      resp <- paste(.escape_control_chars(.disambiguate_labels(labels[sort(removed)])), collapse = ", ")
       period_txt <- sprintf("k*=%d of %d periods (%s)", k, T, resp)
     } else {
       la <- as.numeric(L[[champ]]); lb <- as.numeric(L[[opp]])
       c_ <- w * (lb - la)
       top_i <- which.max(c_)
-      period_txt <- sprintf("k*=%d of %d periods (largest single contributor: %s)", k, T, .fmt_label(labels[[top_i]]))
+      # Same fix as the k<=5 branch above, for the single-label case (k>5, "largest single
+      # contributor" instead of a comma-joined list): an ANSI-escape-sequence label here is
+      # arguably the worse variant of the two, since cat()'ing the report to a real terminal lets
+      # the escape sequence change color/cursor position rather than just printing a fake prose
+      # line -- confirmed directly with a label containing "\x1b[31m...\x1b[0m".
+      period_txt <- sprintf("k*=%d of %d periods (largest single contributor: %s)", k, T, .escape_control_chars(.fmt_label(labels[[top_i]])))
     }
     if (identical(res$fragility_read, "undetermined")) {
       reason <- if (!is.null(mcs_error)) {

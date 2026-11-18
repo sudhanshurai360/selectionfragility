@@ -792,23 +792,48 @@ exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL
   # STRICT-AUDIT FIX (2026-11-18): the loop below uses seed ARITHMETIC to keep each replicate's
   # outer panel-generation draw (`seed + r`) and its inner winner_stability() bootstrap draw
   # (`seed + 1000003 + r`) on two disjoint integer streams, using 1000003 as a fixed separation
-  # constant. That separation is only disjoint while n_rep stays below it: once n_rep >= 1000003,
-  # the outer stream for some late r and the inner stream for some early r' land on the exact same
-  # effective seed (`seed + r == seed + 1000003 + r'` whenever `r - r' == 1000003`), silently
-  # correlating two draws that are supposed to be independent, with no error or warning. Confirmed
-  # by direct arithmetic (not run end-to-end -- n_rep this large is computationally impractical):
-  # at n_rep = 1000005, r = 1000004's panel-generation seed (seed + 1000004) exactly equals r' =
-  # 1's bootstrap seed (seed + 1000003 + 1). Rejected loudly here instead of letting it through
-  # silently; 1000003 is already >> any realistic n_rep (default 200), so this is not a practical
-  # restriction, only a guard against the collision becoming reachable.
-  if (n_rep >= 1000003L) {
+  # constant. Re-deriving the exact collision condition: the outer stream over the loop is
+  # {seed+r : r=1..n_rep} and the inner stream is {seed+1000003+r' : r'=1..n_rep}; a collision
+  # needs seed+r == seed+1000003+r', i.e. r = 1000003+r' for some r,r' in [1,n_rep]. The smallest
+  # satisfying r is 1000004 (at r'=1), so the smallest n_rep that can ever reach a collision is
+  # 1000004, NOT 1000003 -- n_rep=1000003 is actually collision-free (max r=1000003 can only pair
+  # with r'=0, which the loop never visits). A prior pass of this guard rejected n_rep>=1000003,
+  # which is safe (never lets a real collision through) but off-by-one too strict, needlessly
+  # rejecting the legitimate n_rep=1000003. Corrected to the exact boundary (reject only
+  # n_rep>=1000004) and confirmed directly: n_rep=1000003 runs past this guard, n_rep=1000004 and
+  # 1000005 both stop here. 1000003/1000004 are already >> any realistic n_rep (default 200), so
+  # this is not a practical restriction, only a guard against the collision becoming reachable.
+  if (n_rep >= 1000004L) {
     stop(sprintf(
       paste0(
         "exchangeable_benchmark(): n_rep=%d is too large -- this function's internal seed ",
         "arithmetic (seed + r for the outer draw, seed + 1000003 + r for the inner bootstrap) ",
-        "is only collision-free while n_rep stays below 1000003; at or above that, two supposedly ",
-        "-independent replicates would silently share an effective seed. Use n_rep < 1000003."
+        "is only collision-free while n_rep stays at or below 1000003; at or above 1000004, two ",
+        "supposedly-independent replicates would silently share an effective seed. Use n_rep <= 1000003."
       ), n_rep
+    ), call. = FALSE)
+  }
+  # STRICT-AUDIT FIX (2026-11-18): the n_rep guard above only protects against the TWO-STREAMS
+  # colliding with EACH OTHER; it does not protect against either stream's own arithmetic
+  # overflowing R's 32-bit integer range. `r` here is produced by seq_len(), which is an integer
+  # vector, so `seed + r` and `seed + 1000003 + r` are integer-on-integer arithmetic (1000003 is a
+  # double literal, so only the first addition promotes to double and is safe; the raw
+  # `set.seed(seed + r)` line below stays pure integer arithmetic). A seed close to
+  # .Machine$integer.max (itself a VALID, non-negative value that passes the seed guard above)
+  # silently overflows to NA on `seed + r` with only a warning, not an error -- and set.seed(NA)
+  # then raises the exact raw, unworded "supplied seed is not a valid integer" error this whole
+  # fix round exists to eliminate. Confirmed directly: seed=.Machine$integer.max, n_rep=1 crashes
+  # with that raw error (the n_rep/collision guards above do not catch it, since seed itself is
+  # perfectly valid in isolation). Guarded here using double-precision arithmetic (no overflow risk
+  # in the check itself) against the largest offset actually used in the loop below.
+  if (seed > .Machine$integer.max - 1000003L - n_rep) {
+    stop(sprintf(
+      paste0(
+        "exchangeable_benchmark(): seed=%d is too large together with n_rep=%d -- this function's ",
+        "internal seed arithmetic (seed + 1000003 + r for the inner bootstrap draw, r up to n_rep) ",
+        "would overflow R's 32-bit integer range (max %d), silently becoming NA and then crashing ",
+        "set.seed() with a raw, unworded error. Use seed <= %d for this n_rep, or a smaller n_rep."
+      ), seed, n_rep, .Machine$integer.max, .Machine$integer.max - 1000003L - n_rep
     ), call. = FALSE)
   }
   w <- rep(1, T)

@@ -17,9 +17,21 @@
 #' weight scales 1e-6/1e-3/1/1e3 gave four DIFFERENT results depending on permutation order before
 #' this fix. Sorting first makes any two permutations of the same multiset collapse to the exact
 #' same input sequence (so they can only ever sum identically, by construction, regardless of
-#' R's internal summation algorithm); Neumaier (improved Kahan) compensated summation on top of
-#' the sorted sequence keeps the result close to the mathematically exact sum, matching
-#' `math.fsum`'s intent without needing to reimplement Shewchuk's distillation algorithm.
+#' R's internal summation algorithm) -- THIS is the guarantee this function actually delivers,
+#' and the only one the tie-break logic depends on. Neumaier (improved Kahan) compensated
+#' summation on top of the sorted sequence then keeps the result CLOSE to the mathematically
+#' exact sum for ordinary inputs, but is NOT provably exact the way `math.fsum`'s Shewchuk
+#' distillation algorithm is: 5-lens round, 2026-11-18 live-diffing against Python found a
+#' contrived mixed-sign input at this package's own `.MAX_ABS_LOSS` magnitude cap (1e100) --
+#' `rep(c(1, 1e100, 1, -1e100), 5)`, true sum 10 -- where this function returns 0 (catastrophic,
+#' not just imprecise) while `math.fsum()` on the identical input correctly returns 10. The
+#' earlier "matching math.fsum's intent" framing overclaimed single-compensator Neumaier
+#' summation's exactness; a single compensation term is not provably sufficient for every input
+#' the way Shewchuk's running list of nonoverlapping partial sums is. In practice this requires
+#' near-cap-magnitude values that cancel almost exactly, which realistic forecast-loss panels
+#' are not expected to produce -- not fixed here (reimplementing Shewchuk's algorithm correctly
+#' is a nontrivial, separate piece of work, not warranted by this failure mode's practical
+#' likelihood), but the claim of exactness is corrected so a future reader doesn't rely on it.
 #' @keywords internal
 .fsum <- function(x) {
   x <- sort(x)
@@ -55,6 +67,18 @@
 #' ~38% of random panels with a strict pooled winner have more than one opponent tied at k*). This is
 #' NOT a bug or an oversight relative to `decision_breakdown()`'s rule -- unifying the two would
 #' reintroduce the rename-dependence this rule was specifically chosen to avoid.
+#'
+#' TIE WITHIN THE TIE (verified 2026-11-18, not a bug): if two or more of the M-tied opponents ALSO
+#' have an EXACTLY tied M (adversarially constructible -- e.g. two opponents whose per-period losses
+#' are permutations of each other, as in the regression test below), the `if (M > best_M)` loop
+#' below keeps the FIRST one encountered and does not replace it on an exact tie. "First encountered"
+#' is the first name in `db$ties`, which `decision_breakdown()` builds by iterating
+#' `sort(..., method = "radix")` over model names -- i.e. this secondary tie-break falls back to
+#' alphabetically-first-by-byte-order, independent of the ORIGINAL list's insertion order and of
+#' locale (`method = "radix"` is explicitly non-locale-dependent per R's own `?sort` docs). Confirmed
+#' directly: swapping two exactly-margin-tied opponents' position in the input list left the chosen
+#' opponent unchanged (always the alphabetically-first of the two), across 5 repeated calls and two
+#' different insertion orders.
 #' @keywords internal
 .champ_opp_contributions <- function(L, w) {
   champ <- pooled_winner(L, w)

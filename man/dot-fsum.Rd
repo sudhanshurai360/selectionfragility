@@ -19,8 +19,20 @@ summing a permutation-tied adversarial vector (one huge contribution plus many t
 weight scales 1e-6/1e-3/1/1e3 gave four DIFFERENT results depending on permutation order before
 this fix. Sorting first makes any two permutations of the same multiset collapse to the exact
 same input sequence (so they can only ever sum identically, by construction, regardless of
-R's internal summation algorithm); Neumaier (improved Kahan) compensated summation on top of
-the sorted sequence keeps the result close to the mathematically exact sum, matching
-\code{math.fsum}'s intent without needing to reimplement Shewchuk's distillation algorithm.
+R's internal summation algorithm) -- THIS is the guarantee this function actually delivers,
+and the only one the tie-break logic depends on. Neumaier (improved Kahan) compensated
+summation on top of the sorted sequence then keeps the result CLOSE to the mathematically
+exact sum for ordinary inputs, but is NOT provably exact the way \code{math.fsum}'s Shewchuk
+distillation algorithm is: 5-lens round, 2026-11-18 live-diffing against Python found a
+contrived mixed-sign input at this package's own \code{.MAX_ABS_LOSS} magnitude cap (1e100) --
+\code{rep(c(1, 1e100, 1, -1e100), 5)}, true sum 10 -- where this function returns 0 (catastrophic,
+not just imprecise) while \code{math.fsum()} on the identical input correctly returns 10. The
+earlier "matching math.fsum's intent" framing overclaimed single-compensator Neumaier
+summation's exactness; a single compensation term is not provably sufficient for every input
+the way Shewchuk's running list of nonoverlapping partial sums is. In practice this requires
+near-cap-magnitude values that cancel almost exactly, which realistic forecast-loss panels
+are not expected to produce -- not fixed here (reimplementing Shewchuk's algorithm correctly
+is a nontrivial, separate piece of work, not warranted by this failure mode's practical
+likelihood), but the claim of exactness is corrected so a future reader doesn't rely on it.
 }
 \keyword{internal}

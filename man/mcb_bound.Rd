@@ -26,6 +26,10 @@ MCB-style simultaneous upper confidence bound on the champion's edge
 differential -- see \code{.weighted_se}'s comment in resolution.R. Also assumes the champion and
 its binding rival sit at a comparable loss scale -- see \code{\link[=minimum_detectable_edge]{minimum_detectable_edge()}}'s
 Assumption section for why an extreme scale mismatch can produce a nonsensical percentage.
+The "never tighter than the observed edge" guarantee below additionally assumes \code{point} and
+\code{resolution_report()$observed_edge} agree to floating-point precision; see the inline comment
+above this function's body for a constructed combination (extreme loss magnitude + weight
+concentration + near-zero true variance) where that guarantee is confirmed to break.
 }
 
 \examples{

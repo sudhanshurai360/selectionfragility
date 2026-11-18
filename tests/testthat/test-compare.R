@@ -105,3 +105,33 @@ test_that("compare() supports rolling-window and disjoint label sets (not just p
   earlier <- loss_panel(list(a = rep(1, 10), b = c(1.2,1.1,1.0,1.3,0.9,1.1,1.2,1.0,1.1,1.0)), labels = 2015:2024)
   expect_error(compare(later, earlier), "subset|wrong order")
 })
+
+test_that("print.change_report() escapes a champion model name containing an embedded newline (output-injection regression, sibling to LEADERBOARD's fix)", {
+  # REGRESSION: print.change_report() interpolates previous_champion/current_champion into its
+  # one-line sprintf() summary with a bare %s and NO escaping at all -- unlike LEADERBOARD's
+  # per-model rows (report.R), which at least had a collision-triggered escaping path before its
+  # own control-character fix, this print method had no escaping path whatsoever. Confirmed
+  # directly: a model named "evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE_INJECTED_LINE\n
+  # act=TRUE", used as the previous_champion, printed as three separate lines, with the middle
+  # line rendering byte-for-byte like a genuine VERDICT section header and a genuine "act=TRUE".
+  # Fixed with the same encodeString(..., quote = "'") escaping already established for
+  # LEADERBOARD; this test confirms the fabricated line can no longer appear as a bare,
+  # line-initial fake section header once routed through that fix.
+  evil <- "evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE_INJECTED_LINE\nact=TRUE"
+  years <- 2015:2024
+  L_prev <- list(x = rep(2.0, 10), tmp = rep(0.5, 10))
+  names(L_prev)[2] <- evil
+  L_curr <- list(x = rep(0.5, 10), tmp = rep(2.0, 10))
+  names(L_curr)[2] <- evil
+  prev <- loss_panel(L_prev, labels = years)
+  curr <- loss_panel(L_curr, labels = years)
+  cr <- compare(prev, curr, n_perm = 50)
+  out <- capture.output(print(cr))
+  # The whole summary must still be exactly one line -- an unescaped embedded newline would have
+  # split it into three.
+  expect_length(out, 1)
+  # No fabricated line-initial "VERDICT:" header may appear.
+  expect_false(any(grepl("^VERDICT:", out)))
+  # The escaped name (backslash-n, not a real newline) must appear in the single-line output.
+  expect_match(out, "evil\\\\nVERDICT", perl = TRUE)
+})

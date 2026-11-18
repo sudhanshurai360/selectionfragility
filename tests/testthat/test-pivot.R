@@ -60,3 +60,49 @@ test_that(".fsum is permutation-invariant (the opponent tie-break summation)", {
   # macOS/windows in CI) -- it is not a property of this package's code, so it is not safe to
   # assert portably. The permutation-invariance check above is the actual regression test.
 })
+
+test_that(".fsum() is permutation-invariant even where it is NOT exact (known limitation, documented, not fixed, 5-lens round 2026-11-18)", {
+  # REGRESSION/LIMITATION: live-diffing against Python's math.fsum() (Shewchuk's algorithm,
+  # provably exact) found a contrived mixed-sign input at this package's own .MAX_ABS_LOSS cap
+  # (1e100) where .fsum()'s single-compensator Neumaier summation is not just imprecise but
+  # CATASTROPHICALLY wrong (true sum 10, .fsum() returns 0) -- math.fsum() on the identical input
+  # correctly returns 10. Not fixed (reimplementing Shewchuk's algorithm is a nontrivial separate
+  # piece of work, and this needs near-cap-magnitude values that cancel almost exactly, which
+  # realistic forecast-loss panels aren't expected to produce). What DOES still hold, and is what
+  # the tie-break logic actually depends on (per .fsum()'s own doc comment): the result is still
+  # permutation-invariant, i.e. two permutations of the same multiset -- even this adversarial
+  # one -- can never flip which opponent gets named, because sorting first collapses them to the
+  # identical input sequence before summation ever starts. Pinning both facts so a future partial
+  # fix (e.g. one that restores exactness but reintroduces permutation-sensitivity) gets caught.
+  x <- rep(c(1, 1e100, 1, -1e100), 5)
+  result <- selectionfragility:::.fsum(x)
+  expect_equal(result, 0)  # confirmed wrong (true sum is 10) -- pins the known limitation
+  perm <- rev(x)
+  expect_identical(result, selectionfragility:::.fsum(perm))  # but still permutation-invariant
+})
+
+test_that(".champ_opp_contributions()'s tie-within-a-tie falls back to alphabetical, not
+           insertion/iteration order", {
+  # REGRESSION (verified 2026-11-18, confirmed correct, not a bug -- see .champ_opp_contributions()'s
+  # own @keywords internal doc comment). When two opponents are tied at k* AND have an EXACTLY tied
+  # total margin M (constructed here as permutations of the same per-period-loss multiset), the
+  # largest-margin tie-break's `if (M > best_M)` loop keeps the first-encountered of the two, which is
+  # the alphabetically-first name in decision_breakdown()'s own radix-sorted `ties` vector -- NOT
+  # whichever model happened to be listed first in the caller's original list. Confirmed deterministic
+  # (5 repeated calls) and insertion-order-independent (both orderings of the two tied names below
+  # choose the same, alphabetically-first, opponent).
+  ar1 <- c(1, 1, 1, 1, 1, 1)
+  base_opp <- c(1.5, 1.2, 1.3, 1.1, 1.4, 1.0)  # contributions over ar1: .5,.2,.3,.1,.4,.0
+  zeta <- base_opp
+  alpha <- rev(base_opp)  # exact permutation of the same multiset -> exactly tied M
+
+  panel_zeta_first <- loss_panel(list(ar1 = ar1, zeta = zeta, alpha = alpha))
+  panel_alpha_first <- loss_panel(list(ar1 = ar1, alpha = alpha, zeta = zeta))
+
+  for (i in 1:5) {
+    cc1 <- selectionfragility:::.champ_opp_contributions(panel_zeta_first$losses, rep(1, 6))
+    cc2 <- selectionfragility:::.champ_opp_contributions(panel_alpha_first$losses, rep(1, 6))
+    expect_identical(cc1$opp, "alpha")
+    expect_identical(cc2$opp, "alpha")
+  }
+})

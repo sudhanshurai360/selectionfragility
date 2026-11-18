@@ -316,8 +316,15 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
 .from_list <- function(data) {
   if (length(data) == 0) stop("empty list passed to loss_panel(); need at least 2 models.", call. = FALSE)
   nm <- names(data)
-  if (is.null(nm) || any(nm == "")) {
-    stop("loss_panel() needs a NAMED list (one name per model); got an unnamed or partially-named list.", call. = FALSE)
+  # STRICT-AUDIT FIX (2026-11-18): the original `any(nm == "")` crashes with a raw, unworded
+  # "missing value where TRUE/FALSE needed" the moment any name is NA (not ""): `nm == ""`
+  # yields NA for that element, any(c(FALSE, NA)) is itself NA (not FALSE -- any() can't rule
+  # out a hidden TRUE), so `is.null(nm) || NA` is NA and if(NA) aborts outright, bypassing this
+  # file's entire stop()-with-a-clear-message policy. Check anyNA() first (it short-circuits the
+  # `||` before `nm == ""` ever sees an NA) so both an NA name and an empty-string name get the
+  # same clear, deliberate rejection instead of one of them crashing past it.
+  if (is.null(nm) || anyNA(nm) || any(nm == "")) {
+    stop("loss_panel() needs a NAMED list (one name per model); got an unnamed, NA-named, or empty-named list.", call. = FALSE)
   }
   .check_no_name_collision(nm)
   for (k in nm) {
@@ -357,7 +364,26 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
   }
   cn <- colnames(arr)
   nm <- if (!is.null(cn)) cn else paste0("m", seq_len(K) - 1L)
-  if (!is.null(cn)) .check_no_name_collision(nm)
+  if (!is.null(cn)) {
+    # STRICT-AUDIT FIX (2026-11-18): an NA or "" column name used to slip past here with no
+    # explicit check at all and get "rejected" only by accident downstream, through R's own
+    # `[[`-by-name quirk: `list[[NA_character_]]` and `list[["" ]]` both silently return NULL
+    # even when a same-named element exists (confirmed directly: `setNames(list(1:6,7:12),
+    # c("","b"))[[""]]` is NULL, not 1:6). That NULL then surfaced as a wrong, confusing error
+    # from a LATER, unrelated check ("all models must share the same number of periods; ''
+    # has 0, expected 6") rather than this file's own clear, deliberate "needs a real name"
+    # wording that the list-path sibling check already gives. Still rejects the input (so no
+    # empty/NA-named model was ever silently built), but reject it with the same deliberate,
+    # worded guard as `.from_list()`, not a coincidence of lookup semantics.
+    if (anyNA(nm) || any(nm == "")) {
+      stop(paste0(
+        "loss_panel() got a matrix with an NA or empty-string column name -- every model needs ",
+        "a real, non-empty name. Set colnames() explicitly, or pass the matrix with no colnames ",
+        "at all to get auto-generated 'm0', 'm1', ... names."
+      ), call. = FALSE)
+    }
+    .check_no_name_collision(nm)
+  }
   models <- stats::setNames(lapply(seq_len(K), function(i) as.numeric(arr[, i])), nm)
   .check_metadata_columns(models, T)
   list(losses = models, labels = seq_len(T) - 1L, labels_are_positional = TRUE)
@@ -365,7 +391,21 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
 
 #' @keywords internal
 .from_data_frame <- function(df) {
-  if (anyDuplicated(colnames(df))) {
+  cn0 <- colnames(df)
+  # STRICT-AUDIT FIX (2026-11-18): same accidental-rejection gap as .from_matrix() -- an NA or
+  # "" column name (reachable via `colnames(df) <- c(NA, "b")` or `check.names = FALSE`) had no
+  # explicit check here either, and was "caught" only because `df[[""]]`/`df[[NA_character_]]`
+  # silently return NULL even for an existing same-named column, surfacing as a wrong, confusing
+  # downstream error ("column '' is not numeric (class NULL)") instead of this file's own clear,
+  # deliberate wording. Reject explicitly and early, matching .from_list()/.from_matrix().
+  if (anyNA(cn0) || any(cn0 == "")) {
+    stop(paste0(
+      "loss_panel() got a data.frame with an NA or empty-string column name -- every model needs ",
+      "a real, non-empty name. Rename the column(s) first (e.g. via colnames(df) <- ... or by not ",
+      "passing check.names = FALSE with a blank name)."
+    ), call. = FALSE)
+  }
+  if (anyDuplicated(cn0)) {
     stop("duplicate column names in the data.frame -- rename before building a loss_panel.", call. = FALSE)
   }
   rn <- rownames(df)
