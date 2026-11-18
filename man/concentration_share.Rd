@@ -12,7 +12,8 @@ concentration_share(L, w = NULL)
 \item{w}{Optional numeric vector of per-period weights.}
 }
 \value{
-The concentration share, or \code{NA} if there is no strict winner or the margin is degenerate.
+The concentration share, or \code{NA} if there is no strict winner or the margin is
+degenerate -- see \code{?selectionfragility}'s "Sentinel conventions" section.
 }
 \description{
 Share of the champion's margin concentrated in the single most influential period

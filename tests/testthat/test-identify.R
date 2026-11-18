@@ -158,3 +158,15 @@ test_that("mcs_size()/identified() warn on large K like mcs() does, when called 
   expect_warning(mcs_size(L_big, reps = 500, seed = 1), "K=110 models")
   expect_warning(identified(L_big, reps = 500, seed = 1), "K=110 models")
 })
+
+test_that("mcs_size()/identified() put w second, like every other (L, w, ...) function in the package (strict-regression round, 2026-11-18)", {
+  # REGRESSION: w used to sit LAST in these two signatures while every other exported function
+  # taking both L and w (pooled_winner, fragility, decision_breakdown, winner_stability, etc.)
+  # puts w second, right after L -- a real positional-call footgun, since identified(L, w) used
+  # to silently bind w to alpha instead. Confirmed fixed by calling both functions POSITIONALLY
+  # with w in the second slot and checking the result matches the named-argument equivalent.
+  L <- list(a = c(1.0, 1.1, 0.9, 1.0, 1.2, 0.8, 1.0, 1.1), b = c(2.0, 2.1, 1.9, 2.0, 2.2, 1.8, 2.0, 2.1))
+  w <- rep(1, 8)
+  expect_equal(mcs_size(L, w, 0.10, 500, 2, 1), mcs_size(L, w = w, alpha = 0.10, reps = 500, block_size = 2, seed = 1))
+  expect_equal(identified(L, w, 0.10, 500, 2, 1), identified(L, w = w, alpha = 0.10, reps = 500, block_size = 2, seed = 1))
+})

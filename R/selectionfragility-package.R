@@ -22,5 +22,22 @@
 #' `seeds <- 1:4` (or any panel-specific offset), so each worker's bootstrap draws are genuinely
 #' independent.
 #'
+#' @section Sentinel conventions for "cannot determine": this package uses two different
+#'   sentinels for "this diagnostic could not be determined," deliberately, not by accident.
+#'   `NA` marks a DEGENERATE-BUT-COMPUTED result: the comparison actually ran, but the specific
+#'   question doesn't meaningfully apply to this input (e.g. [fragility()]'s `fragile` field when
+#'   no `benchmark` was supplied, [prop22_certifies()] when `k<=0`/`k>=T`, or
+#'   [concentration_share()]/[pivot_agreement()] in their own degenerate cases) -- these live
+#'   inside a scalar/typed-vector return where `NULL` would not be type-stable. `NULL` marks a
+#'   diagnostic whose underlying computation never completed at all: a caught error inside a
+#'   list-returning function, most commonly [identified()] erroring inside
+#'   [resolution_report()]'s R2 check or [compare()]'s internal MCS call (e.g.
+#'   `resolution_report()$identified`, `compare()$old_champion_still_in_mcs`). For
+#'   `resolution_report()$identified` specifically, `NULL` additionally mirrors the Python
+#'   original's `None` for the identical caught-error case -- a deliberate cross-language parity
+#'   choice, not just an internal convention. Don't write code that treats `NA` and `NULL` as
+#'   interchangeable across this package's return values; check each field's own documentation
+#'   for which sentinel it actually uses.
+#'
 #' @keywords internal
 "_PACKAGE"

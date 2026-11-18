@@ -124,7 +124,8 @@
 #'
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @param w Optional numeric vector of per-period weights.
-#' @return The concentration share, or `NA` if there is no strict winner or the margin is degenerate.
+#' @return The concentration share, or `NA` if there is no strict winner or the margin is
+#'   degenerate -- see `?selectionfragility`'s "Sentinel conventions" section.
 #' @seealso [pivot_agreement()] (whether this concentration is stable under subsampling),
 #'   [surprise_concentration()], [report()].
 #' @export
@@ -162,7 +163,8 @@ concentration_share <- function(L, w = NULL) {
 #' @param n_boot Number of subsamples to draw.
 #' @param frac Fraction of periods kept in each subsample (strictly between 0 and 1).
 #' @return The agreement fraction, or `NA` if there is no strict winner, the subsample is too
-#'   small, or every subsample drawn had no strict winner.
+#'   small, or every subsample drawn had no strict winner -- see `?selectionfragility`'s
+#'   "Sentinel conventions" section.
 #' @section Limitation: this statistic is weaker evidence than it may appear. Subsampling draws
 #'   WITHOUT replacement from the SAME already-realized loss values (no new noise is drawn), so
 #'   a period's per-period contribution is identical at every kept position; dropping other

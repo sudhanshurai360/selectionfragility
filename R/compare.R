@@ -159,7 +159,9 @@ print.change_report <- function(x, ...) {
 #' @param alpha Significance level passed to the MCS check.
 #' @param n_perm Number of permutations for the churn base rate.
 #' @param seed RNG seed.
-#' @return An object of class `change_report`.
+#' @return An object of class `change_report`. `old_champion_still_in_mcs` is `NULL` (not `NA`)
+#'   when the internal MCS check errors -- see `?selectionfragility`'s "Sentinel conventions"
+#'   section.
 #' @seealso [loss_panel()] to build the `previous`/`current` panels; [mcs()]/[model_confidence_set()]
 #'   for the Model Confidence Set check this uses to assess whether the old champion really left.
 #' @examples

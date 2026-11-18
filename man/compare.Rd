@@ -18,7 +18,9 @@ compare(previous, current, alpha = 0.1, n_perm = 400, seed = 0)
 \item{seed}{RNG seed.}
 }
 \value{
-An object of class \code{change_report}.
+An object of class \code{change_report}. \code{old_champion_still_in_mcs} is \code{NULL} (not \code{NA})
+when the internal MCS check errors -- see \code{?selectionfragility}'s "Sentinel conventions"
+section.
 }
 \description{
 Reports whether the pooled champion changed between two consecutive evaluation runs, and

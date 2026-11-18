@@ -222,11 +222,11 @@
 #' how this engine relates to this package's own native `mcs()`/`model_confidence_set()`.
 #'
 #' @param L A named list `{model: vector}` or a `loss_panel`.
+#' @param w Optional per-period weights; must be uniform (or `NULL`) -- see this file's header.
 #' @param alpha Significance level (strictly between 0 and 1).
 #' @param reps Number of bootstrap replications (>= 2).
 #' @param block_size Block length for the moving-block bootstrap (0 = iid resampling).
 #' @param seed RNG seed.
-#' @param w Optional per-period weights; must be uniform (or `NULL`) -- see this file's header.
 #' @return Integer size of the surviving Model Confidence Set.
 #' @seealso [mcs()]/[model_confidence_set()] for this package's own independent native MCS engine
 #'   (kept deliberately separate as a cross-check, not a second copy of the same algorithm).
@@ -241,7 +241,11 @@
 #' # reps kept small here purely for example speed; use the reps=500 default for real analyses.
 #' mcs_size(L, reps = 200, seed = 1)  # 2 -- ar1 and ets both survive
 #' @export
-mcs_size <- function(L, alpha = 0.10, reps = 500, block_size = 3, seed = 0, w = NULL) {
+mcs_size <- function(L, w = NULL, alpha = 0.10, reps = 500, block_size = 3, seed = 0) {
+  # STRICT-AUDIT FIX (2026-11-18): w used to sit last in this signature while every other
+  # (L, w, ...) function in the package puts it second, right after L -- a real positional-call
+  # footgun (identified(L, w) silently bound w to alpha). Reordered before this package's first
+  # CRAN release, the one window where an exported signature change is free.
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
   included <- .run_mcs_arch(L, alpha = alpha, reps = reps, block_size = block_size, seed = seed, w = w)
   length(included)
@@ -284,6 +288,6 @@ mcs_size <- function(L, alpha = 0.10, reps = 500, block_size = 3, seed = 0, w = 
 #' )
 #' identified(L_clear, reps = 200, seed = 1)  # TRUE
 #' @export
-identified <- function(L, alpha = 0.10, reps = 500, block_size = 3, seed = 0, w = NULL) {
-  isTRUE(mcs_size(L, alpha = alpha, reps = reps, block_size = block_size, seed = seed, w = w) == 1L)
+identified <- function(L, w = NULL, alpha = 0.10, reps = 500, block_size = 3, seed = 0) {
+  isTRUE(mcs_size(L, w = w, alpha = alpha, reps = reps, block_size = block_size, seed = seed) == 1L)
 }

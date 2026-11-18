@@ -30,6 +30,25 @@ worker instead, e.g. \code{parallel::mclapply(seeds, function(s) winner_stabilit
 independent.
 }
 
+\section{Sentinel conventions for "cannot determine"}{
+ this package uses two different
+sentinels for "this diagnostic could not be determined," deliberately, not by accident.
+\code{NA} marks a DEGENERATE-BUT-COMPUTED result: the comparison actually ran, but the specific
+question doesn't meaningfully apply to this input (e.g. \code{\link[=fragility]{fragility()}}'s \code{fragile} field when
+no \code{benchmark} was supplied, \code{\link[=prop22_certifies]{prop22_certifies()}} when \code{k<=0}/\code{k>=T}, or
+\code{\link[=concentration_share]{concentration_share()}}/\code{\link[=pivot_agreement]{pivot_agreement()}} in their own degenerate cases) -- these live
+inside a scalar/typed-vector return where \code{NULL} would not be type-stable. \code{NULL} marks a
+diagnostic whose underlying computation never completed at all: a caught error inside a
+list-returning function, most commonly \code{\link[=identified]{identified()}} erroring inside
+\code{\link[=resolution_report]{resolution_report()}}'s R2 check or \code{\link[=compare]{compare()}}'s internal MCS call (e.g.
+\code{resolution_report()$identified}, \code{compare()$old_champion_still_in_mcs}). For
+\code{resolution_report()$identified} specifically, \code{NULL} additionally mirrors the Python
+original's \code{None} for the identical caught-error case -- a deliberate cross-language parity
+choice, not just an internal convention. Don't write code that treats \code{NA} and \code{NULL} as
+interchangeable across this package's return values; check each field's own documentation
+for which sentinel it actually uses.
+}
+
 \seealso{
 Useful links:
 \itemize{

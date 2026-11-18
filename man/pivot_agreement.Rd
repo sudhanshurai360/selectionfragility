@@ -19,7 +19,8 @@ pivot_agreement(L, w = NULL, seed = 0, n_boot = 200, frac = 0.8)
 }
 \value{
 The agreement fraction, or \code{NA} if there is no strict winner, the subsample is too
-small, or every subsample drawn had no strict winner.
+small, or every subsample drawn had no strict winner -- see \code{?selectionfragility}'s
+"Sentinel conventions" section.
 }
 \description{
 Fraction of \code{frac}*T-sized subsamples of periods (without replacement) that name the same

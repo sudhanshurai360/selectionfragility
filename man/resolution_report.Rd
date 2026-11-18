@@ -28,7 +28,9 @@ resolution_report(
 }
 \value{
 A named list: \code{champion}, \code{resolved}, \code{observed_edge}, \code{mde}, \code{significance_boundary},
-\code{binding_rival}, \code{identified}, \code{fragility_read}.
+\code{binding_rival}, \code{identified} (\code{NULL}, not \code{NA}, when the internal \code{identified()} call
+errors -- see \code{?selectionfragility}'s "Sentinel conventions" section, including why this
+field specifically mirrors the Python oracle's \code{None}), \code{fragility_read}.
 }
 \description{
 R1/R2 resolution report with refusal rules

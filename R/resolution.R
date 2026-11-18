@@ -442,7 +442,9 @@ selection_regret <- function(L, weights = NULL, w = NULL) {
 #' @param mcs_alpha Significance level passed to `identified()` for R2.
 #' @param mcs_seed RNG seed passed to `identified()` for R2 (see "Seed sensitivity" below).
 #' @return A named list: `champion`, `resolved`, `observed_edge`, `mde`, `significance_boundary`,
-#'   `binding_rival`, `identified`, `fragility_read`.
+#'   `binding_rival`, `identified` (`NULL`, not `NA`, when the internal `identified()` call
+#'   errors -- see `?selectionfragility`'s "Sentinel conventions" section, including why this
+#'   field specifically mirrors the Python oracle's `None`), `fragility_read`.
 #' @seealso [minimum_detectable_edge()], [significance_boundary()], [mcb_bound()] for the
 #'   individual statistics this report assembles; [report()] for the one-screen view that reuses
 #'   this same R1/R2 logic.

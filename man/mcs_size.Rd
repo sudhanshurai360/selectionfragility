@@ -4,10 +4,12 @@
 \alias{mcs_size}
 \title{Size of the Model Confidence Set at level alpha (independent engine)}
 \usage{
-mcs_size(L, alpha = 0.1, reps = 500, block_size = 3, seed = 0, w = NULL)
+mcs_size(L, w = NULL, alpha = 0.1, reps = 500, block_size = 3, seed = 0)
 }
 \arguments{
 \item{L}{A named list \code{{model: vector}} or a \code{loss_panel}.}
+
+\item{w}{Optional per-period weights; must be uniform (or \code{NULL}) -- see this file's header.}
 
 \item{alpha}{Significance level (strictly between 0 and 1).}
 
@@ -16,8 +18,6 @@ mcs_size(L, alpha = 0.1, reps = 500, block_size = 3, seed = 0, w = NULL)
 \item{block_size}{Block length for the moving-block bootstrap (0 = iid resampling).}
 
 \item{seed}{RNG seed.}
-
-\item{w}{Optional per-period weights; must be uniform (or \code{NULL}) -- see this file's header.}
 }
 \value{
 Integer size of the surviving Model Confidence Set.

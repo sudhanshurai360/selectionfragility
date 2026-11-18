@@ -14,7 +14,8 @@ prop22_certifies(k, T, z = 1.96)
 \item{z}{Two-sided critical value (default 1.96, two-sided 5\%).}
 }
 \value{
-\code{TRUE}/\code{FALSE}, or \code{NA} when the certificate does not apply (\code{k <= 0} or \code{k >= T}).
+\code{TRUE}/\code{FALSE}, or \code{NA} when the certificate does not apply (\code{k <= 0} or \code{k >= T}) --
+see \code{?selectionfragility}'s "Sentinel conventions" section for why this is \code{NA}, not \code{NULL}.
 }
 \description{
 Scope, not enforced here: this function takes a bare \code{k}/\code{T}, with no visibility into how \code{k}

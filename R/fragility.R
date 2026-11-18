@@ -1012,7 +1012,8 @@ surprise_concentration <- function(L, labels = NULL) {
 #'       [winner_stability()] directly on the same panel -- this degenerate branch raises NO
 #'       `warning()` here; the placeholder values are identical, only the warning is absent.}
 #'     \item{fragile}{`TRUE` if degenerate; `NA` if no `benchmark` was supplied to calibrate
-#'       against; otherwise `TRUE` iff `winner_stability` falls below `benchmark`'s p05.}
+#'       against (see `?selectionfragility`'s "Sentinel conventions" section); otherwise `TRUE`
+#'       iff `winner_stability` falls below `benchmark`'s p05.}
 #'   }
 #'   See `vignette("selectionfragility")` for a worked, narrative example using several of these
 #'   fields together.

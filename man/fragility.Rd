@@ -81,7 +81,8 @@ result INLINE rather than calling \code{winner_stability()} itself, so -- unlike
 \code{\link[=winner_stability]{winner_stability()}} directly on the same panel -- this degenerate branch raises NO
 \code{warning()} here; the placeholder values are identical, only the warning is absent.}
 \item{fragile}{\code{TRUE} if degenerate; \code{NA} if no \code{benchmark} was supplied to calibrate
-against; otherwise \code{TRUE} iff \code{winner_stability} falls below \code{benchmark}'s p05.}
+against (see \code{?selectionfragility}'s "Sentinel conventions" section); otherwise \code{TRUE}
+iff \code{winner_stability} falls below \code{benchmark}'s p05.}
 }
 See \code{vignette("selectionfragility")} for a worked, narrative example using several of these
 fields together.

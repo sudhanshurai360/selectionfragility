@@ -23,7 +23,8 @@
 #' @param k The pairwise decision breakdown point (k*).
 #' @param T Number of periods.
 #' @param z Two-sided critical value (default 1.96, two-sided 5%).
-#' @return `TRUE`/`FALSE`, or `NA` when the certificate does not apply (`k <= 0` or `k >= T`).
+#' @return `TRUE`/`FALSE`, or `NA` when the certificate does not apply (`k <= 0` or `k >= T`) --
+#'   see `?selectionfragility`'s "Sentinel conventions" section for why this is `NA`, not `NULL`.
 #' @seealso [certified_tied_subset()] (applies this certificate across a whole panel),
 #'   [breakdown_number()]/[decision_breakdown()] (where `k` comes from), [mcb_bound()] (the
 #'   multiple-comparisons-corrected analogue for an adaptively-searched rival).

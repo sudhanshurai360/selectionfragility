@@ -11,7 +11,7 @@ Initial release: a native R port of the Python package
   refusal rules), `prop22` (zero-simulation Proposition 2.2 certificate), `pivot` (concentration
   share, pivot agreement), `report` (one-screen summary), `compare` (run-over-run champion-change
   diagnostic).
-* 1176 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
+* 1178 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
   this count will keep moving as hardening continues; check `devtools::test()`'s own output rather
   than treating this number as authoritative), including a dedicated cross-language
   oracle-comparison suite verified against the Python package's live behavior, not just its
@@ -284,3 +284,16 @@ Initial release: a native R port of the Python package
     fragile relative to chance." Flagged for a possible larger documentation-structure
     improvement; one concrete first-contact jargon gap (an unglossed "R1/R2" reference in
     README's Quick Start) was fixed directly.
+* The two exported-API inconsistencies flagged above were resolved by an expert design review
+  (2026-11-18) before this package's first CRAN submission -- the one window where either change
+  is free. `identified()`/`mcs_size()` now put `w` second, immediately after `L`, matching every
+  other `(L, w, ...)` function in the package (previously `w` sat last, so `identified(L, w)`
+  silently bound `w` to `alpha`); confirmed safe since no call site anywhere in the package or
+  its tests relied on the old positional order, and `MCS::MCSprocedure()` itself has no `w`-like
+  parameter to stay aligned with. The `NA`-vs-`NULL` "cannot determine" sentinel was NOT
+  standardized -- it reflects a real, principled split (`NA` for a degenerate-but-computed
+  result inside a typed scalar return; `NULL` for a caught error inside a list-returning
+  function, with `resolution_report()$identified` specifically also mirroring the Python
+  oracle's `None`) -- instead, a new "Sentinel conventions" section was added to the
+  package-level documentation (`?selectionfragility`), cross-referenced from every affected
+  function's `@return`.
