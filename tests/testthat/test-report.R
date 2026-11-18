@@ -298,7 +298,7 @@ test_that("report()'s static autocorrelation disclosure stays consistent with re
   # resolution_report()'s own @section Assumption roxygen block must still assert the SAME core
   # claim report.R's disclosure refers readers to.
   expect_match(resolution_src,
-    "assume no autocorrelation in the\\s*\n#'\\s*per-period loss differential",
+    "assume no autocorrelation in(\\s|#')+the(\\s|#')+per-period loss differential",
     perl = TRUE)
 })
 

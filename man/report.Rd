@@ -15,13 +15,8 @@ report(panel, alpha = 0.1, full = FALSE, seed = 0)
 
 \item{seed}{RNG seed for every bootstrap this function runs internally: the Model Confidence
 Set bootstrap behind VERDICT/\code{fragility_read}, and the \code{pivot_agreement()} subsample
-bootstrap behind PIVOT's \verb{pivot_agreement:} line. On a genuinely borderline panel the
-identified/not-identified verdict can be seed-sensitive (see \code{?mcs}'s "Adversarial use"
-section for a quantified example: identification can swing ~37-42 percentage points across
-seed=1..300 on one borderline panel), and \code{pivot_agreement()}'s own percentage is similarly
-seed-sensitive on a small/borderline panel. Previously silently pinned to \code{seed=0} with no
-way to check; pass a few different seeds yourself near a borderline alpha if this matters
-for your use case.}
+bootstrap behind PIVOT's \verb{pivot_agreement:} line. On a borderline panel the verdict can
+depend on the seed (see \code{?mcs}, "Adversarial use"); try a few seeds if it matters.}
 }
 \value{
 A character string of class \code{selectionfragility_report} (the report text) with a
@@ -36,10 +31,7 @@ pivot_agreement).
 \examples{
 # Ten years of losses for three models: ar1 is steady, nbeats wins nine of the ten years
 # but one shock-year loss (2.60) is large enough that ar1 wins on the pooled mean anyway,
-# ets is uniformly worse. T/K=3.3 is below the internal MCS engine's own small-T threshold,
-# so report() below is expected to print its "small-sample regime" warning once (it
-# de-duplicates the same warning firing from its two internal MCS call sites) -- that is
-# disclosure, not a sign report() is broken.
+# ets is uniformly worse. The panel is small, so expect one small-sample warning.
 L <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),

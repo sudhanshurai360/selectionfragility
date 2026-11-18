@@ -1,12 +1,7 @@
-# report.R — the one-screen report. Faithful port of report.py. Prose lives here, never in the
-# returned value (it returns a single formatted character string, matching the Python original's
-# "\n".join(lines) return type -- call cat() on it, or just print it, for display).
+# report.R — the one-screen report. Port of report.py; returns a single formatted string.
 
-# Date/time labels print at the panel's own cadence: "%Y-%m" when every label falls on the same
-# day of the month at midnight (a monthly-or-coarser panel -- identical to the Python original's
-# fixed "%Y-%m"), otherwise the full date (plus time of day if any label has one). A fixed "%Y-%m"
-# on a DAILY panel used to print a pivotal day as just its month ("2024-03"), and only fell back
-# to full dates when two pivotal days happened to share a month.
+# Date/time labels print at the panel's cadence: "%Y-%m" when every label is the same day of month
+# at midnight (monthly or coarser, as in Python), otherwise the full date, plus time if any.
 #' @keywords internal
 .label_format <- function(labels) {
   if (!(inherits(labels, "Date") || inherits(labels, "POSIXt"))) return(NULL)
@@ -51,14 +46,8 @@
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
-# STRICT-AUDIT FIX (2026-11-18): factored out of LEADERBOARD's own disambiguation block so the
-# SAME control-character escaping it introduced for model names also covers PIVOT's printed
-# period labels and compare.R's printed champion names -- both were found to have the identical
-# injection gap LEADERBOARD's fix closed (a model/label/champion name containing a literal
-# newline/CR/tab/DEL/ANSI-escape-sequence character prints verbatim into the one-screen report,
-# indistinguishable from real prose, or alters a real terminal's rendering via an embedded ANSI
-# escape). Centralizing avoids a 4th copy of this exact regex drifting out of sync like the
-# K/T sibling-gap pattern already documented elsewhere in this package.
+# Shared escaping for printed model names and period labels, so a name containing a newline or
+# ANSI escape cannot inject fake lines into the report.
 #' @keywords internal
 .has_control_char <- function(x) grepl("[\\x00-\\x1f\\x7f]", x, perl = TRUE)
 
@@ -96,13 +85,8 @@
 #' @param full Accepted for forward compatibility; unused (the default view is the compact one).
 #' @param seed RNG seed for every bootstrap this function runs internally: the Model Confidence
 #'   Set bootstrap behind VERDICT/`fragility_read`, and the `pivot_agreement()` subsample
-#'   bootstrap behind PIVOT's `pivot_agreement:` line. On a genuinely borderline panel the
-#'   identified/not-identified verdict can be seed-sensitive (see `?mcs`'s "Adversarial use"
-#'   section for a quantified example: identification can swing ~37-42 percentage points across
-#'   seed=1..300 on one borderline panel), and `pivot_agreement()`'s own percentage is similarly
-#'   seed-sensitive on a small/borderline panel. Previously silently pinned to `seed=0` with no
-#'   way to check; pass a few different seeds yourself near a borderline alpha if this matters
-#'   for your use case.
+#'   bootstrap behind PIVOT's `pivot_agreement:` line. On a borderline panel the verdict can
+#'   depend on the seed (see `?mcs`, "Adversarial use"); try a few seeds if it matters.
 #' @return A character string of class `selectionfragility_report` (the report text) with a
 #'   `print` method, so both `report(panel)` (auto-printed at the console) and
 #'   `print(report(panel))` display the formatted report; `cat(report(panel))` also works.
@@ -111,10 +95,7 @@
 #' @examples
 #' # Ten years of losses for three models: ar1 is steady, nbeats wins nine of the ten years
 #' # but one shock-year loss (2.60) is large enough that ar1 wins on the pooled mean anyway,
-#' # ets is uniformly worse. T/K=3.3 is below the internal MCS engine's own small-T threshold,
-#' # so report() below is expected to print its "small-sample regime" warning once (it
-#' # de-duplicates the same warning firing from its two internal MCS call sites) -- that is
-#' # disclosure, not a sign report() is broken.
+#' # ets is uniformly worse. The panel is small, so expect one small-sample warning.
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
 #'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
@@ -127,9 +108,8 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
   if (!inherits(panel, "loss_panel")) {
     stop(sprintf("report() expects a loss_panel, got %s. Build one first with loss_panel(...).", class(panel)[1]), call. = FALSE)
   }
-  # Validate up front: both internal MCS calls below are wrapped in tryCatch (so a data-driven
-  # refusal degrades to "VERDICT: not available"), which would otherwise turn a caller's typo into
-  # a half-filled report instead of an error.
+  # Validate first: the MCS calls below catch errors, which would turn a typo into a half-filled
+  # report.
   .validate_alpha(alpha)
   .validate_seed(seed, "report(): seed")
   L <- panel$losses
@@ -141,22 +121,8 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
 
   mcs_error <- NULL
   survivors <- character(0); msize <- NULL; ident <- NULL
-  # STRICT-AUDIT FIX (2026-11-18, new-comment-block adversarial round): report() calls
-  # .run_mcs_arch() directly (right below, for VERDICT) AND ALSO calls resolution_report() (below)
-  # which, for its own R2 check, internally calls identified() -> mcs_size() -> the SAME
-  # .run_mcs_arch(), with matching T/K/w AND matching alpha/seed (resolution_report() is called
-  # with mcs_alpha = alpha, mcs_seed = seed -- this function's own `alpha`/`seed` arguments). Any
-  # warning .run_mcs_arch() raises based only on T/K/alpha (the small-T warning added in the
-  # immediately-preceding commit, the large-K warning, the block-shrink warning) is therefore
-  # byte-for-byte identical on both call sites and fires TWICE per report() call -- confirmed
-  # directly: report() on a T=12/K=3 panel prints the "identified()/mcs_size(): T=12 periods for
-  # K=3 models..." small-sample warning twice, word-for-word, which looks like a duplicated/buggy
-  # warning to a real user rather than one risk surfaced from two internal call sites. Fixed
-  # conservatively: capture every warning from both internal engine calls via
-  # withCallingHandlers()/muffleWarning (deferring, not suppressing, them), then re-emit only the
-  # UNIQUE messages once each after both calls complete. This also naturally de-duplicates the
-  # large-K and block-shrink warnings if they ever fire from both sites the same way, without
-  # hardcoding anything specific to the small-T wording.
+  # Both the VERDICT call and resolution_report() run .run_mcs_arch() on the same panel and raise
+  # the same warnings; collect them and re-emit each unique message once.
   warn_msgs <- character(0)
   .collect_warning <- function(w) {
     warn_msgs <<- c(warn_msgs, conditionMessage(w))
@@ -196,13 +162,7 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
       lines <- c(lines, "  (see RESOLUTION below -- identification alone does not mean the edge is",
                  "   powered at this sample size)")
     } else if (!isTRUE(ident)) {
-      # STRICT-AUDIT FIX (2026-11-18): the opposite-direction caveat was missing. VERDICT (R2,
-      # the MCS bootstrap) and RESOLUTION (R1, a power check against the binding rival alone)
-      # answer different questions and can legitimately disagree -- "not identified" + "resolved"
-      # on the same panel is not a contradiction, but a one-screen reader seeing only the top two
-      # sections (this function is advertised as exactly that) could easily misread "resolved" as
-      # "the edge over the rival is real and the decision is settled," missing that the MCS
-      # bootstrap still can't rule out some OTHER rival not involved in RESOLUTION's calculation.
+      # Resolved but not identified: the edge over one rival does not rule out the others.
       lines <- c(lines, "  (see RESOLUTION below -- a powered edge over the binding rival alone does",
                  "   not mean the MCS bootstrap can rule out every other model; VERDICT and",
                  "   RESOLUTION answer different questions and can legitimately disagree)")
@@ -215,27 +175,8 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
   ordered <- models[order(means[models])]
   padded <- stats::setNames(sprintf("%-15s", ordered), ordered)
   collisions <- ordered[sapply(ordered, function(m) sum(padded == padded[m]) > 1)]
-  # Quoted + escaped (not a bare sprintf("'%s'", ...)) so a model name that itself contains a
-  # quote character does not render as an ambiguous run of unescaped quotes once wrapped --
-  # verified directly: two colliding names "ar1's" / "ar1's " used to print as `'ar1's'` /
-  # `'ar1's '`, i.e. exactly the kind of indistinguishable-looking duplicate this disambiguation
-  # branch exists to prevent. encodeString(..., quote="'") backslash-escapes the quote/backslash
-  # the same way R's own quoting of strings does, so the wrapped name is always unambiguous.
-  # STRICT-AUDIT FIX (2026-11-18): a model name containing a literal newline/carriage-return (or
-  # any other C0/DEL control character) was embedded into LEADERBOARD's one-row-per-model text
-  # completely unescaped unless it ALSO happened to collide with another name after padding --
-  # loss_panel()'s own name validation (panel.R) only rejects empty/duplicate names, not control
-  # characters, so this was directly reachable. Confirmed directly: a model named
-  # "evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE\nb" printed as three separate lines
-  # inside LEADERBOARD, with the middle line rendering byte-for-byte like a genuine VERDICT
-  # section header -- a one-screen reader (this function's own advertised audience) has no way to
-  # tell that line apart from this function's real prose. This is a strictly worse failure mode
-  # than the quote-collision bug the comment below already guards: it doesn't need a second,
-  # colliding model name to trigger, and it breaks the one-line-per-model invariant the whole
-  # table depends on rather than just looking ambiguous. Escape any name containing a control
-  # character through the SAME encodeString() quoting already used for padding collisions, so a
-  # model name alone can never inject extra "lines" (or anything that reads as a section header)
-  # into the printed report.
+  # Escape names that collide after padding or contain control characters, so every row is one
+  # unambiguous line.
   has_control_char <- .has_control_char(ordered)
   needs_escape <- ordered %in% collisions | has_control_char
   disp <- stats::setNames(
@@ -263,33 +204,15 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
   } else {
     lines <- c(lines, sprintf("  MCB bound: the champion's true edge over the binding rival may be as large as %s, at 95%% confidence", .fmt_pct(bound_res)))
   }
-  # STRICT-AUDIT FIX (2026-11-18, 11-domain-expert real-world round + expert design review):
-  # RESOLUTION's "resolved"/"cannot determine" verdict assumes no autocorrelation in the
-  # per-period loss differential (resolution.R's .weighted_se() comment). A realistic,
-  # uniform-weight, autocorrelated panel (the common case) gets NO runtime signal of this at
-  # all -- the one existing runtime guard (resolution.R's weight/volatility-correlation warning)
-  # is gated on non-uniform weights and structurally cannot fire here, and the VERDICT/RESOLUTION
-  # disagreement caveat above only fires when that disagreement happens to manifest on this
-  # specific data draw, not reliably. A dynamic autocorrelation check was considered and rejected
-  # (see resolution.R's header comment): at this package's typical T, lag-1 ACF sampling noise
-  # alone would fire on a large fraction of genuinely-fine panels with no non-uniform-weight gate
-  # to narrow it, crossing from "screening heuristic" into "noise on nearly every call." An
-  # always-printed, non-conditional disclosure is the honest alternative.
+  # Always printed. Uniform-weight panels get no other runtime signal of autocorrelation, and a
+  # lag-1 ACF check would fire on noise at typical T (its null SD is ~0.29 at T=12, ~0.18 at T=30).
   lines <- c(lines, "  (RESOLUTION assumes no autocorrelation in the per-period loss differential;",
              "   see ?resolution_report's Assumption section -- this is NOT checked at runtime)")
   lines <- c(lines, "")
   lines <- c(lines, "PIVOT")
-  # NOTE ON MIXED TIE-BREAK RULES IN THIS PARAGRAPH: `db$binding_opponent` below (and the k*/removed-
-  # periods text built from it) uses decision_breakdown()'s alphabetically-first tie-break; the
-  # concentration_share()/pivot_agreement() calls further down in this same paragraph use a DIFFERENT,
-  # largest-margin tie-break internally (pivot.R's .champ_opp_contributions()) for the same "which
-  # opponent" question. On a panel with a genuine k*-tie (common -- ~38% of random panels with a
-  # strict pooled winner have one), this paragraph can name two different opponents across its own
-  # lines. This is deliberate, not a drift bug: see decision_breakdown()'s @section Limitation
-  # (fragility.R) for why each rule is correct for its own call site and why unifying them would
-  # reintroduce a rename-dependence bug the largest-margin rule exists to prevent. RESOLUTION above
-  # uses a THIRD, independent rule (resolution.R's .binding_rival(), closest pooled-mean distance) --
-  # also documented there, also not unified with either of these.
+  # On a k*-tie, the opponent named by decision_breakdown() (alphabetical tie-break) can differ from
+  # the one concentration_share()/pivot_agreement() use (largest margin); see decision_breakdown()'s
+  # Limitation section. RESOLUTION uses a third rule (closest pooled mean).
   db <- decision_breakdown(L, w, a = champ)
   k <- db$k; opp <- db$binding_opponent; removed <- db$removed
   label_fmt <- .label_format(labels) %||% "%Y-%m"
@@ -297,27 +220,12 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
     lines <- c(lines, "  k*=0 -- no strict pooled winner (an exact or effective tie); nothing is pivotal")
   } else {
     if (k <= 5) {
-      # STRICT-AUDIT FIX (2026-11-18): same injection class as LEADERBOARD's model-name fix
-      # above, reached through period LABELS instead of model names -- loss_panel()'s own label
-      # validation (panel.R) rejects NA/duplicate labels but not control characters, so a label
-      # containing a literal newline/CR/tab/DEL/ANSI-escape character printed completely
-      # unescaped into PIVOT's one-line period_txt. Confirmed directly: a 10-period panel with
-      # labels[10] <- "evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE\nb" made the pivotal
-      # period print a fake VERDICT line inside PIVOT, byte-for-byte indistinguishable from a
-      # real section header -- the exact failure mode the LEADERBOARD fix was written to close,
-      # just through the other printed identifier this function has. Escaped through the same
-      # .escape_control_chars() helper (factored out of that fix) rather than a second copy.
       resp <- paste(.escape_control_chars(.disambiguate_labels(labels[sort(removed)], fmt = label_fmt)), collapse = ", ")
       period_txt <- sprintf("k*=%d of %d periods (%s)", k, T, resp)
     } else {
       la <- as.numeric(L[[champ]]); lb <- as.numeric(L[[opp]])
       c_ <- w * (lb - la)
       top_i <- which.max(c_)
-      # Same fix as the k<=5 branch above, for the single-label case (k>5, "largest single
-      # contributor" instead of a comma-joined list): an ANSI-escape-sequence label here is
-      # arguably the worse variant of the two, since cat()'ing the report to a real terminal lets
-      # the escape sequence change color/cursor position rather than just printing a fake prose
-      # line -- confirmed directly with a label containing "\x1b[31m...\x1b[0m".
       period_txt <- sprintf("k*=%d of %d periods (largest single contributor: %s)", k, T, .escape_control_chars(.fmt_label(labels[[top_i]], fmt = label_fmt)))
     }
     if (identical(res$fragility_read, "undetermined")) {
@@ -330,17 +238,8 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
       }
       lines <- c(lines, sprintf("  %s -- fragility read UNDETERMINED (%s); see VERDICT/RESOLUTION above before treating this as evidence either way", period_txt, reason))
     } else {
-      # prop22_certifies() is only valid for a k* computed from an UNWEIGHTED breakdown_number()
-      # (see prop22.R's own scope note) -- but `k` here came from decision_breakdown(L, w, ...)
-      # using the panel's REAL, possibly non-uniform weights. Calling prop22_certifies(k, T) on
-      # that weighted k could in principle silently produce a confident "certifies non-significance"
-      # line that is not actually certified once weighting is correctly excluded from the Prop 2.2
-      # statistic (measured at 6.75% of simulated weighted panels). This branch is reached only when
-      # fragility_read != "undetermined" (i.e. "resolved"), which already requires identified() to
-      # have succeeded, which already requires .weights_are_uniform(w) (.validate_mcs_weights2()
-      # rejects non-uniform weights upstream in .run_mcs_arch) -- so `!.weights_are_uniform(w)` below
-      # is provably always FALSE here today. It is kept as a defensive, currently-inert guard in case
-      # a future change relaxes that upstream validation; it does not currently execute.
+      # Prop 2.2 needs an unweighted k*. Non-uniform weights cannot reach this branch today
+      # (identification already rejects them); the guard stays in case that changes.
       cert <- NA
       cert_txt <- if (!.weights_are_uniform(w)) {
         "no constraint from Proposition 2.2 (panel has non-uniform weights)"
@@ -356,26 +255,14 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
       }
       lines <- c(lines, sprintf("  %s -- %s", period_txt, cert_txt))
       if (isTRUE(cert)) {
-        # STRICT-AUDIT FIX (2026-11-18): this line can print "certifies non-significance"
-        # immediately below RESOLUTION's "resolved" with no text connecting the two, which reads
-        # as a flat self-contradiction. It isn't one: RESOLUTION's R1 check (resolution.R) uses
-        # the SAMPLE variance (ddof=1) and a one-sided Student-t critical value, while Prop 2.2's
-        # certificate (prop22.R) is an unconditional, distribution-free bound keyed to the
-        # POPULATION variance (ddof=0) and a fixed two-sided z -- two different, independently
-        # valid tests that use different variance conventions and different critical values, so
-        # they can and sometimes do disagree on the identical rival pair. Neither is wrong.
+        # RESOLUTION (sample variance, one-sided t) and Prop 2.2 (population variance, two-sided z)
+        # are different tests and can disagree on the same pair.
         lines <- c(lines, paste0(
           "    (not a contradiction -- RESOLUTION's \"resolved\" and this certificate use ",
           "different variance conventions and critical values; see ?prop22_certifies)"
         ))
       }
       cs <- concentration_share(L, w)
-      # Threaded from report()'s own seed= (STRICT-AUDIT FIX, 2026-11-18): this used to be
-      # hardcoded to seed=0 regardless of what the caller passed to report(), which silently
-      # defeated the seed-sensitivity check seed= exists for -- a caller following this file's
-      # own @param seed advice ("pass a few different seeds yourself") would see the PIVOT
-      # line's percentage never move, since pivot_agreement() is just as RNG-dependent (a
-      # 200-rep bootstrap) as the MCS identification check that seed= does correctly control.
       pa <- pivot_agreement(L, w, seed = seed)
       lines <- c(lines, sprintf("  concentration_share: %s of the margin comes from the single largest-contribution period", .fmt_pct(cs)))
       if (!is.na(pa)) {

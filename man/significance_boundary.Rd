@@ -21,10 +21,8 @@ edge must clear this value to be called significant at the stated one-sided \cod
 One-sided significance threshold against the binding rival
 }
 \section{Assumption}{
- assumes no autocorrelation in the per-period (rival - champion) loss
-differential -- see \code{.weighted_se}'s comment in resolution.R. Also assumes the champion and
-its binding rival sit at a comparable loss scale -- see \code{\link[=minimum_detectable_edge]{minimum_detectable_edge()}}'s
-Assumption section for why an extreme scale mismatch can produce a nonsensical percentage.
+ same as \code{\link[=minimum_detectable_edge]{minimum_detectable_edge()}}: no autocorrelation in the loss
+differential, and a champion mean loss not near zero.
 }
 
 \examples{

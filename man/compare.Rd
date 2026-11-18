@@ -27,32 +27,18 @@ Reports whether the pooled champion changed between two consecutive evaluation r
 whether that change looks like signal or noise.
 }
 \section{New-period attribution requires real labels}{
- \code{n_new_periods}/\code{champion_without_new_periods}
-detect a rolling window by comparing the two panels' period LABELS -- if both panels were built
-with \code{loss_panel()}'s default positional labels (no \verb{labels=} passed, the common case for a bare
-list/matrix), positional labels carry no cross-panel identity, so a same-length rolling window
-(periods really did drop out and new ones came in, but T stayed the same) is honestly reported as
-\code{n_new_periods=0}/\code{champion_without_new_periods=NULL} ("cannot attribute"), even though periods
-really did change. Pass \verb{labels=} explicitly to \code{loss_panel()} for both panels if you need
-accurate new-period attribution on a same-length rolling window.
+ \code{n_new_periods} and
+\code{champion_without_new_periods} compare the two panels' period labels. With \code{loss_panel()}'s
+default positional labels, a same-length rolling window is reported as \code{n_new_periods=0} /
+\code{champion_without_new_periods=NULL} ("cannot attribute"). Pass \verb{labels=} to both panels.
 
-STRICT-AUDIT FIX (2026-11-18): that remedy does NOT cover every real-world labeling
-convention -- it only fixes POSITIONAL labels. A real, non-positional labeling scheme where
-the SAME label strings are reused every run (e.g. a pipeline that numbers "slot 1..24 in
-the trailing window," not calendar date) has \code{labels_are_positional == FALSE} yet suffers
-the identical defect, because \code{compare()} matches periods by label-STRING identity: if both
-panels use \code{labels = paste0("period", 1:24)} again, a genuine rolling window (oldest period
-dropped, one new period appended) is still reported as \code{n_new_periods=0}, because the label
-SETS are identical even though the underlying periods are not. If your labeling convention
-re-numbers slots rather than carrying a stable per-period identity (a calendar date, a
-period-since-epoch counter), \code{compare()}'s new-period attribution will be silently wrong
-regardless of whether you pass \verb{labels=}.
+Attribution matches periods by label string, so it also fails when every run reuses the same
+labels for different periods (e.g. "slot 1..24" of a trailing window). Use labels with a
+stable per-period identity, such as calendar dates.
 }
 
 \examples{
-# Small, 10-11 period panel purely for example speed; expect compare()'s internal MCS check
-# to print the "small-sample regime" warning below (T/K well under its threshold) -- that is
-# the check disclosing its own measured limitation, not a sign this call is broken.
+# A small panel for example speed; expect the MCS small-sample warning.
 L <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
@@ -68,11 +54,8 @@ current <- loss_panel(L_new_period, labels = c(years, 2025))
 
 cr <- compare(previous, current)
 cr$act
-# FALSE here: cr$champion_changed is FALSE (ar1 is still the pooled champion after the new
-# period), so there is nothing actionable -- a promotion/alerting step should do nothing.
-# cr$act only becomes TRUE when the champion changed AND the old champion has demonstrably
-# left the Model Confidence Set (not just lost the pooled mean by noise) -- that is the one
-# boolean a CI/pipeline promotion step should gate a real action on.
+# FALSE: ar1 is still the champion. act is TRUE only when the champion changed AND the old
+# champion left the Model Confidence Set -- the one boolean to gate a promotion step on.
 }
 \seealso{
 \code{\link[=loss_panel]{loss_panel()}} to build the \code{previous}/\code{current} panels; \code{\link[=mcs]{mcs()}}/\code{\link[=model_confidence_set]{model_confidence_set()}}

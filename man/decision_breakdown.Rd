@@ -25,45 +25,20 @@ period labels for display; call \code{panel$labels[removed]} yourself if you nee
 See \code{\link[=breakdown_number]{breakdown_number()}} for the pairwise primitive and its robust-statistics lineage
 (Hampel 1971).
 }
-\section{Limitation -- THREE TIE-BREAK RULES, DELIBERATELY DIFFERENT, NOT A BUG}{
- when multiple
-opponents are tied at the same minimal k*, this function's \code{binding_opponent} resolves the tie
-to the alphabetically-first name. Two OTHER functions resolve the conceptually-similar
-"which opponent is the one that matters" question differently, and this was verified (by
-reading the Python oracle's own design-decision comments in \code{pivot.py}/\code{resolution.py}, which
-predate and motivate this R port) to be INTENTIONAL in all three cases, not independently-drifted
-accidents:
+\section{Limitation}{
+ three different "which opponent" rules: when several opponents tie at the
+minimal k*, \code{binding_opponent} is the alphabetically first (a stable, citable name). Two other
+functions answer related questions differently, by design (as in the Python package):
 \itemize{
-\item \code{\link[=concentration_share]{concentration_share()}}/\code{\link[=pivot_agreement]{pivot_agreement()}} (via the internal \code{.champ_opp_contributions()}
-in pivot.R) restrict to the SAME tied set this function computes (\code{ties}/\code{binding_opponents})
-but pick the member with the LARGEST total margin, not the alphabetically-first one. This is
-deliberate: an earlier version of that module used the alphabetical rule and it made the
-\emph{period-level} statistics (which period is "the" pivot) measurably RENAME-dependent -- renaming
-a tied opponent could flip which one sorted first, and different tied opponents can have very
-different pivotal periods. Largest-margin is a property of the DATA, not of what the models are
-called, so it does not have that defect; it was chosen specifically to fix it. This function's
-own alphabetical rule is fine for ITS job (a stable, citable name for a point estimate of k*,
-which is an integer and ties on it by exact-count coincidence are common at small T) but would
-be the wrong choice for pivot.R's job.
-\item \code{resolution_report()}'s own \code{binding_rival} field (via \code{resolution.R}'s internal
-\code{.binding_rival()}) is not a k*-minimality tie-break at all -- it answers a different
-question (which rival's pooled mean is statistically closest to the champion's, for the
-power/MDE calculation) and is not restricted to this function's tied set. The Python oracle
-measured an 18.25\% disagreement rate between these two opponents across 20,000 random panels;
-an equivalent direct check on this R port (3,000 random panels, 3-6 models, 8-30 periods)
-found k*-ties on ~38\% of panels with a strict winner, a ~20\% disagreement rate between this
-function's \code{binding_opponent} and \code{concentration_share()}'s internal pick, and a ~25\%
-disagreement rate against \code{binding_rival}. This is a common, not a contrived-edge-case,
-occurrence on realistic panels -- read the field name in context, not just "binding X".
+\item \code{\link[=concentration_share]{concentration_share()}}/\code{\link[=pivot_agreement]{pivot_agreement()}} pick, from the same tied set, the opponent
+with the largest total margin. An alphabetical rule there made the named pivotal period
+change when a model was renamed.
+\item \code{resolution_report()$binding_rival} is the rival with the closest pooled mean (what the
+power/MDE calculation needs), not restricted to the k*-tied set.
 }
-\code{\link[=report]{report()}}'s PIVOT paragraph prints text sourced from this function's \code{binding_opponent} AND
-(via \code{concentration_share()}/\code{pivot_agreement()}) the largest-margin pick, in the same paragraph
--- see the inline comment at that call site in report.R. In the common case of no k*-tie, all
-three name the same opponent; the above only matters when several are genuinely tied at k*.
-None of this is unified across the three call sites because each rule is already correct for its
-own job; forcing them to agree would either reintroduce the rename-dependence bug largest-margin
-was built to fix, or conflate k*-minimality with mean-distance, which are genuinely different
-statistical questions.
+On random panels with a strict winner, ~38\% have a k*-tie; \code{binding_opponent} differs from the
+largest-margin pick on ~20\% and from \code{binding_rival} on ~25\%. \code{\link[=report]{report()}}'s PIVOT paragraph can
+therefore name two different opponents. With no k*-tie, all three agree.
 }
 
 \examples{

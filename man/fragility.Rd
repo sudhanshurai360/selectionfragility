@@ -35,10 +35,7 @@ is 1-based instead).}
 \item{benchmark}{Optional \code{exchangeable_benchmark()} result (or its p05) to calibrate \code{fragile}.}
 }
 \value{
-A named list of 25 diagnostic fields (STRICT-AUDIT FIX, 2026-11-18: this used to point
-to \code{vignette("selectionfragility")} for "field-by-field guidance" that does not exist there
--- the vignette itself points back to \code{?fragility}, a circular reference that left roughly
-15 of the 25 fields never documented in prose anywhere):
+A named list of 25 diagnostic fields:
 \describe{
 \item{pooled_winner, per_period_winner, condorcet_winner, condorcet_status}{The four
 winner-selection rules this package compares; see their own help pages.}
@@ -69,18 +66,11 @@ whether no Condorcet winner exists at all (a cycle is one way that can happen).}
 note this differs from \code{decision_breakdown()$removed}, which is 1-based). Zero-length,
 of the same type as the labels, when \code{k_star == 0}.}
 \item{shock_coincidence}{\code{NULL} if \code{shock_periods} was not supplied; otherwise \code{TRUE} iff
-\code{responsible} is non-empty AND every period in it is also in \code{shock_periods}. STRICT-
-AUDIT FIX (2026-11-18): this is deliberately NOT vacuous truth -- when \code{k_star == 0}
-(\code{responsible} is empty, e.g. the pooled winner's margin is already degenerate), this is
-\code{FALSE}, not \code{TRUE}, even though "every period in an empty set satisfies any predicate"
-would suggest otherwise. An empty \code{responsible} means there is no k*-period evidence to
-check against \code{shock_periods} at all, not that the (vacuous) check trivially passed.}
+\code{responsible} is non-empty AND every period in it is also in \code{shock_periods} (so \code{FALSE},
+not vacuously \code{TRUE}, when \code{k_star == 0}).}
 \item{winner_stability, winner_freq}{\code{winner_stability()}'s bootstrap stability and
-per-model win frequency. STRICT-AUDIT FIX (2026-11-18): when the champion-vs-binding-
-opponent pair is degenerate, \code{fragility()} computes the same \code{NaN}/uniform-placeholder
-result INLINE rather than calling \code{winner_stability()} itself, so -- unlike calling
-\code{\link[=winner_stability]{winner_stability()}} directly on the same panel -- this degenerate branch raises NO
-\code{warning()} here; the placeholder values are identical, only the warning is absent.}
+per-model win frequency. On a degenerate pair these are \code{NaN} and a uniform placeholder,
+as from \code{\link[=winner_stability]{winner_stability()}}, but without its warning.}
 \item{fragile}{\code{TRUE} if degenerate; \code{NA} if no \code{benchmark} was supplied to calibrate
 against (see \code{?selectionfragility}'s "Sentinel conventions" section); otherwise \code{TRUE}
 iff \code{winner_stability} falls below \code{benchmark}'s p05.}

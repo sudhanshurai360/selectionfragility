@@ -24,44 +24,16 @@ small, or every subsample drawn had no strict winner -- see \code{?selectionfrag
 }
 \description{
 Fraction of \code{frac}*T-sized subsamples of periods (without replacement) that name the same
-pivotal period as the full sample. NOTE: uses R's own RNG, so results are not bit-for-bit
-identical to the Python package's numpy-based subsampling on the same seed.
+pivotal period as the full sample. Uses R's RNG, so results differ from Python's on the same
+seed.
 }
 \section{Limitation}{
- this statistic is weaker evidence than it may appear. Subsampling draws
-WITHOUT replacement from the SAME already-realized loss values (no new noise is drawn), so
-a period's per-period contribution is identical at every kept position; dropping other
-periods can never create a new maximum that exceeds the full sample's actual top contributor.
-\code{sub_pivot == full_pivot} whenever the top period happens to survive into the subsample,
-which happens with probability close to \code{frac} BY CONSTRUCTION of this sampling scheme,
-largely independent of whether the panel's true pivot is robust or a noise artifact.
-Measured directly (2026-11-18): on both a maximally-robust panel (one dominant shock,
-\code{concentration_share} ~0.99) and a maximally-fragile one (evenly spread margin,
-\code{concentration_share} ~0.11), \code{pivot_agreement()} returns ~\code{frac} (the default 0.8) in BOTH
-cases -- the number tracks the \code{frac} knob, not the panel's actual concentration structure.
-Treat it as a weak signal at best; \code{concentration_share()} is the more informative diagnostic
-for "is this pivot a real feature of the data."
-
-NOT R-SPECIFIC; NOT FIXED BY THIS PORT ON PURPOSE. This is a property of the ORIGINAL
-\code{selection_fragility} (Python) design, not a porting defect: \code{pivot.py}'s own
-\verb{_champ_opp_contributions}-based subsampling also draws WITHOUT replacement from the same
-realized values (\code{rng.choice(T, size=n_sub, replace=False)}), and a fresh three-regime check
-against the installed Python package (\code{selection-fragility} 1.0.4, dominant-shock vs.
-evenly-spread vs. two-way-near-tie fixtures, 2026-11-18) reproduced the identical pattern:
-\code{pivot_agreement()} tracked \code{frac} (~0.75-0.82 at \code{frac=0.8}, ~0.49-0.57 at \code{frac=0.5},
-~0.93-0.96 at \code{frac=0.95}) regardless of \code{concentration_share} (0.10-0.88 across the same three
-panels), in both languages. Fixing this in R alone would create a cross-language divergence
-from the oracle-pinned Python formula and is out of scope here; a shared redesign would need
-deliberate review on both sides.
-
-The seemingly obvious parity-safe fix -- sample periods WITH replacement (a true bootstrap)
-instead of without -- was tried (not shipped) and does NOT solve this: resampling still draws
-from the SAME fixed realized values, so it is still bounded by \verb{P(the full-sample top period appears at least once in the resample)}, a combinatorial function of \code{n_sub}/\code{T} alone, not of
-the panel's concentration. Measured directly: across the same three regimes, with-replacement
-resampling gave 0.52-0.67 with little separation between the dominant-shock and evenly-spread
-panels -- no more discriminative than the shipped without-replacement version, just shifted to
-a different frac-driven constant. No further change is planned without also redrawing new
-noise (a different statistic, out of scope for a same-signature fix).
+ this statistic is weaker evidence than it may appear. Subsampling reuses
+the same realized losses, so the subsample names the full-sample pivot whenever that period
+survives the draw -- probability close to \code{frac} by construction. On both a single-shock panel (\code{concentration_share} ~0.99) and an evenly spread one (~0.11)
+it returns about \code{frac}. Treat it as a weak signal; \code{concentration_share()} is the more
+informative diagnostic. The Python package has the same design, and resampling with
+replacement does not fix it (it is still bounded by the top period's chance of being drawn).
 }
 
 \examples{

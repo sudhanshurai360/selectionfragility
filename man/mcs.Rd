@@ -13,116 +13,62 @@ mcs(L, alpha = 0.1, B = 2000, block = 3, seed = 0, elimination = NULL)
 
 \item{B}{Number of bootstrap resamples.}
 
-\item{block}{Block length for the circular block bootstrap. The default (3) is tuned for
-roughly-i.i.d. losses; it does NOT adapt to serial dependence, and the EPA/MCS bootstrap test
-is over-sized (retains too few models) under persistent losses with a short block (e.g. at
-AR(1)=0.5 the complete-null retain-all rate falls to ~0.62 vs the nominal 0.90). If your loss
-differentials are autocorrelated, raise \code{block} and report the result across a block sweep
-rather than trusting the default. (This over-elimination is conservative for a tie claim --
-it shrinks the MCS -- but it inflates the apparent identification rate.)
+\item{block}{Block length for the circular block bootstrap. The default (3) suits roughly
+i.i.d. losses and does not adapt to serial dependence: at AR(1)=0.5 the complete-null
+retain-all rate falls to ~0.62 (nominal 0.90). With autocorrelated loss differentials, raise
+\code{block} and report results across a block sweep.
 
-STRICT-AUDIT FIX (2026-11-18): the AR(1) figure above is NOT the whole story -- a dedicated
-simulation under a true complete null with ZERO autocorrelation (all K models i.i.d., same
-mean) found the test is still measurably over-sized at ordinary panel sizes using these
-defaults: at T=30, K=3, alpha=0.10, the actual false-elimination rate was ~18\% (not ~10\%),
-roughly double what \verb{alpha=} implies; at alpha=0.05 it was ~9\% (not 5\%). This is a genuine
-finite-sample size distortion of the sequential-elimination/equivalence-test procedure
-itself, separate from and additive to the AR(1) effect above, and converges toward nominal
-only as T grows into the low hundreds. A user who checks their losses for autocorrelation,
-finds none, and takes comfort from the AR(1) caveat alone is still running a test whose real
-error rate at a typical T~30 panel can be close to double the number baked into \verb{alpha=}.}
+Even with no autocorrelation the test is over-sized at ordinary panel sizes: at T=30, K=3 the
+false-elimination rate was ~18\% at alpha=0.10 and ~9\% at alpha=0.05, and ~41\% at T=12, K=4
+(e.g. 12 years of annual actuarial reserving data comparing 4 methods). It converges to
+nominal only as T reaches the low hundreds; the function warns when T/K < 10.}
 
 \item{seed}{RNG seed.}
 
 \item{elimination}{\code{"studentized"} (Hansen-Lunde-Nason's e_max, default) or \code{"raw"} (legacy
 mean-based rule). \code{NULL} reads \code{getOption("selectionfragility.elimination", "studentized")}.
-ADVERSARIAL-REVIEW FINDING (2026-11-18): the two rules agree closely at small model counts
-but this does NOT extrapolate to large \code{K} -- stress-tested across 100+ randomly generated
-realistic panels (\code{T} in 20-60, heterogeneous per-model means/variances, \code{alpha=0.10},
-default \code{B}): at \code{K} in 3-9 the surviving sets matched on ~95-97\% of panels (consistent with
-"rarely disagree"), but at \code{K} in 10-15 they matched on only ~77\% (23\% disagreement), and at
-\code{K} in 16-30 they matched on as few as ~47-53\% of panels -- a coin flip, not a rare event.
-Do not generalize a small-\code{K} "the two rules rarely disagree in practice" intuition to a
-large-\code{K} sweep; re-check both rules explicitly (or just always report \code{elimination} alongside
-\code{surviving}, which this function already stamps onto its result for exactly this reason).}
+The two rules agree on ~95-97\% of panels at K=3-9, ~77\% at K=10-15 and only ~50\% at K=16-30,
+so at large K check both and always report \code{elimination} alongside \code{surviving}.}
 }
 \value{
-A list \code{list(surviving = surviving_column_indices, p = p_at_stop, elimination = elimination_rule_used)} (1-based indices). \code{elimination} is stamped onto the result (not just
-accepted as an argument) because two "identical" calls across sessions are otherwise silently
-incomparable if a global \code{options(selectionfragility.elimination=...)} was quietly set in one
-of them -- confirmed consequential, not cosmetic: on one panel, \code{"studentized"} gave
-\verb{surviving=\{1,2\}}/\code{p=0.257} while \code{"raw"} gave \code{surviving={2}}/\code{p=0.002} at the same seed/B.
+A list \code{list(surviving = surviving_column_indices, p = p_at_stop, elimination = elimination_rule_used)} (1-based indices). \code{elimination} records which rule produced the
+result, since a global option can silently change it between sessions.
 }
 \description{
 Model Confidence Set on a T x K loss matrix
 }
 \section{Adversarial use / competition settings}{
 
-This diagnostic was built for a trusted analyst diagnosing their own model comparison, not for
-a setting where the models being evaluated were chosen knowing the methodology and have an
-incentive to beat it. Before using an MCS "co-champion" / "statistically tied" claim in a
-competitive setting (a forecasting leaderboard, a benchmark with prizes), two gaming vectors are
-real and confirmed, not hypothetical:
+This diagnostic assumes an analyst checking their own comparison. In a competitive setting (a
+leaderboard, a benchmark with prizes) it can be gamed:
 \itemize{
-\item \strong{Noise can hide genuine inferiority inside a tie claim.} A model with a real,
-substantial mean-loss disadvantage can survive MCS elimination at a high rate if its
-per-period losses carry high idiosyncratic variance, since noise suppresses the studentized
-elimination statistic below threshold. This is correct arithmetic, not a bug, but it is a
-deliberately-engineerable exploit: do not use MCS survival alone as a "co-champion"
-criterion in an adversarial setting -- pair it with an independent accuracy floor.
-\item \strong{Whoever controls the weight vector controls the result.} If \code{w} is
-participant-supplied rather than fixed by the competition operator in advance, it can flip
-both the pooled winner and k* entirely. Weights must always be operator-controlled and
-fixed before results are known in any setting with an adversarial party.
-\item \strong{Seed-shopping on a borderline panel is at least as exploitable as the two
-vectors above}: quantified on a genuinely
-borderline K=2, T=20 panel sitting near the alpha=0.10 boundary, sweeping seed=1..300 with
-every other argument at its default: the native engine (this function) called the comparison
-"identified" (singleton MCS) on 37.3\% of seeds at B=2000 (42.0\% at B=500) and "not identified"
-on the rest; the independent cross-check engine (\code{\link[=mcs_size]{mcs_size()}}/\code{\link[=identified]{identified()}}, which delegates
-to \code{MCS::MCSprocedure()}) called it "identified" on only 13.0\% of seeds. A party who tries a
-handful of seeds and reports only the favorable one can flip the headline verdict roughly 1
-time in 3 (this engine) to 1 time in 8 (the cross-check engine) with NO data manipulation at
-all. \code{\link[=winner_stability]{winner_stability()}} is NOT exploitable this way (it stayed within 0.933-0.960 across the
-same seed sweep) -- only the MCS/identification layer is. \code{\link[=report]{report()}} has a \verb{seed=} argument
-(default 0, matching its prior hardcoded behavior) precisely so a caller CAN check this --
-call \code{report(panel, seed=...)}/\code{mcs()}/\code{mcs_size()}/\code{identified()} across a few different
-seeds yourself near a borderline alpha if this matters for your use case, rather than
-trusting one fixed-seed call.
-\item \strong{The two engines' exact MCS SIZE is far less reliable than their yes/no
-"identified" verdict, and specifically so near a true complete null.} Stress-tested across
-paired runs of this engine and \code{\link[=mcs_size]{mcs_size()}} on identical panels, identical seed, default
-\code{alpha}/\code{B}/\code{reps}: when there is a genuine single winner, the two engines' exact surviving
-COUNT matched on ~97-100\% of panels regardless of how small \code{T} was relative to \code{K}. But
-under a true complete null (all models equal in expectation -- nothing to really
-identify), exact-size agreement degraded sharply as \code{T/K} shrank: ~90\% at \code{T/K=5}, falling
-to ~10\% at \code{T/K=0.33} (e.g. \code{T=10}, \code{K=30}). The binary "is it a singleton" question stayed
-reliable throughout (both engines almost always correctly said "not identified" under a
-complete null). Practical guidance: treat the yes/no identification verdict as the robust
-signal across engines; do not lean on the exact reported MCS size as a precise "confidence
-set width" when \code{T} is small relative to \code{K} and no model is clearly best -- that number is
-largely bootstrap noise in that regime, and it will not replicate across the two engines.
+\item \strong{Noise can hide inferiority inside a tie claim.} A clearly worse model with high
+per-period variance often survives elimination. Pair MCS survival with an independent
+accuracy floor before calling anything a co-champion.
+\item \strong{Whoever controls the weights controls the result.} Participant-supplied \code{w} can
+flip both the pooled winner and k*; weights must be fixed by the operator in advance.
+\item \strong{Seed-shopping on a borderline panel.} On a borderline K=2, T=20 panel,
+sweeping seed=1..300 gave "identified" on 37\% of seeds with this engine and 13\% with
+\code{\link[=mcs_size]{mcs_size()}}/\code{\link[=identified]{identified()}}; \code{\link[=winner_stability]{winner_stability()}} stayed within 0.93-0.96. Near a
+borderline alpha, check several seeds rather than trusting one.
+\item \strong{Exact MCS size is less reliable than the yes/no verdict.} With a genuine single
+winner the two engines' surviving counts match on ~97-100\% of panels. Under a complete null,
+agreement on the exact size falls from ~90\% at T/K=5 to ~10\% at T/K=0.33, while both still
+correctly say "not identified". Do not read the size as a precise set width when T is small
+relative to K.
 }
-Strategic period-withholding (submitting only "easy" periods to inflate an apparent record) is
-only PARTIALLY closed at the input layer: \code{loss_panel()} requires every model to have the SAME
-period count, which closes the ASYMMETRIC case (one model's record quietly shorter than the
-others'). It cannot and does not close the SYMMETRIC case -- an analyst handing every model the
-same curated/cherry-picked subset of periods, which looks identical to honest data from inside
-any loss-matrix-consuming tool. That is an inherent limitation of any diagnostic at this level,
-not a gap specific to this package.
+\code{loss_panel()} requires every model to share the same periods, which blocks one model's record
+being quietly shorter. It cannot detect every model being given the same cherry-picked subset of
+periods; no loss-matrix tool can.
 }
 
 \examples{
-# A 30-period, 3-model loss panel (T=30 deliberately -- it matches the T/K=10 anchor this
-# function's own small-T warning above cites as its "already-tolerated" boundary, so this
-# example does not trigger that warning on itself; a shorter panel would) where models 1 and
-# 2 are tied (identical losses) and model 3 is clearly worse -- the MCS should retain the
-# tied pair. No set.seed() call is needed here: mcs() saves/restores the caller's RNG state
-# internally, so reproducibility comes from the seed= argument below, not from the global RNG.
+# A 30-period, 3-model panel (T/K=10, so no small-sample warning): models 1 and 2 are tied,
+# model 3 is clearly worse, so the MCS should keep the tied pair.
 ar1_ets <- rep(c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98), 3)
 nbeats  <- rep(c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18), 3)
 L <- cbind(ar1 = ar1_ets, ets = ar1_ets, nbeats = nbeats)
-# B kept small here purely for example speed; use the B=2000 default for real analyses.
+# B kept small for example speed; use the default 2000 in real analyses.
 res <- mcs(L, B = 200, seed = 1)
 res$surviving  # columns 1 and 2 (ar1, ets) survive; nbeats is eliminated
 

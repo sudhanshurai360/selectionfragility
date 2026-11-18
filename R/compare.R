@@ -1,7 +1,6 @@
 # compare.R — compare(previous, current), the run-over-run champion-change diagnostic.
-# Faithful port of compare.py. `change_report()` builds an S3 object of class "change_report"
-# (the R analogue of Python's ChangeReport); `.act` is the single field a CI/pipeline promotion
-# step should gate on.
+# Port of compare.py. Returns an S3 "change_report" (Python's ChangeReport); `$act` is the field
+# a CI/pipeline promotion step should gate on.
 
 #' @keywords internal
 .new_change_report <- function(previous_champion, current_champion, champion_changed,
@@ -24,21 +23,7 @@
 
 #' @keywords internal
 .escape_champion_name <- function(name) {
-  # STRICT-AUDIT FIX (2026-11-18): sibling bug to report.R's LEADERBOARD control-character fix
-  # (same commit). print.change_report() interpolates previous_champion/current_champion into
-  # its one-line sprintf() summary with a bare %s, with no escaping at all -- unlike
-  # LEADERBOARD's per-model rows, there isn't even a collision-triggered escaping path here, so
-  # ANY model name containing a literal newline/carriage-return (or other C0/DEL control
-  # character) sails straight through unescaped. Confirmed directly: a model named
-  # "evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE_INJECTED_LINE\nact=TRUE" used as the
-  # previous_champion printed as three separate lines, with the middle line rendering
-  # byte-for-byte like a genuine VERDICT section header and a genuine "act=TRUE" -- a reader of
-  # this one-line summary has no way to tell a fabricated line from this function's real prose.
-  # loss_panel()'s own name validation (panel.R) only rejects empty/duplicate names, not control
-  # characters, so this is directly reachable the same way the LEADERBOARD bug was. Fixed with
-  # the SAME escaping approach already established in report.R: encodeString(..., quote = "'")
-  # whenever the name contains a control character, so a champion name alone can never inject
-  # extra "lines" into the printed summary.
+  # Escape control characters so a model name cannot inject extra lines into the printed summary.
   if (is.null(name) || length(name) != 1 || is.na(name)) return(name)
   if (grepl("[\\x00-\\x1f\\x7f]", name, perl = TRUE)) encodeString(name, quote = "'") else name
 }
@@ -76,29 +61,12 @@ print.change_report <- function(x, ...) {
 
 #' @keywords internal
 .churn_base_rate <- function(L, w, n_perm = 400, seed = 0) {
-  # STRICT-AUDIT FIX (2026-11-18): n_perm never got the overflow-safe coerce-and-check treatment
-  # its siblings n_boot/n_rep/B all received elsewhere in the package (including n_rep, fixed in
-  # this exact round). The old `if (n_perm <= 0)` let NA/Inf/character through to crash with a
-  # raw, unworded error, and -- worse -- let a FRACTIONAL n_perm (e.g. 7.9) through silently: the
-  # loop below truncated via seq_len(n_perm) to floor(n_perm) real iterations, but the final
-  # churn_base_rate divided by the ORIGINAL untruncated n_perm, mismatching numerator and
-  # denominator and returning a confidently wrong statistic with no warning. Reassigning n_perm
-  # to its coerced integer value HERE (reused below by both the loop and the final division) fixes
-  # the mismatch outright; a fractional n_perm is still accepted and truncated, matching the
-  # established convention n_boot/B/block already use, but numerator and denominator can no
-  # longer disagree.
+  # n_perm is coerced once and reused for both the loop and the final division.
   n_perm_in <- n_perm; n_perm <- suppressWarnings(as.integer(n_perm))
   if (length(n_perm) != 1 || is.na(n_perm) || n_perm <= 0) {
     stop(sprintf("n_perm must be a single positive integer; got %s.",
                   paste(format(n_perm_in), collapse = ", ")), call. = FALSE)
   }
-  # STRICT-AUDIT FIX (2026-11-18): seed was the one parameter in this function passed straight
-  # into set.seed() with no local guard, unlike n_perm just above (same fix commit) -- a bad seed
-  # (NA/non-scalar/out-of-range) reached a raw, unworded "supplied seed is not a valid integer"
-  # error from base R's set.seed() itself. Worse than the n_perm case: compare() wraps its call
-  # into .run_mcs_arch() in a tryCatch that degrades gracefully into mcs_error, but NOT this call,
-  # so the raw error aborted the whole compare() call rather than failing with this package's own
-  # worded style.
   seed_in <- seed; seed <- suppressWarnings(as.integer(seed))
   if (length(seed) != 1 || is.na(seed) || seed < 0) {
     stop(sprintf(".churn_base_rate(): seed must be a single non-negative integer; got %s.",
@@ -136,26 +104,14 @@ print.change_report <- function(x, ...) {
 #'
 #' @param previous A `loss_panel` from the earlier run.
 #' @param current A `loss_panel` from the later run.
-#' @section New-period attribution requires real labels: `n_new_periods`/`champion_without_new_periods`
-#'   detect a rolling window by comparing the two panels' period LABELS -- if both panels were built
-#'   with `loss_panel()`'s default positional labels (no `labels=` passed, the common case for a bare
-#'   list/matrix), positional labels carry no cross-panel identity, so a same-length rolling window
-#'   (periods really did drop out and new ones came in, but T stayed the same) is honestly reported as
-#'   `n_new_periods=0`/`champion_without_new_periods=NULL` ("cannot attribute"), even though periods
-#'   really did change. Pass `labels=` explicitly to `loss_panel()` for both panels if you need
-#'   accurate new-period attribution on a same-length rolling window.
+#' @section New-period attribution requires real labels: `n_new_periods` and
+#'   `champion_without_new_periods` compare the two panels' period labels. With `loss_panel()`'s
+#'   default positional labels, a same-length rolling window is reported as `n_new_periods=0` /
+#'   `champion_without_new_periods=NULL` ("cannot attribute"). Pass `labels=` to both panels.
 #'
-#'   STRICT-AUDIT FIX (2026-11-18): that remedy does NOT cover every real-world labeling
-#'   convention -- it only fixes POSITIONAL labels. A real, non-positional labeling scheme where
-#'   the SAME label strings are reused every run (e.g. a pipeline that numbers "slot 1..24 in
-#'   the trailing window," not calendar date) has `labels_are_positional == FALSE` yet suffers
-#'   the identical defect, because `compare()` matches periods by label-STRING identity: if both
-#'   panels use `labels = paste0("period", 1:24)` again, a genuine rolling window (oldest period
-#'   dropped, one new period appended) is still reported as `n_new_periods=0`, because the label
-#'   SETS are identical even though the underlying periods are not. If your labeling convention
-#'   re-numbers slots rather than carrying a stable per-period identity (a calendar date, a
-#'   period-since-epoch counter), `compare()`'s new-period attribution will be silently wrong
-#'   regardless of whether you pass `labels=`.
+#'   Attribution matches periods by label string, so it also fails when every run reuses the same
+#'   labels for different periods (e.g. "slot 1..24" of a trailing window). Use labels with a
+#'   stable per-period identity, such as calendar dates.
 #' @param alpha Significance level passed to the MCS check.
 #' @param n_perm Number of permutations for the churn base rate.
 #' @param seed RNG seed.
@@ -165,9 +121,7 @@ print.change_report <- function(x, ...) {
 #' @seealso [loss_panel()] to build the `previous`/`current` panels; [mcs()]/[model_confidence_set()]
 #'   for the Model Confidence Set check this uses to assess whether the old champion really left.
 #' @examples
-#' # Small, 10-11 period panel purely for example speed; expect compare()'s internal MCS check
-#' # to print the "small-sample regime" warning below (T/K well under its threshold) -- that is
-#' # the check disclosing its own measured limitation, not a sign this call is broken.
+#' # A small panel for example speed; expect the MCS small-sample warning.
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
 #'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
@@ -183,11 +137,8 @@ print.change_report <- function(x, ...) {
 #'
 #' cr <- compare(previous, current)
 #' cr$act
-#' # FALSE here: cr$champion_changed is FALSE (ar1 is still the pooled champion after the new
-#' # period), so there is nothing actionable -- a promotion/alerting step should do nothing.
-#' # cr$act only becomes TRUE when the champion changed AND the old champion has demonstrably
-#' # left the Model Confidence Set (not just lost the pooled mean by noise) -- that is the one
-#' # boolean a CI/pipeline promotion step should gate a real action on.
+#' # FALSE: ar1 is still the champion. act is TRUE only when the champion changed AND the old
+#' # champion left the Model Confidence Set -- the one boolean to gate a promotion step on.
 #' @export
 compare <- function(previous, current, alpha = 0.10, n_perm = 400, seed = 0) {
   for (p in list(previous = previous, current = current)) {
@@ -198,27 +149,9 @@ compare <- function(previous, current, alpha = 0.10, n_perm = 400, seed = 0) {
     }
   }
   .validate_alpha(alpha)
-  # STRICT-AUDIT FIX (2026-11-18): this guard used to compare the CACHED previous$models/
-  # current$models fields -- the same "trusts a pre-validated object even if it's since been
-  # mutated" blind spot already found and fixed in print.loss_panel(), as.data.frame.loss_panel(),
-  # and summary.loss_panel() (panel.R; all three moved to live names(x$losses) specifically
-  # because $models can silently disagree with a panel's actual losses after a direct field edit).
-  # compare() was the one call site that still trusted the stale cache: confirmed directly
-  # reachable -- mutating `previous$losses <- previous$losses[c("ar1","nbeats")]` after
-  # construction (dropping "ets") leaves `previous$models` at its original, now-stale 3-model
-  # value, so this check silently passed and compare() went on to report a plausible-looking
-  # champion comparison between a 2-model previous panel and a 3-model current panel with no error
-  # at all -- exactly the mismatched-model-set comparison this guard exists to prevent. Reading
-  # the model sets live from names(previous$losses)/names(current$losses) (what pooled_winner()
-  # and every other downstream call in this function actually iterate over) closes the gap the
-  # same way the panel.R methods already did.
+  # Read model sets from the live losses, not the cached $models field, which can go stale if the
+  # panel was edited after construction.
   if (!setequal(names(previous$losses), names(current$losses))) {
-    # LOCALE-AUDIT FIX (2026-11-18): bare sort() on model names here used R's default LC_COLLATE
-    # locale collation -- confirmed to print the SAME two model sets in a DIFFERENT order in this
-    # error message depending on the session's locale (e.g. C orders "Beta_model" < "Zeta_model" <
-    # "alpha_model", en_US/tr_TR order "alpha_model" < "Beta_model" < "Zeta_model"). Doesn't change
-    # whether the error fires, but is exactly the kind of non-reproducible, locale-dependent output
-    # this package's radix-sort hardening elsewhere exists to eliminate. method="radix" throughout.
     stop(sprintf(
       "previous and current panels have different model sets -- cannot compare mismatched models: %s vs %s.",
       paste(sort(names(previous$losses), method = "radix"), collapse = ", "),
@@ -263,15 +196,8 @@ compare <- function(previous, current, alpha = 0.10, n_perm = 400, seed = 0) {
     missing_old <- setdiff(prev_label_set, curr_label_set)
     is_new <- !(curr_label_set %in% prev_label_set)
     n_new <- sum(is_new)
-    # Reversed-argument guard, deliberately NARROW: fire ONLY when current introduces no new
-    # periods yet is missing some of previous's (i.e. current's labels are a strict subset of
-    # previous's -- current is unambiguously the EARLIER/smaller run, so the arguments were
-    # swapped). A broader "current dropped any old label" guard would wrongly reject two cases the
-    # Python original supports and documents by name: a rolling window (drop the oldest period,
-    # append a new one at the same T -- here n_new > 0, so this guard stays silent and the overlap
-    # is compared), and a fully disjoint current (n_new == T_curr, handled below as "cannot
-    # attribute"). Python has no guard here at all and relies on honest reporting; this guard adds
-    # only the append-case reversed-order protection Python lacks, without regressing those two.
+    # Reversed-argument guard: fires only when current adds no periods and drops some, i.e. the
+    # arguments were swapped. Rolling windows (n_new > 0) and disjoint panels are still allowed.
     if (n_new == 0 && length(missing_old) > 0) {
       stop(sprintf(
         paste0(

@@ -3,13 +3,9 @@ NULL
 
 # loss_panel — the single validated entry point for every public function in this package.
 #
-# Every other function in this package consumes a loss_panel (or its raw $losses/$weights,
-# which are the SAME validated data). The bare constructor is not exported -- go through
-# loss_panel() so a caller cannot skip validation by accident. This mirrors the Python
-# package's `LossPanel.from_losses()` contract (see panel.py); `from_forecasts()` (long
-# forecast-vs-actual frames with metric computation and auto-inference) is NOT ported in
-# this release -- build a wide loss matrix/data.frame/list yourself and pass it to
-# `loss_panel()`.
+# Mirrors Python's LossPanel.from_losses() (panel.py). The bare constructor is not exported, so
+# callers cannot skip validation. from_forecasts() is not ported: build a wide loss
+# matrix/data.frame/list and pass it to loss_panel().
 
 .MAX_ABS_LOSS <- 1e100
 .LARGE_K_WARN_THRESHOLD <- 100
@@ -18,11 +14,7 @@ NULL
 .looks_like_metadata_column <- function(arr, T) {
   arr <- as.numeric(arr)
   if (T < 4) return(FALSE)
-  # NA/NaN/Inf short-circuit: Python's NaN == x is False (not NaN), so np.all(...) resolves
-  # cleanly to FALSE and the heuristic falls through harmlessly; R's NA == x is NA, which
-  # breaks all()/if() with a raw "missing value where TRUE/FALSE needed" error instead of
-  # letting the real, better-worded NaN/Inf check downstream report it. Match the Python
-  # behavior (never crash here) by deferring entirely to that downstream check.
+  # Leave NA/Inf to the worded check downstream (R's NA == x would crash all() here).
   if (anyNA(arr) || any(!is.finite(arr))) return(FALSE)
   if (all(arr == arr[1])) return(FALSE)
   diffs <- diff(arr)
@@ -32,13 +24,7 @@ NULL
     for (p in 2:max_p) {
       reps_needed <- ceiling(T / p)
       tiled <- rep(arr[1:p], reps_needed)[1:T]
-      # EXACT equality, matching Python's np.array_equal -- NOT all.equal(). all.equal() allows a
-      # default relative tolerance (~1.5e-8), so a genuine, non-periodic loss column that merely
-      # comes CLOSE to tiling a short pattern (floating-point noise on an otherwise-periodic real
-      # signal, or plain coincidence) was being wrongly flagged as metadata and rejected -- a real
-      # loss column the Python oracle accepts outright, since array_equal requires bit-for-bit
-      # equality. Verified directly against the Python oracle: a period-3 pattern with one value
-      # perturbed by 1e-9 is accepted (False) in Python but was wrongly rejected (TRUE) here.
+      # Exact equality, as Python's np.array_equal; all.equal()'s tolerance would flag real losses.
       if (T %/% p >= 2 && length(arr) == length(tiled) && all(arr == tiled)) return(TRUE)
     }
   }
@@ -87,25 +73,13 @@ NULL
     ), call. = FALSE)
   }
   if (is.factor(w)) {
-    # A factor is not numeric (is.numeric(factor) is FALSE) and not character (is.character(factor)
-    # is also FALSE), so it slips past the string guard above and straight into as.numeric(), which
-    # on a factor returns the INTEGER LEVEL CODES, not the labels -- e.g. factor(c("10","20","30"))
-    # silently becomes c(1, 2, 3). This is the same class of silent-wrong-answer bug as `NA == x`:
-    # a value that looks numeric to a careless call but silently is not. Reject explicitly, by the
-    # same policy as the string guard above, rather than let it corrupt weights with no warning.
+    # as.numeric() on a factor returns level codes, not values.
     stop(sprintf(
       "weights must be a numeric vector of %d values (one per period), not a factor; got levels %s. ",
       T, paste(levels(w), collapse = ", ")
     ), call. = FALSE)
   }
   if (is.logical(w)) {
-    # STRICT-AUDIT FIX (2026-11-18): every model-column constructor in this file (.from_list,
-    # .from_data_frame, and .from_matrix as its own dedicated fix) rejects a logical column with
-    # this exact rationale -- "a flag/indicator column... silently coerced TRUE/FALSE -> 1/0...
-    # crowned a model with no warning." .validate_weights() carries the identical risk (and its
-    # own factor guard above already frames factor-weights as "the same class of silent-wrong-
-    # answer bug") but was never given the sibling is.logical() guard -- a logical weights vector
-    # silently became a 0/1 numeric weight vector with zero warning.
     stop(sprintf(
       "weights must be a numeric vector of %d values (one per period), not logical (TRUE/FALSE); got %s.",
       T, paste(w, collapse = ", ")
@@ -125,15 +99,7 @@ NULL
     stop("weights are all zero; at least one period must carry positive weight.", call. = FALSE)
   }
   if (any(w > .MAX_ABS_LOSS)) {
-    # STRICT-AUDIT FIX (2026-11-18): unlike losses, which have had this exact cap since the first
-    # hardening round, weights had none -- each individual weight was only checked for finite/
-    # non-negative, so a weight that is, by itself, "valid" (e.g. 1e308) could still make sum(w)
-    # overflow to Inf inside stats::weighted.mean(), producing Inf/Inf = NaN for every model's
-    # mean loss. pooled_winner() then fed that into sort(), whose default na.last=NA silently
-    # drops all-NaN entries, returning NA_character_ as the "champion" with NO error or warning
-    # -- which then cascaded into wildly misattributed downstream errors (e.g. decision_breakdown()
-    # blaming a "length mismatch" and resolution_report() reporting "T=0" on a real T=2 panel,
-    # because L[[NA_character_]] silently returns NULL rather than erroring).
+    # Huge weights can overflow sum(w) to Inf and turn every weighted mean into NaN.
     stop(sprintf(
       paste0("weights must not exceed %.0e in magnitude -- a weight this large can make ",
              "sum(weights) overflow to Inf and silently corrupt every weighted statistic downstream."),
@@ -283,23 +249,10 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
     }
     str_labels <- as.character(final_labels)
     if (anyNA(str_labels)) {
-      # STRICT-AUDIT FIX (2026-11-18): an NA/null label used to pass silently as long as it
-      # wasn't duplicated -- but labels are compare()'s one identity key for telling a new
-      # period from an old one, and an NA label is unique by %in%-matching semantics (NA %in% x
-      # is always FALSE), so a single NA defeats compare()'s reversed-argument safety guard:
-      # that period gets miscounted as "new" rather than "missing," n_new becomes nonzero, and
-      # the guard's n_new==0 precondition is never met -- compare() then confidently prints a
-      # fully-formed but causally backwards change_report instead of erroring on the swapped
-      # arguments. Reachable through the one file-I/O boundary too: load_loss_panel() accepted a
-      # JSON "labels" array containing null without complaint. Reject outright here instead.
+      # compare() matches periods by label; an NA label would be miscounted as a new period.
       stop("labels must not contain NA/NULL values -- every period needs a real identity for compare() to match on.", call. = FALSE)
     }
     if (length(unique(str_labels)) != T) {
-      # LOCALE-AUDIT FIX (2026-11-18): bare sort() on duplicate labels used LC_COLLATE locale
-      # collation -- confirmed to list the same duplicate set in a different order (and, with
-      # more than 5 distinct duplicates, to truncate to a DIFFERENT head(dupes, 5) subset) across
-      # locales. Doesn't change whether the error fires, but same non-reproducibility class this
-      # package's radix-sort hardening elsewhere exists to eliminate. method="radix" throughout.
       dupes <- sort(unique(str_labels[duplicated(str_labels)]), method = "radix")
       stop(sprintf(
         paste0(
@@ -321,13 +274,7 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
 .from_list <- function(data) {
   if (length(data) == 0) stop("empty list passed to loss_panel(); need at least 2 models.", call. = FALSE)
   nm <- names(data)
-  # STRICT-AUDIT FIX (2026-11-18): the original `any(nm == "")` crashes with a raw, unworded
-  # "missing value where TRUE/FALSE needed" the moment any name is NA (not ""): `nm == ""`
-  # yields NA for that element, any(c(FALSE, NA)) is itself NA (not FALSE -- any() can't rule
-  # out a hidden TRUE), so `is.null(nm) || NA` is NA and if(NA) aborts outright, bypassing this
-  # file's entire stop()-with-a-clear-message policy. Check anyNA() first (it short-circuits the
-  # `||` before `nm == ""` ever sees an NA) so both an NA name and an empty-string name get the
-  # same clear, deliberate rejection instead of one of them crashing past it.
+  # anyNA() first: `nm == ""` is NA for an NA name and would crash the if().
   if (is.null(nm) || anyNA(nm) || any(nm == "")) {
     stop("loss_panel() needs a NAMED list (one name per model); got an unnamed, NA-named, or empty-named list.", call. = FALSE)
   }
@@ -354,9 +301,6 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
 .from_matrix <- function(arr) {
   if (length(dim(arr)) != 2) stop("matrix input to loss_panel() must be 2-D (periods x models).", call. = FALSE)
   if (is.logical(arr)) {
-    # Matches the is.logical rejection the list and data.frame constructors already apply: a
-    # logical matrix otherwise coerces TRUE/FALSE -> 1/0 silently and gets treated as 0/1 "losses",
-    # so an indicator/flag matrix would be crowned a set of models with no warning on this one path.
     stop(paste0(
       "loss_panel() got a logical matrix -- this looks like a flag/indicator matrix, not per-period ",
       "losses. If these really are 0/1 losses, convert with `arr * 1` or `matrix(as.numeric(arr), ...)` ",
@@ -370,16 +314,8 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
   cn <- colnames(arr)
   nm <- if (!is.null(cn)) cn else paste0("m", seq_len(K) - 1L)
   if (!is.null(cn)) {
-    # STRICT-AUDIT FIX (2026-11-18): an NA or "" column name used to slip past here with no
-    # explicit check at all and get "rejected" only by accident downstream, through R's own
-    # `[[`-by-name quirk: `list[[NA_character_]]` and `list[["" ]]` both silently return NULL
-    # even when a same-named element exists (confirmed directly: `setNames(list(1:6,7:12),
-    # c("","b"))[[""]]` is NULL, not 1:6). That NULL then surfaced as a wrong, confusing error
-    # from a LATER, unrelated check ("all models must share the same number of periods; ''
-    # has 0, expected 6") rather than this file's own clear, deliberate "needs a real name"
-    # wording that the list-path sibling check already gives. Still rejects the input (so no
-    # empty/NA-named model was ever silently built), but reject it with the same deliberate,
-    # worded guard as `.from_list()`, not a coincidence of lookup semantics.
+    # list[[""]] and list[[NA]] return NULL even when such an element exists, so a blank name
+    # would surface later as a confusing length error. Reject it here.
     if (anyNA(nm) || any(nm == "")) {
       stop(paste0(
         "loss_panel() got a matrix with an NA or empty-string column name -- every model needs ",
@@ -397,12 +333,7 @@ loss_panel <- function(data, weights = NULL, labels = NULL) {
 #' @keywords internal
 .from_data_frame <- function(df) {
   cn0 <- colnames(df)
-  # STRICT-AUDIT FIX (2026-11-18): same accidental-rejection gap as .from_matrix() -- an NA or
-  # "" column name (reachable via `colnames(df) <- c(NA, "b")` or `check.names = FALSE`) had no
-  # explicit check here either, and was "caught" only because `df[[""]]`/`df[[NA_character_]]`
-  # silently return NULL even for an existing same-named column, surfacing as a wrong, confusing
-  # downstream error ("column '' is not numeric (class NULL)") instead of this file's own clear,
-  # deliberate wording. Reject explicitly and early, matching .from_list()/.from_matrix().
+  # Same blank-name problem as .from_matrix(): df[[""]] returns NULL.
   if (anyNA(cn0) || any(cn0 == "")) {
     stop(paste0(
       "loss_panel() got a data.frame with an NA or empty-string column name -- every model needs ",
@@ -476,33 +407,8 @@ print.loss_panel <- function(x, ...) {
       return(invisible(x))
     }
   }
-  # STRICT-AUDIT FIX (2026-11-18): this fallback used to discard report()'s error entirely
-  # (`error = function(e) NULL`) and print a plain, normal-looking "<loss_panel> models=..., T=..."
-  # line with NO indication anything had gone wrong -- confirmed directly reachable, with no
-  # control characters involved: a panel object is a plain mutable list, and editing a field after
-  # construction (e.g. `p$losses$a <- shorter_vector`, the exact scenario as.data.frame.loss_panel()
-  # and summary.loss_panel() already guard against with a clear "loss_panel is inconsistent" error)
-  # makes report(x) throw a raw, cryptic base-R error ("'x' and 'w' must have the same length").
-  # print(p) -- by far the most common way a user ever actually sees a panel, including bare
-  # auto-print at the console -- swallowed that error completely and showed a falsely reassuring
-  # `<loss_panel> models=a, b, T=5`, even though model 'a' no longer had 5 periods. This directly
-  # contradicted the sibling methods' own stated design intent ("fails as loudly as its siblings
-  # (report/summary) do on a mutated/inconsistent object," per as.data.frame.loss_panel()'s
-  # comment above): report() DOES fail loudly when called directly, but print.loss_panel() was
-  # the one place in the package that actively hid that loud failure. Surface the error message
-  # instead of discarding it, so a malformed object is visibly flagged rather than silently
-  # mis-reported as fine.
-  # SECURITY-AUDIT FIX (2026-11-18): this fallback (reached only when report() itself errors on a
-  # mutated/inconsistent panel) printed x$models raw via paste()+sprintf(), with none of the
-  # control-character escaping report()'s own LEADERBOARD/PIVOT sections and compare()'s print
-  # method already apply to model names/labels (same commit, same injection class: a model name
-  # containing a literal newline/CR/ANSI-escape prints as fake extra "lines," here specifically a
-  # fake "VERDICT: identified ..." line indistinguishable from real output). Confirmed directly
-  # reachable: a model named "evil\nVERDICT: identified (MCS size 1 of 1) -- FAKE\nb" in a panel
-  # mutated to break report() printed that fake VERDICT line via THIS fallback, even though every
-  # other model-name-printing path in the package was already fixed. Escaped through the same
-  # .escape_control_chars() helper (report.R) rather than a new copy, matching the normal
-  # (non-fallback) path above which already goes through report()'s own escaped LEADERBOARD.
+  # report() failed (usually a panel edited after construction): say so rather than print a
+  # normal-looking summary, and escape model names so they cannot inject fake output lines.
   disp_models <- paste(.escape_control_chars(x$models), collapse = ", ")
   if (!is.null(report_err)) {
     cat(sprintf(
@@ -540,11 +446,8 @@ print.loss_panel <- function(x, ...) {
 #' as.data.frame(panel)
 #' @export
 as.data.frame.loss_panel <- function(x, ...) {
-  # Read model names LIVE from names(x$losses), not the cached x$models field: the rest of the
-  # pipeline (report/compare/pooled_winner/decision_breakdown) uses names(x$losses), so if a caller
-  # mutated x$losses after construction, the cached x$models would silently disagree. Validate
-  # lengths explicitly so this method fails as loudly as its siblings (report/summary) do on a
-  # mutated/inconsistent object, instead of silently recycling a wrong-length weight vector.
+  # Use live names(x$losses), not the cached x$models, and fail loudly on an edited, inconsistent
+  # panel rather than recycle a wrong-length weight vector.
   models <- names(x$losses)
   T <- length(x$labels)
   if (length(x$weights) != T) {
@@ -575,9 +478,7 @@ as.data.frame.loss_panel <- function(x, ...) {
 #' @return A data.frame with columns `model`, `mean_loss`, `periods_won`, `in_mcs`.
 #' @seealso [report()] for the prose summary; [fragility()] for the full set of diagnostic fields.
 #' @examples
-#' # T/K=3.3 is below the internal MCS membership check's own small-T threshold, so the
-#' # summary(panel) call below is expected to print its "small-sample regime" warning --
-#' # disclosure from the check that fills in_mcs, not a sign this call is broken.
+#' # Small panel; expect the MCS small-sample warning from the in_mcs check.
 #' L <- list(
 #'   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
 #'   nbeats = c(0.90, 0.88, 0.92, 0.91, 0.89, 0.93, 0.87, 0.90, 2.60, 0.88),
@@ -587,8 +488,7 @@ as.data.frame.loss_panel <- function(x, ...) {
 #' summary(panel)
 #' @export
 summary.loss_panel <- function(object, ...) {
-  # Live names(object$losses), not the cached object$models -- see as.data.frame.loss_panel()'s
-  # note; keeps this method consistent with the rest of the pipeline on a mutated object.
+  # Same live-names and consistency checks as as.data.frame.loss_panel().
   models <- names(object$losses)
   T <- length(object$labels)
   if (length(object$weights) != T) {
@@ -605,12 +505,8 @@ summary.loss_panel <- function(object, ...) {
   )
   wins <- .strict_win_counts(object$losses)
   mcs_res <- tryCatch(.run_mcs_arch(object$losses, w = object$weights, ...), error = function(e) {
-    # a caller passing an argument that
-    # belongs to fragility() (e.g. full=TRUE) rather than to the internal MCS check (alpha=/reps=/
-    # block_size=/seed=) previously degraded silently to in_mcs=NA with zero indication their
-    # argument was ignored. A real MCS-unavailable failure (e.g. non-uniform weights) is still
-    # swallowed into NA, same as before -- only an R argument-matching error (a typo/wrong-function
-    # argument name) is now surfaced loudly instead.
+    # A misspelled or wrong-function argument (e.g. full=TRUE) is an error; a genuine MCS failure
+    # (e.g. non-uniform weights) becomes in_mcs = NA.
     if (grepl("unused argument", conditionMessage(e), fixed = TRUE)) stop(e)
     NULL
   })
@@ -661,13 +557,8 @@ save_loss_panel <- function(panel, path) {
   dest_dir <- dirname(normalizePath(path, mustWork = FALSE))
   tmp <- tempfile(pattern = ".losspanel-", tmpdir = dest_dir, fileext = ".tmp")
   on.exit(if (file.exists(tmp)) unlink(tmp), add = TRUE)
-  # jsonlite::write_json() formats numbers via R's own locale-sensitive formatting: under a
-  # comma-decimal LC_NUMERIC locale (de_DE, fr_FR, and many others) it emits "1,23" instead of
-  # "1.23", which collides with JSON's own field separator and writes syntactically invalid JSON
-  # with no error. Force the C locale for the duration of this write so the file is valid JSON
-  # regardless of the caller's locale. digits=17 (not the default-disabling digits=NA, which only
-  # gets 15 significant digits) is needed for a genuinely bit-identical round-trip, matching this
-  # function's own documented identical(panel$losses, reloaded$losses) contract.
+  # Force the C locale: under a comma-decimal locale (de_DE, fr_FR) jsonlite writes "1,23", which
+  # is invalid JSON. digits = 17 gives a bit-identical round-trip.
   old_numeric <- Sys.getlocale("LC_NUMERIC")
   Sys.setlocale("LC_NUMERIC", "C")
   on.exit(suppressWarnings(Sys.setlocale("LC_NUMERIC", old_numeric)), add = TRUE)
@@ -708,11 +599,8 @@ load_loss_panel <- function(path) {
   payload <- tryCatch(
     jsonlite::read_json(path, simplifyVector = TRUE),
     error = function(e) {
-      # Every OTHER failure mode here (missing keys, wrong type, length mismatch, ...) raises a
-      # clear, path-prefixed load_loss_panel() message; a JSON SYNTAX error otherwise leaked
-      # jsonlite's raw internal parser error straight through -- no mention of load_loss_panel(),
-      # no mention of the file path, and raw unprintable bytes dumped to the console for a binary
-      # garbage file. A caller looping over many files had no way to tell which one failed.
+      # Name the file in JSON syntax errors (jsonlite's message omits it), so a loop over many
+      # files shows which one failed.
       stop(sprintf("load_loss_panel(): '%s' is not valid JSON (%s).", path, conditionMessage(e)), call. = FALSE)
     }
   )

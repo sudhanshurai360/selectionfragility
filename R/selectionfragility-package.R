@@ -8,37 +8,19 @@
 #'
 #' @section Running this package's bootstrap functions in parallel:
 #' [mcs()], [winner_stability()], and [exchangeable_benchmark()] all take a `seed=` argument
-#' (default `0`), reseed R's RNG from it, and restore the caller's `.Random.seed` on exit -- so
-#' their results neither depend on nor disturb the session's RNG state. That makes them safe to call from
-#' `parallel::mclapply()`/`future`/`foreach` workers -- but only if each worker is given a
-#' *different* seed. `parallel::mclapply()` on non-Windows forks the current process, and a fork
-#' gives every child an independent, non-interfering copy of both R's global options (confirmed:
-#' `options(selectionfragility.elimination = ...)` set inside one forked worker is invisible to
-#' sibling workers and to the parent) and `.Random.seed` -- so there is no cross-worker state
-#' leakage from this package. The one real risk is a *user* mistake, not a package bug: calling
-#' e.g. `parallel::mclapply(1:4, function(i) winner_stability(L, seed=99))` with the SAME literal
-#' seed in every worker deterministically reproduces the identical bootstrap in all four, silently
-#' giving you four copies of one result dressed up as four independent ones. Vary the seed per
-#' worker instead, e.g. `parallel::mclapply(seeds, function(s) winner_stability(L, seed=s))` with
-#' `seeds <- 1:4` (or any panel-specific offset), so each worker's bootstrap draws are genuinely
-#' independent.
+#' (default `0`), reseed R's RNG from it, and restore the caller's `.Random.seed` on exit, so
+#' their results neither depend on nor disturb the session's RNG state. They are safe to call from
+#' `parallel::mclapply()`/`future`/`foreach` workers, provided each worker gets a *different*
+#' seed: the same literal seed in every worker reproduces one bootstrap N times. Use e.g.
+#' `parallel::mclapply(1:4, function(s) winner_stability(L, seed = s))`.
 #'
-#' @section Sentinel conventions for "cannot determine": this package uses two different
-#'   sentinels for "this diagnostic could not be determined," deliberately, not by accident.
-#'   `NA` marks a DEGENERATE-BUT-COMPUTED result: the comparison actually ran, but the specific
-#'   question doesn't meaningfully apply to this input (e.g. [fragility()]'s `fragile` field when
-#'   no `benchmark` was supplied, [prop22_certifies()] when `k<=0`/`k>=T`, or
-#'   [concentration_share()]/[pivot_agreement()] in their own degenerate cases) -- these live
-#'   inside a scalar/typed-vector return where `NULL` would not be type-stable. `NULL` marks a
-#'   diagnostic whose underlying computation never completed at all: a caught error inside a
-#'   list-returning function, most commonly [identified()] erroring inside
-#'   [resolution_report()]'s R2 check or [compare()]'s internal MCS call (e.g.
-#'   `resolution_report()$identified`, `compare()$old_champion_still_in_mcs`). For
-#'   `resolution_report()$identified` specifically, `NULL` additionally mirrors the Python
-#'   original's `None` for the identical caught-error case -- a deliberate cross-language parity
-#'   choice, not just an internal convention. Don't write code that treats `NA` and `NULL` as
-#'   interchangeable across this package's return values; check each field's own documentation
-#'   for which sentinel it actually uses.
+#' @section Sentinel conventions for "cannot determine":
+#'   `NA` marks a result that was computed but where the question does not apply to this input
+#'   (e.g. [fragility()]'s `fragile` with no `benchmark`, [prop22_certifies()] when `k<=0` or
+#'   `k>=T`); it appears inside scalar or typed-vector returns. `NULL` marks a diagnostic whose
+#'   computation did not complete -- a caught error inside a list-returning function, e.g.
+#'   `resolution_report()$identified` or `compare()$old_champion_still_in_mcs` (matching Python's
+#'   `None`). Check each field's documentation for which sentinel it uses.
 #'
 #' @keywords internal
 "_PACKAGE"

@@ -31,8 +31,7 @@ A list \code{list(stability, freq)}.
 }
 \description{
 Resample evaluation periods (circular block bootstrap) and recompute the pooled winner on
-each resample. NOTE: uses R's own RNG, so results are not bit-for-bit identical to the
-Python package's numpy-based bootstrap on the same seed -- only statistically equivalent.
+each resample. Uses R's RNG, so results match Python statistically, not bit-for-bit.
 }
 \examples{
 L <- list(
@@ -42,10 +41,8 @@ L <- list(
 )
 ws <- winner_stability(L, seed = 1)
 ws$stability  # fraction of bootstrap resamples where ar1 is still the pooled winner
-# This number is NOT interpretable in isolation -- a mid-range value like this can be exactly
-# what pure chance produces with only 3 models and 10 periods. Compare it to
-# exchangeable_benchmark(K = 3, T = 10)'s p05: only below that is the win unusually fragile
-# relative to chance, not just "looks uncertain."
+# Not interpretable alone: with 3 models and 10 periods, chance alone produces mid-range values.
+# Compare against exchangeable_benchmark(K = 3, T = 10)$p05.
 }
 \seealso{
 \code{\link[=exchangeable_benchmark]{exchangeable_benchmark()}} (the null distribution to compare this against --

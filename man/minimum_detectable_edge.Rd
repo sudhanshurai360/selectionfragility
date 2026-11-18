@@ -22,30 +22,14 @@ The minimum detectable edge, as a fraction of the champion's loss level.
 Minimum detectable edge against the binding rival
 }
 \section{Assumption}{
- assumes no autocorrelation in the per-period (rival - champion) loss
-differential -- see \code{.weighted_se}'s comment in resolution.R for why this can matter and
-what to do instead (prefer \code{mcs()}/\code{model_confidence_set()}'s block bootstrap) when it does. Also assumes the champion
-and its binding rival sit at a comparable loss scale -- an extreme scale mismatch between
-them can produce a nonsensical, unbounded percentage (normalization is by the champion's
-own mean only); sanity-check this fraction yourself if your models' loss magnitudes differ
-by many orders of magnitude. The trigger is actually broader than "extreme scale mismatch":
-normalization divides by the champion's mean with a hard floor at 1e-12, so the SAME-scale,
-non-adversarial case of a champion mean that's merely small relative to its volatility (a
-skill score, a de-meaned metric, or simply two close/tied models -- this package's central
-use case) can also land near that floor, where a sub-measurement-precision input change
-(e.g. one weight shifted by 1e-9) swings this value by 10+ orders of magnitude between two
-superficially plausible-looking answers. Both answers are meaningless near this floor;
-sanity-check whenever your champion's mean is close to zero, not just when scales visibly
-differ. In that same pathological regime this value can -- for specific
-inputs, not as a general rule of the scale mismatch alone -- also differ numerically from the
-Python original by a small constant factor: confirmed reproducible, e.g. champion losses
-\code{c(1e-8, 3e-8, 3e-8)} against a rival \code{c(1e8, 1e8, 1e8)} gives R 1.0378 vs Python 2.5421 (a
-factor of sqrt(6)), because the paired standard error is a \code{var()} of near-equal huge numbers
-and R's and NumPy's variance routines round that catastrophic cancellation differently bit for
-bit. Other extreme-scale panels have been observed to agree to floating-point instead -- this
-is a rare, input-dependent rounding artifact, not a threshold you can rely on crossing at a
-fixed number of orders of magnitude. Both answers are meaningless in this regime regardless;
-well-scaled losses agree to floating-point.
+ the standard error assumes no autocorrelation in the per-period
+(rival - champion) loss differential; under positive autocorrelation it is too small. If that
+is a concern, prefer the block-bootstrap \code{\link[=mcs]{mcs()}}/\code{\link[=model_confidence_set]{model_confidence_set()}}. The result is a
+fraction of the champion's mean loss, so it is meaningless when that mean is near zero (a
+skill score, a de-meaned metric, two near-tied models): tiny input changes can swing it by
+orders of magnitude. In that regime R and Python can also differ (e.g. champion
+\code{c(1e-8, 3e-8, 3e-8)} vs rival \code{c(1e8, 1e8, 1e8)}: 1.04 vs 2.54) because their variance
+routines round the cancellation differently. Well-scaled losses agree to floating point.
 }
 
 \examples{

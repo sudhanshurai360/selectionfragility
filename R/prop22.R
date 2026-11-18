@@ -1,5 +1,5 @@
 # prop22.R — Proposition 2.2, inverted into a k* certificate, plus the certified-tied subset.
-# Faithful port of prop22.py.
+# Port of prop22.py.
 
 #' @keywords internal
 .prop22_threshold <- function(T, z = 1.96) {
@@ -10,15 +10,11 @@
 
 #' Zero-simulation certificate of non-significance for a champion-vs-rival k*
 #'
-#' Scope, not enforced here: this function takes a bare `k`/`T`, with no visibility into how `k`
-#' was computed, so it CANNOT itself check two preconditions the caller must. (1) `k` must come
-#' from an UNWEIGHTED `breakdown_number()` call -- see `certified_tied_subset()`'s own guard for
-#' the bug this produces when violated (a genuinely significant gap silently certified
-#' "non-significant"). (2) This certifies the SINGLE binding rival named by k*'s definition (min
-#' over rivals), not an adaptively re-searched one -- if your workflow re-runs
-#' `decision_breakdown()` with different weight vectors until a favorable rival turns up, that is
-#' a multiple-comparisons problem this certificate does not correct for (contrast [mcb_bound()],
-#' which DOES Bonferroni-correct for an analogous post-hoc rival-selection problem).
+#' Two preconditions this function cannot check from a bare `k`/`T`: (1) `k` must come from an
+#' unweighted [breakdown_number()] call -- on a weighted k* the certificate is unsound; (2) it
+#' certifies the single binding rival named by k*'s definition, not one found by re-running
+#' [decision_breakdown()] until a favorable rival turns up (for that multiple-comparisons case,
+#' use [mcb_bound()], which Bonferroni-corrects).
 #'
 #' @param k The pairwise decision breakdown point (k*).
 #' @param T Number of periods.
@@ -56,12 +52,8 @@ prop22_certifies <- function(k, T, z = 1.96) {
 }
 
 #' @keywords internal
-# Tolerance matches numpy's `np.allclose(w, w.flat[0])` default (atol=1e-8, rtol=1e-5) exactly --
-# a tighter, ad hoc tolerance here previously rejected float-noisy-but-uniform weight vectors
-# (e.g. observation counts recomputed from a slightly perturbed source) that the Python oracle
-# accepts, a real cross-language behavioral divergence, not just a decimal-precision difference.
-# Shared by certified_tied_subset() (below) and report()'s PIVOT section (report.R) -- both call
-# prop22_certifies() on a k* that is only valid when it came from UNWEIGHTED breakdown_number().
+# Same tolerance as numpy's np.allclose(w, w[0]) (atol=1e-8, rtol=1e-5), so R and Python agree on
+# which weight vectors count as uniform.
 .weights_are_uniform <- function(w) {
   isTRUE(all(abs(w - w[1]) <= 1e-8 + 1e-5 * abs(w[1])))
 }

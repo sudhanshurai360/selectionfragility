@@ -18,15 +18,11 @@ prop22_certifies(k, T, z = 1.96)
 see \code{?selectionfragility}'s "Sentinel conventions" section for why this is \code{NA}, not \code{NULL}.
 }
 \description{
-Scope, not enforced here: this function takes a bare \code{k}/\code{T}, with no visibility into how \code{k}
-was computed, so it CANNOT itself check two preconditions the caller must. (1) \code{k} must come
-from an UNWEIGHTED \code{breakdown_number()} call -- see \code{certified_tied_subset()}'s own guard for
-the bug this produces when violated (a genuinely significant gap silently certified
-"non-significant"). (2) This certifies the SINGLE binding rival named by k*'s definition (min
-over rivals), not an adaptively re-searched one -- if your workflow re-runs
-\code{decision_breakdown()} with different weight vectors until a favorable rival turns up, that is
-a multiple-comparisons problem this certificate does not correct for (contrast \code{\link[=mcb_bound]{mcb_bound()}},
-which DOES Bonferroni-correct for an analogous post-hoc rival-selection problem).
+Two preconditions this function cannot check from a bare \code{k}/\code{T}: (1) \code{k} must come from an
+unweighted \code{\link[=breakdown_number]{breakdown_number()}} call -- on a weighted k* the certificate is unsound; (2) it
+certifies the single binding rival named by k*'s definition, not one found by re-running
+\code{\link[=decision_breakdown]{decision_breakdown()}} until a favorable rival turns up (for that multiple-comparisons case,
+use \code{\link[=mcb_bound]{mcb_bound()}}, which Bonferroni-corrects).
 }
 \examples{
 prop22_certifies(2, T = 10)   # TRUE  -- k*=2 is certified non-significant at T=10

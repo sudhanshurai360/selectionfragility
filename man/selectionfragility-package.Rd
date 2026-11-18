@@ -15,39 +15,21 @@ Start at \code{\link[=loss_panel]{loss_panel()}} and \code{\link[=report]{report
 \section{Running this package's bootstrap functions in parallel}{
 
 \code{\link[=mcs]{mcs()}}, \code{\link[=winner_stability]{winner_stability()}}, and \code{\link[=exchangeable_benchmark]{exchangeable_benchmark()}} all take a \verb{seed=} argument
-(default \code{0}), reseed R's RNG from it, and restore the caller's \code{.Random.seed} on exit -- so
-their results neither depend on nor disturb the session's RNG state. That makes them safe to call from
-\code{parallel::mclapply()}/\code{future}/\code{foreach} workers -- but only if each worker is given a
-\emph{different} seed. \code{parallel::mclapply()} on non-Windows forks the current process, and a fork
-gives every child an independent, non-interfering copy of both R's global options (confirmed:
-\code{options(selectionfragility.elimination = ...)} set inside one forked worker is invisible to
-sibling workers and to the parent) and \code{.Random.seed} -- so there is no cross-worker state
-leakage from this package. The one real risk is a \emph{user} mistake, not a package bug: calling
-e.g. \code{parallel::mclapply(1:4, function(i) winner_stability(L, seed=99))} with the SAME literal
-seed in every worker deterministically reproduces the identical bootstrap in all four, silently
-giving you four copies of one result dressed up as four independent ones. Vary the seed per
-worker instead, e.g. \code{parallel::mclapply(seeds, function(s) winner_stability(L, seed=s))} with
-\code{seeds <- 1:4} (or any panel-specific offset), so each worker's bootstrap draws are genuinely
-independent.
+(default \code{0}), reseed R's RNG from it, and restore the caller's \code{.Random.seed} on exit, so
+their results neither depend on nor disturb the session's RNG state. They are safe to call from
+\code{parallel::mclapply()}/\code{future}/\code{foreach} workers, provided each worker gets a \emph{different}
+seed: the same literal seed in every worker reproduces one bootstrap N times. Use e.g.
+\code{parallel::mclapply(1:4, function(s) winner_stability(L, seed = s))}.
 }
 
 \section{Sentinel conventions for "cannot determine"}{
- this package uses two different
-sentinels for "this diagnostic could not be determined," deliberately, not by accident.
-\code{NA} marks a DEGENERATE-BUT-COMPUTED result: the comparison actually ran, but the specific
-question doesn't meaningfully apply to this input (e.g. \code{\link[=fragility]{fragility()}}'s \code{fragile} field when
-no \code{benchmark} was supplied, \code{\link[=prop22_certifies]{prop22_certifies()}} when \code{k<=0}/\code{k>=T}, or
-\code{\link[=concentration_share]{concentration_share()}}/\code{\link[=pivot_agreement]{pivot_agreement()}} in their own degenerate cases) -- these live
-inside a scalar/typed-vector return where \code{NULL} would not be type-stable. \code{NULL} marks a
-diagnostic whose underlying computation never completed at all: a caught error inside a
-list-returning function, most commonly \code{\link[=identified]{identified()}} erroring inside
-\code{\link[=resolution_report]{resolution_report()}}'s R2 check or \code{\link[=compare]{compare()}}'s internal MCS call (e.g.
-\code{resolution_report()$identified}, \code{compare()$old_champion_still_in_mcs}). For
-\code{resolution_report()$identified} specifically, \code{NULL} additionally mirrors the Python
-original's \code{None} for the identical caught-error case -- a deliberate cross-language parity
-choice, not just an internal convention. Don't write code that treats \code{NA} and \code{NULL} as
-interchangeable across this package's return values; check each field's own documentation
-for which sentinel it actually uses.
+
+\code{NA} marks a result that was computed but where the question does not apply to this input
+(e.g. \code{\link[=fragility]{fragility()}}'s \code{fragile} with no \code{benchmark}, \code{\link[=prop22_certifies]{prop22_certifies()}} when \code{k<=0} or
+\code{k>=T}); it appears inside scalar or typed-vector returns. \code{NULL} marks a diagnostic whose
+computation did not complete -- a caught error inside a list-returning function, e.g.
+\code{resolution_report()$identified} or \code{compare()$old_champion_still_in_mcs} (matching Python's
+\code{None}). Check each field's documentation for which sentinel it uses.
 }
 
 \seealso{

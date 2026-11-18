@@ -20,56 +20,36 @@ model_confidence_set(
 
 \item{B}{Number of bootstrap resamples.}
 
-\item{block}{Block length for the circular block bootstrap. The default (3) is tuned for
-roughly-i.i.d. losses; it does NOT adapt to serial dependence, and the EPA/MCS bootstrap test
-is over-sized (retains too few models) under persistent losses with a short block (e.g. at
-AR(1)=0.5 the complete-null retain-all rate falls to ~0.62 vs the nominal 0.90). If your loss
-differentials are autocorrelated, raise \code{block} and report the result across a block sweep
-rather than trusting the default. (This over-elimination is conservative for a tie claim --
-it shrinks the MCS -- but it inflates the apparent identification rate.)
+\item{block}{Block length for the circular block bootstrap. The default (3) suits roughly
+i.i.d. losses and does not adapt to serial dependence: at AR(1)=0.5 the complete-null
+retain-all rate falls to ~0.62 (nominal 0.90). With autocorrelated loss differentials, raise
+\code{block} and report results across a block sweep.
 
-STRICT-AUDIT FIX (2026-11-18): the AR(1) figure above is NOT the whole story -- a dedicated
-simulation under a true complete null with ZERO autocorrelation (all K models i.i.d., same
-mean) found the test is still measurably over-sized at ordinary panel sizes using these
-defaults: at T=30, K=3, alpha=0.10, the actual false-elimination rate was ~18\% (not ~10\%),
-roughly double what \verb{alpha=} implies; at alpha=0.05 it was ~9\% (not 5\%). This is a genuine
-finite-sample size distortion of the sequential-elimination/equivalence-test procedure
-itself, separate from and additive to the AR(1) effect above, and converges toward nominal
-only as T grows into the low hundreds. A user who checks their losses for autocorrelation,
-finds none, and takes comfort from the AR(1) caveat alone is still running a test whose real
-error rate at a typical T~30 panel can be close to double the number baked into \verb{alpha=}.}
+Even with no autocorrelation the test is over-sized at ordinary panel sizes: at T=30, K=3 the
+false-elimination rate was ~18\% at alpha=0.10 and ~9\% at alpha=0.05, and ~41\% at T=12, K=4
+(e.g. 12 years of annual actuarial reserving data comparing 4 methods). It converges to
+nominal only as T reaches the low hundreds; the function warns when T/K < 10.}
 
 \item{seed}{RNG seed.}
 
 \item{elimination}{\code{"studentized"} (Hansen-Lunde-Nason's e_max, default) or \code{"raw"} (legacy
 mean-based rule). \code{NULL} reads \code{getOption("selectionfragility.elimination", "studentized")}.
-ADVERSARIAL-REVIEW FINDING (2026-11-18): the two rules agree closely at small model counts
-but this does NOT extrapolate to large \code{K} -- stress-tested across 100+ randomly generated
-realistic panels (\code{T} in 20-60, heterogeneous per-model means/variances, \code{alpha=0.10},
-default \code{B}): at \code{K} in 3-9 the surviving sets matched on ~95-97\% of panels (consistent with
-"rarely disagree"), but at \code{K} in 10-15 they matched on only ~77\% (23\% disagreement), and at
-\code{K} in 16-30 they matched on as few as ~47-53\% of panels -- a coin flip, not a rare event.
-Do not generalize a small-\code{K} "the two rules rarely disagree in practice" intuition to a
-large-\code{K} sweep; re-check both rules explicitly (or just always report \code{elimination} alongside
-\code{surviving}, which this function already stamps onto its result for exactly this reason).}
+The two rules agree on ~95-97\% of panels at K=3-9, ~77\% at K=10-15 and only ~50\% at K=16-30,
+so at large K check both and always report \code{elimination} alongside \code{surviving}.}
 }
 \value{
-A list \code{list(surviving = surviving_model_names, p = p_at_stop, elimination = elimination_rule_used)} -- see \code{mcs()}'s \verb{@return} for why \code{elimination} is stamped onto the
-result (cross-session comparability under a quietly-set global option).
+A list \code{list(surviving = surviving_model_names, p = p_at_stop, elimination = elimination_rule_used)}.
 }
 \description{
 Convenience wrapper over \code{mcs()} that takes a named list \code{{model: vector}} (or a \code{loss_panel})
 and returns the surviving model NAMES rather than column indices.
 }
 \examples{
-# Same tied panel as mcs() (T=30, matching its T/K=10 "already-tolerated" anchor so this
-# example doesn't trigger mcs()'s own small-T warning), but as a named list -- the surviving
-# set comes back as names. No set.seed() call is needed: reproducibility comes from the
-# seed= argument below.
+# Same tied panel as mcs(), as a named list: the surviving set comes back as names.
 ar1_ets <- rep(c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98), 3)
 nbeats  <- rep(c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18), 3)
 L <- list(ar1 = ar1_ets, ets = ar1_ets, nbeats = nbeats)
-# B kept small here purely for example speed; use the B=2000 default for real analyses.
+# B kept small for example speed; use the default 2000 in real analyses.
 res <- model_confidence_set(L, B = 200, seed = 1)
 res$surviving  # c("ar1", "ets"); nbeats is eliminated
 }

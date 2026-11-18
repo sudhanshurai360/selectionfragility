@@ -32,19 +32,15 @@ when \code{reps}/\code{B} are matched, but are not required to agree on unmatche
 }
 \examples{
 # A 10-period, 3-model loss panel where ar1 and ets are tied and nbeats is clearly worse.
-# T/K=3.3 here is below this engine's own small-T threshold (see .run_mcs_arch's warning),
-# so running this deliberately-small teaching example will print that warning -- expected,
-# not a sign anything is broken; kept small for example speed rather than enlarged to T=30+,
-# since the point here is the tie/clear-winner contrast, not threshold-avoidance.
+# Small for example speed; expect the small-sample warning.
 L <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
   ets    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),
   nbeats = c(1.20, 1.18, 1.22, 1.21, 1.19, 1.23, 1.17, 1.20, 1.22, 1.18)
 )
-# reps kept small here purely for example speed; use the reps=500 default for real analyses.
+# reps kept small for example speed; use the default 500 in real analyses.
 mcs_size(L, reps = 200, seed = 1)  # 2 -- ar1 and ets both survive
 }
 \seealso{
-\code{\link[=mcs]{mcs()}}/\code{\link[=model_confidence_set]{model_confidence_set()}} for this package's own independent native MCS engine
-(kept deliberately separate as a cross-check, not a second copy of the same algorithm).
+\code{\link[=mcs]{mcs()}}/\code{\link[=model_confidence_set]{model_confidence_set()}}, the package's native MCS engine.
 }

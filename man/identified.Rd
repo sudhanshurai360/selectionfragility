@@ -30,23 +30,14 @@ same arguments and uses the same \code{MCS::MCSprocedure()}-backed engine; call 
 directly if you want the actual set size rather than just the yes/no identification question.
 }
 \section{If this returns FALSE}{
- a bare \code{FALSE} says only that this bootstrap did not narrow
-to one model -- it carries no information about WHY, or about whether a different diagnostic
-lens would tell a more complete story. \code{\link[=report]{report()}} wires this exact signal into guidance
-("identification alone does not mean the edge is powered," and vice versa); calling
-\code{identified()}/\code{mcs_size()} directly skips that guidance entirely. Before concluding "pick
-the lowest mean-loss model and move on," consider \code{\link[=resolution_report]{resolution_report()}} (is the edge over
-the binding rival even powered at this sample size), \code{\link[=decision_breakdown]{decision_breakdown()}}/\code{\link[=fragility]{fragility()}}
-(how many periods would have to change to flip the decision), and \code{\link[=winner_stability]{winner_stability()}} (does
-the pooled winner survive a block bootstrap) -- or just call \code{\link[=report]{report()}}, which runs all of
-these together.
+ it says only that the bootstrap did not narrow to one model,
+not why. \code{\link[=resolution_report]{resolution_report()}} (is the edge powered?), \code{\link[=decision_breakdown]{decision_breakdown()}}/\code{\link[=fragility]{fragility()}}
+(how many periods would flip it?) and \code{\link[=winner_stability]{winner_stability()}} answer the follow-ups; \code{\link[=report]{report()}}
+runs them all together.
 }
 
 \examples{
-# Both panels below are small (T/K well under this engine's own small-T warning threshold)
-# purely for example speed -- expect the "identified()/mcs_size(): ... small-sample regime"
-# warning to print on both calls; that is this diagnostic disclosing its own measured
-# limitation, not a sign either call is broken.
+# Small panels for example speed; expect the small-sample warning.
 # Tied pair -> not identified (MCS size 2, not 1).
 L_tied <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),

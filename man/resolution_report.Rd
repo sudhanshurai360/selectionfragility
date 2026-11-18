@@ -28,36 +28,33 @@ resolution_report(
 }
 \value{
 A named list: \code{champion}, \code{resolved}, \code{observed_edge}, \code{mde}, \code{significance_boundary},
-\code{binding_rival}, \code{identified} (\code{NULL}, not \code{NA}, when the internal \code{identified()} call
-errors -- see \code{?selectionfragility}'s "Sentinel conventions" section, including why this
-field specifically mirrors the Python oracle's \code{None}), \code{fragility_read}.
+\code{binding_rival}, \code{identified} (\code{NULL} when the internal \code{identified()} call errors; see
+"Sentinel conventions" in \code{?selectionfragility}), \code{fragility_read}.
 }
 \description{
 R1/R2 resolution report with refusal rules
 }
 \section{Assumption}{
- \code{resolved}/\code{mde}/\code{significance_boundary} assume no autocorrelation in the
-per-period loss differential (see \code{.weighted_se}'s comment in resolution.R). \code{fragility_read}'s
-\code{identified} check does not share this assumption (it goes through the block-bootstrap MCS),
-but the R1 \code{resolved} gate does; a "resolved" read can overstate confidence under
-autocorrelated losses. The R1 gate also assumes per-period variance doesn't depend on \code{w}
-(\code{.weighted_se}'s comment again) -- re-verified NOT a rare edge case: among "resolved" verdicts,
-a false-confidence rate of 15-39\% was measured across mild-to-strong, realistic weight/
-volatility correlations (as low as rho=0.1), and 8\% even on an unremarkable seasonal
-observation-count pattern. This function now \code{warning()}s when \code{w} is non-uniform AND
-POSITIVELY correlates with the differential's volatility AND it is about to report "resolved".
-The warning is a cheap, single-realization screening heuristic, not a precise diagnosis -- it
-also fires on a non-trivial fraction of panels where the assumption genuinely holds (~13-38\%
-depending on T, purely from sampling noise in the correlation estimate); treat it as a prompt
-to sanity-check the result yourself, not as proof the result is wrong.
+ \code{resolved}, \code{mde} and \code{significance_boundary} assume no autocorrelation in
+the per-period loss differential, so "resolved" can overstate confidence under autocorrelated
+losses (the \code{identified} check uses the block bootstrap and does not share this assumption).
+They also assume per-period variance does not depend on \code{w}. That fails when weights are
+observation counts and the high-count periods are also the volatile ones: among "resolved"
+verdicts, a false-confidence rate of 15-39\% was measured for weight/volatility correlations of
+0.2-0.8, and 8\% on an ordinary seasonal reporting pattern. The function warns when \code{w} is
+non-uniform, positively correlated with the differential's volatility, and the read is
+"resolved". The warning is a screening heuristic that also fires on ~13-38\% of panels where
+the assumption holds; treat it as a prompt to check, not proof. It checks the closest-mean
+rival only, so it can miss the case that matters: e.g. a grid operator weights winter days
+for peak planning, and a winter cold snap is exactly where \code{decision_breakdown()}'s
+\code{binding_opponent} fails. If your weights line up with when a known pivotal model misses,
+check that correlation yourself.
 }
 
 \section{Seed sensitivity}{
- \code{mcs_seed} -- \code{fragility_read}'s \code{identified} check is a
-bootstrap-based MCS call, and on a genuinely
-borderline panel the verdict can be seed-sensitive (see \code{?mcs}'s "Adversarial use" section
-for a quantified example). Previously silently pinned to \code{seed=0}; pass a few different seeds
-yourself near a borderline alpha if this matters for your use case.
+ the \code{identified} check is a bootstrap, so on a borderline panel the
+verdict can depend on \code{mcs_seed} (see \code{?mcs}, "Adversarial use"); try a few seeds if it
+matters.
 }
 
 \section{Reading the two gates}{
@@ -73,10 +70,7 @@ error immediately rather than being reported as "undetermined".
 # Only 4 periods, and nbeats narrowly beats ar1 on average -- but with this
 # little data, that edge is NOT resolved: it falls short of the significance
 # boundary (R1), and the champion isn't even uniquely identified by the MCS
-# (R2). The report's job is to say so honestly rather than overclaim. This T=4/K=2 panel is
-# deliberately tiny -- small enough to trigger the internal MCS engine's own small-sample
-# warning too, which is apt here, not noise: the whole point of this example is a panel too
-# small to trust.
+# (R2). Expect the small-sample warning on a panel this tiny.
 L <- list(
   ar1    = c(1.00, 0.95, 1.05, 0.90),
   nbeats = c(0.95, 0.97, 0.90, 0.99)

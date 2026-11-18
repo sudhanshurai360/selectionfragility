@@ -46,40 +46,18 @@ loss differentials are autocorrelated; check their ACF, or build a null that mat
 panel's own serial-dependence structure.
 }
 
-\section{Runtime scales with T, not just with n_rep/n_boot}{
- this function's cost is
-\code{O(n_rep * n_boot * T)} -- an outer loop of \code{n_rep} simulated null panels, each paying a full
-\code{winner_stability()} bootstrap of \code{n_boot} resamples, each of which is itself \code{O(T)}. The
-defaults (\code{n_rep=200}, \code{n_boot=500}) are fine at the small-to-moderate \code{T} (tens to low
-hundreds) typical of monthly/quarterly forecast comparisons, where this finishes in well
-under a second. It does NOT stay interactive at the high-frequency intraday \code{T} that is
-routine, not exceptional, in call-center/workforce-management (WFM) demand forecasting --
-e.g. half-hourly staffing data over a 6-month comparison window is \code{T} ~ 8,700. Measured
-directly at \code{K=5}, \code{T=8736} with the documented defaults: ~78 seconds for one call, on
-ordinary single-core hardware. That is not a crash and the returned \code{median}/\code{p05}/\code{p95} are
-correct, but a WFM analyst who follows this page's own "real usage should use the defaults...
-or larger" advice at a realistic intraday \code{T} will wait more than a minute per call, and
-substantially longer for a block-length sweep or a 12-month window. If your \code{T} is in the
-thousands, pass a smaller \code{n_rep}/\code{n_boot} for exploration (a few hundred total \code{n_rep * n_boot} is usually enough to read off \code{p05} to the precision a go/no-go decision needs) and
-reserve the full defaults for a final, one-time check you are willing to let run. DO NOT use
-the single \code{T=8736}/~78s figure above for precise linear extrapolation to a different \code{T}
-(e.g. "my \code{T} is a sixth of that, so it should take ~13 seconds") -- re-measured at daily-
-granularity airline-crew-scheduling scale (\code{T} ~ 1,460, four years of daily data) with the
-documented defaults, repeated full-default calls varied by several-fold run to run and did
-not track that naive proportional prediction, because (a) each of the \code{n_rep} replicates pays
-a fixed per-replicate setup cost (seeding, drawing the \code{T}-length null panel, entering
-\code{winner_stability()}) that is NOT part of the \code{O(T)} inner-loop term and is a proportionally
-larger share of the total at smaller \code{T}, and (b) wall-clock time on a real, shared machine is
-sensitive to whatever else is competing for the CPU at the time -- this is an ordinary
-measurement-noise/overhead caveat, not a change to the \code{O(n_rep * n_boot * T)} complexity
-itself (confirmed correct by inspection: there is no hidden higher-order term in the block-
-resampling inner loop). Treat the ~78s figure as an order-of-magnitude anchor, not an
-arithmetic one, and always re-time at your own \code{T} on your own machine before relying on it.
+\section{Runtime}{
+ cost is \code{O(n_rep * n_boot * T)}. The defaults finish in well under a second
+at the T typical of monthly or quarterly comparisons (tens to low hundreds). Intraday data is
+much slower: half-hourly call-center staffing data over six months (T ~ 8,700, K=5) took ~78
+seconds per call. For T in the thousands, explore with smaller \code{n_rep}/\code{n_boot} and keep the
+defaults for a final check. Do not extrapolate the 78s linearly: at four years of daily
+airline-crew data (T ~ 1,460) timings varied several-fold run to run because of fixed
+per-replicate overhead and machine load. Re-time at your own T.
 }
 
 \examples{
-# n_rep/n_boot are tiny here purely to keep the example fast; real usage should use the
-# defaults (n_rep = 200, n_boot = 500) or larger for a stable null distribution.
+# n_rep/n_boot kept tiny for example speed; use the defaults or larger in real analyses.
 eb <- exchangeable_benchmark(K = 3, T = 20, n_rep = 20, n_boot = 50, seed = 1)
 eb$median  # typical winner_stability() under "no model is really better"
 }

@@ -1,13 +1,9 @@
 # fragility.R — the decision breakdown point (k*) and ranking-fragility diagnostics.
 #
-# Faithful port of fragility.py. Indexing convention: `removed` (breakdown_number()/
-# decision_breakdown()) is a 1-based R position, shifted +1 from the Python original's 0-based
-# index. `responsible` (fragility()) is a period LABEL -- a panel's own label, or by default the
-# same 0-based positional label loss_panel() assigns, matching Python. All numeric results (margins, k*, ratios,
-# winner names) match the Python oracle exactly on deterministic inputs; `winner_stability()`
-# and `exchangeable_benchmark()` depend on a block-bootstrap RNG and are NOT bit-for-bit
-# reproducible against the Python package (different RNG streams across languages) -- they are
-# verified for statistical equivalence (same shape of distribution), not exact equality.
+# Port of fragility.py. `removed` (breakdown_number()/decision_breakdown()) is a 1-based R
+# position; `responsible` (fragility()) holds period labels, 0-based positional by default as in
+# Python. Deterministic results match Python exactly; winner_stability() and
+# exchangeable_benchmark() use R's RNG and match statistically, not bit-for-bit.
 
 .MARGIN_REL_FLOOR <- 1e-12
 
@@ -62,9 +58,7 @@
                     paste(dim(v), collapse = "x")), call. = FALSE)
     }
     if (!is.numeric(v)) {
-      # Coercion-introduced NAs (e.g. a character vector) would silently pass a bare is.finite()
-      # check, so refuse non-numeric input outright rather than let a type mistake masquerade as
-      # a data quality issue.
+      # Refuse non-numeric input before coercion can turn it into NAs.
       stop(sprintf("model '%s's loss must be a vector of numeric values; got class %s.", m, class(v)[1]), call. = FALSE)
     }
     a <- as.numeric(v)
@@ -84,15 +78,7 @@
     }
   }
   if (!is.null(w)) {
-    # STRICT-AUDIT FIX (2026-11-18): this validator and panel.R's .validate_weights() are two
-    # independently-written checks for "the same concept" that had silently drifted -- panel.R's
-    # was hardened three separate times (character/factor/logical guards) because
-    # as.numeric(factor(...)) silently returns integer LEVEL CODES, not the labels, and
-    # as.numeric(logical) silently coerces TRUE/FALSE -> 1/0, but this copy (used directly by
-    # pooled_winner()/decision_breakdown()/winner_stability()/fragility()/every resolution.R
-    # function on raw lists, not just loss_panel()) never got the same guards -- confirmed
-    # reachable: decision_breakdown(L, w=factor(c("10","20","30","40"))) used to silently use
-    # weights c(1,2,3,4) with no error. Mirroring panel.R's guards here closes that gap.
+    # Same type guards as panel.R's .validate_weights(): factors and logicals coerce silently.
     if (is.character(w)) {
       stop(sprintf(
         "weights must be a numeric vector of %d values (one per period), not a string; got %s.",
@@ -111,11 +97,7 @@
         T, paste(w, collapse = ", ")
       ), call. = FALSE)
     }
-    # Coercion failures (e.g. non-numeric strings) must raise distinctly from a genuine
-    # length/finiteness problem -- `as.numeric()` on unconvertible values silently produces NA
-    # with only a warning, which `suppressWarnings()` alone would let fall through into the
-    # generic finite-check below and report a misleading "got length N" message even though the
-    # length was correct and the real problem was that the values weren't numeric at all.
+    # Report a failed numeric coercion as such, not as a misleading length/NA error.
     coercion_failed <- FALSE
     wa <- withCallingHandlers(
       as.numeric(w),
@@ -145,10 +127,7 @@
       stop("weights are all zero; at least one period must carry positive weight.", call. = FALSE)
     }
     if (any(wa > .MAX_ABS_LOSS)) {
-      # Same overflow-prevention cap as panel.R's .validate_weights() -- a single "individually
-      # valid" (finite, non-negative) but enormous weight can make sum(weights) overflow to Inf,
-      # producing NaN for every model's weighted mean, which pooled_winner() then fed into
-      # sort()'s NA-dropping default to silently return NA_character_ as the "champion."
+      # Same overflow cap as panel.R's .validate_weights().
       stop(sprintf(
         paste0("weights must not exceed %.0e in magnitude -- a weight this large can make ",
                "sum(weights) overflow to Inf and silently corrupt every weighted statistic downstream."),
@@ -182,12 +161,7 @@ pooled_winner <- function(L, w = NULL) {
   means <- sapply(names(L), function(m) stats::weighted.mean(as.numeric(L[[m]]), w))
   best <- min(means)
   best_m <- names(sort(means))[1]
-  # abs() BOTH terms: the per-model term must be abs()'d too (matching the Python oracle and the
-  # sibling .binding_rival in resolution.R). With negative means, (|v| + v)/2 collapses to ~0, which
-  # collapses the relative tie floor to ~0, so a genuine degenerate tie among negative-mean models
-  # (common with decimal-quantized log/skill-score losses) would not be recognized and the winner
-  # would be broken toward the raw floating-point minimum instead of the name-sorted tie member --
-  # a cross-language champion divergence that propagates through selection_regret/decision_breakdown.
+  # abs() both terms (as Python), so ties among negative-mean models are still recognized.
   scale <- (abs(means[best_m]) + abs(means)) / 2.0
   tied <- names(L)[(means - best) <= .MARGIN_REL_FLOOR * scale]
   sort(tied, method = "radix")[1]
@@ -220,20 +194,11 @@ per_period_winner <- function(L, return_ties = FALSE) {
   up <- .unwrap_panel(L, NULL); L <- up$L
   L <- .as_loss_dict(L)
   .validate_losses(L)
-  # STRICT-AUDIT FIX (2026-11-18): return_ties (here and in decision_breakdown()'s identical
-  # sibling parameter) was used bare in `if (return_ties) ...` with no guard at all --
-  # return_ties=NA raised a raw "missing value where TRUE/FALSE needed", return_ties="yes" raised
-  # a raw "argument is not interpretable as logical", neither naming the function or parameter.
   if (!is.logical(return_ties) || length(return_ties) != 1 || is.na(return_ties)) {
     stop(sprintf("per_period_winner(): return_ties must be a single TRUE/FALSE; got %s.",
                   paste(format(return_ties), collapse = ", ")), call. = FALSE)
   }
-  # method="radix" throughout this package (every sort()/order() on model names, not just here):
-  # R's default sort() on character vectors uses LC_COLLATE locale collation, which disagrees
-  # with Python's codepoint-based sorted()/min() for mixed-case names (e.g. en_US.UTF-8 orders
-  # "alpha" < "Zeta", Python orders "Zeta" < "alpha") -- silently changing which model wins a
-  # tie-break between the two language ports. radix sort is always byte/codepoint order,
-  # locale-independent, and matches Python's convention.
+  # method = "radix" throughout: codepoint order, locale-independent, matching Python's sorted().
   models <- sort(names(L), method = "radix")
   M <- do.call(rbind, lapply(models, function(m) as.numeric(L[[m]])))  # models x T
   per_period_min <- apply(M, 2, min)
@@ -336,10 +301,7 @@ condorcet_status <- function(L) {
 #' @keywords internal
 .is_degenerate_pair <- function(k, la, lb, w, T) {
   c_ <- w * (lb - la)
-  # STRICT-AUDIT FIX (2026-11-18): .fsum() (pivot.R) exists specifically because plain sum() is
-  # order-dependent on permutation-tied contribution vectors -- pivot.R's own header says this
-  # exact bug was found and fixed FIVE separate times in the Python original. This computation is
-  # structurally identical to the margin sums .fsum() was built to protect but never got ported.
+  # .fsum() (pivot.R): permutation-invariant, so tied margins compare equal.
   M <- .fsum(c_)
   isTRUE(k == 0 || (M / T) <= .MARGIN_REL_FLOOR * .pair_scale(la, lb, w, T))
 }
@@ -392,7 +354,7 @@ breakdown_number <- function(la, lb, w) {
     ), call. = FALSE)
   }
   c_ <- w * (lb - la)
-  M <- .fsum(c_)  # STRICT-AUDIT FIX (2026-11-18): see .is_degenerate_pair()'s comment
+  M <- .fsum(c_)
   T <- length(w)
   scale <- if (T > 0) (mean(abs(la)) + mean(abs(lb))) / 2.0 else 0.0
   wscale <- if (T > 0) mean(w) else 0.0
@@ -401,21 +363,10 @@ breakdown_number <- function(la, lb, w) {
   }
   order_idx <- order(-c_)  # R's order() is stable: ties keep earliest original index
   s <- M
-  # STRICT-AUDIT FIX (2026-11-18): `comp` is a Neumaier-compensated correction term, mirroring
-  # .fsum()'s algorithm (pivot.R) -- the loop's running subtraction used to be naive float64
-  # arithmetic even though M (the total it starts from) is computed via .fsum()'s compensated
-  # summation. Over many near-tied contributions, naive subtraction accumulates rounding error
-  # that can cross the s<=0 threshold ONE REMOVAL TOO EARLY: confirmed via 50-digit decimal
-  # arithmetic and a 500-trial brute-force adversarial sweep (~1% of near-tied constructions)
-  # that the naive version understated k* by 1, i.e. OVERSTATED fragility. Tracking `s + comp`
-  # against both stop conditions instead of bare `s` keeps the running remainder as accurate as
-  # the compensated total it started from.
+  # Neumaier compensation on the running remainder, matching .fsum(); naive subtraction can stop
+  # one removal early on near-tied contributions and understate k*.
   comp <- 0.0
-  # Preallocate at the loop's own upper bound (length(order_idx) == T) and track a running count,
-  # instead of `removed <- c(removed, i)` -- that reallocates and copies the whole vector every
-  # iteration, making a long elimination scan (large k* relative to T, i.e. exactly the closely-
-  # tied/fragile panels this package is built to flag) cost O(k*^2) instead of O(k*). Trim to the
-  # real count at the end.
+  # Preallocated buffer: appending inside the loop is O(k*^2).
   removed_buf <- integer(length(order_idx))
   n_removed <- 0L
   for (i in order_idx) {
@@ -450,44 +401,19 @@ breakdown_number <- function(la, lb, w) {
 #'   POSITION into the loss vectors -- it is NOT resolved against `L`'s period labels even when
 #'   `L` is a `loss_panel` built with `labels=`. Only [report()] resolves `removed` into actual
 #'   period labels for display; call `panel$labels[removed]` yourself if you need them here.
-#' @section Limitation -- THREE TIE-BREAK RULES, DELIBERATELY DIFFERENT, NOT A BUG: when multiple
-#'   opponents are tied at the same minimal k*, this function's `binding_opponent` resolves the tie
-#'   to the alphabetically-first name. Two OTHER functions resolve the conceptually-similar
-#'   "which opponent is the one that matters" question differently, and this was verified (by
-#'   reading the Python oracle's own design-decision comments in `pivot.py`/`resolution.py`, which
-#'   predate and motivate this R port) to be INTENTIONAL in all three cases, not independently-drifted
-#'   accidents:
+#' @section Limitation: three different "which opponent" rules: when several opponents tie at the
+#'   minimal k*, `binding_opponent` is the alphabetically first (a stable, citable name). Two other
+#'   functions answer related questions differently, by design (as in the Python package):
 #'   \itemize{
-#'     \item [concentration_share()]/[pivot_agreement()] (via the internal `.champ_opp_contributions()`
-#'       in pivot.R) restrict to the SAME tied set this function computes (`ties`/`binding_opponents`)
-#'       but pick the member with the LARGEST total margin, not the alphabetically-first one. This is
-#'       deliberate: an earlier version of that module used the alphabetical rule and it made the
-#'       *period-level* statistics (which period is "the" pivot) measurably RENAME-dependent -- renaming
-#'       a tied opponent could flip which one sorted first, and different tied opponents can have very
-#'       different pivotal periods. Largest-margin is a property of the DATA, not of what the models are
-#'       called, so it does not have that defect; it was chosen specifically to fix it. This function's
-#'       own alphabetical rule is fine for ITS job (a stable, citable name for a point estimate of k*,
-#'       which is an integer and ties on it by exact-count coincidence are common at small T) but would
-#'       be the wrong choice for pivot.R's job.
-#'     \item `resolution_report()`'s own `binding_rival` field (via `resolution.R`'s internal
-#'       `.binding_rival()`) is not a k*-minimality tie-break at all -- it answers a different
-#'       question (which rival's pooled mean is statistically closest to the champion's, for the
-#'       power/MDE calculation) and is not restricted to this function's tied set. The Python oracle
-#'       measured an 18.25% disagreement rate between these two opponents across 20,000 random panels;
-#'       an equivalent direct check on this R port (3,000 random panels, 3-6 models, 8-30 periods)
-#'       found k*-ties on ~38% of panels with a strict winner, a ~20% disagreement rate between this
-#'       function's `binding_opponent` and `concentration_share()`'s internal pick, and a ~25%
-#'       disagreement rate against `binding_rival`. This is a common, not a contrived-edge-case,
-#'       occurrence on realistic panels -- read the field name in context, not just "binding X".
+#'     \item [concentration_share()]/[pivot_agreement()] pick, from the same tied set, the opponent
+#'       with the largest total margin. An alphabetical rule there made the named pivotal period
+#'       change when a model was renamed.
+#'     \item `resolution_report()$binding_rival` is the rival with the closest pooled mean (what the
+#'       power/MDE calculation needs), not restricted to the k*-tied set.
 #'   }
-#'   [report()]'s PIVOT paragraph prints text sourced from this function's `binding_opponent` AND
-#'   (via `concentration_share()`/`pivot_agreement()`) the largest-margin pick, in the same paragraph
-#'   -- see the inline comment at that call site in report.R. In the common case of no k*-tie, all
-#'   three name the same opponent; the above only matters when several are genuinely tied at k*.
-#'   None of this is unified across the three call sites because each rule is already correct for its
-#'   own job; forcing them to agree would either reintroduce the rename-dependence bug largest-margin
-#'   was built to fix, or conflate k*-minimality with mean-distance, which are genuinely different
-#'   statistical questions.
+#'   On random panels with a strict winner, ~38% have a k*-tie; `binding_opponent` differs from the
+#'   largest-margin pick on ~20% and from `binding_rival` on ~25%. [report()]'s PIVOT paragraph can
+#'   therefore name two different opponents. With no k*-tie, all three agree.
 #' @seealso [breakdown_number()] (the pairwise primitive this searches over), [prop22_certifies()]
 #'   (significance certificate for the resulting k*), [winner_stability()] (a complementary,
 #'   bootstrap-based fragility read).
@@ -503,8 +429,6 @@ breakdown_number <- function(la, lb, w) {
 #' decision_breakdown(L)  # k = 1, binding_opponent = "nbeats", removed = 5
 decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
-  # STRICT-AUDIT FIX (2026-11-18): see per_period_winner()'s identical return_ties guard -- this
-  # sibling had the same gap (bare `if (return_ties)` below, no validation at all).
   if (!is.logical(return_ties) || length(return_ties) != 1 || is.na(return_ties)) {
     stop(sprintf("decision_breakdown(): return_ties must be a single TRUE/FALSE; got %s.",
                   paste(format(return_ties), collapse = ", ")), call. = FALSE)
@@ -526,12 +450,7 @@ decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
   if (is.null(a)) {
     a <- pooled_winner(L, w)
   } else if (length(a) != 1 || is.na(a) || !(a %in% names(L))) {
-    # STRICT-AUDIT FIX (2026-11-18): decision_breakdown(L, a="typo") used to fall straight through
-    # to L[["typo"]] -> NULL -> as.numeric(NULL) -> a length-0 `la`, which breakdown_number() then
-    # rejected with a length-MISMATCH error blaming la/lb/w -- true as far as it goes, but
-    # misattributed: the real problem is that `a` isn't one of names(L) at all. Same failure
-    # class this package's non-numeric-weights fix exists to prevent (see test-fragility.R):
-    # don't let a caller debug the wrong thing.
+    # Otherwise L[[a]] is NULL and breakdown_number() blames a length mismatch instead.
     stop(sprintf("decision_breakdown(): a='%s' is not one of the models in L (%s).",
                   paste(format(a), collapse = ", "), paste(names(L), collapse = ", ")), call. = FALSE)
   }
@@ -548,10 +467,7 @@ decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
       ties <- c(ties, m)
     }
   }
-  # return_ties toggles the return shape, matching the Python original (which returns a 3- vs
-  # 4-tuple): with the default FALSE, `ties` is omitted; with TRUE it is included. Previously the
-  # parameter was inert -- `ties` was always returned regardless -- a doc/behaviour and
-  # cross-language contract mismatch (the @param promised conditional behaviour the code ignored).
+  # return_ties toggles the return shape, as Python's 3- vs 4-tuple.
   if (is.null(best)) {
     out <- list(k = 0L, binding_opponent = NULL, removed = integer(0))
     if (return_ties) out$ties <- character(0)
@@ -564,18 +480,11 @@ decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
 
 #' @keywords internal
 .block_resample_idx <- function(T, block, circular = TRUE) {
-  # Coerce block to an integer up front: n_starts uses ceiling(T/block) (the fractional value) but
-  # the offset range 0:(block-1) truncates block, so a non-integer block makes the two disagree and
-  # pads the index vector with NA. Flooring here keeps them consistent (callers that accept a
-  # user-supplied block validate it as a count elsewhere; this is the last-line guard).
+  # Integer block: a fractional one pads the index vector with NA.
   block <- as.integer(block)
   if (is.na(block) || block <= 1) return(sample.int(T, size = T, replace = TRUE))
   if (!circular) {
-    # Draw all block starts up front and build the index via lapply+unlist (vectorized), mirroring
-    # the circular branch below, instead of `out <- c(out, ...)` inside a while loop -- that
-    # reallocated and copied the whole vector every iteration, the identical O(T^2)-instead-of-O(T)
-    # anti-pattern found and fixed in breakdown_number()'s elimination loop in this same round
-    # (confirmed: 14+ seconds at T=80,000 vs ~1s for the circular default at the same T).
+    # Draw all starts up front (vectorized); growing the vector in a loop is O(T^2).
     n_starts <- ceiling(T / block) + 1L  # +1 covers the worst case where the last start barely fits
     starts <- sample.int(max(1, T - block + 1), size = n_starts, replace = TRUE)
     idx <- unlist(lapply(starts, function(s) seq(s, min(s + block - 1, T))))
@@ -590,8 +499,7 @@ decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
 #' Block-bootstrap winner stability
 #'
 #' Resample evaluation periods (circular block bootstrap) and recompute the pooled winner on
-#' each resample. NOTE: uses R's own RNG, so results are not bit-for-bit identical to the
-#' Python package's numpy-based bootstrap on the same seed -- only statistically equivalent.
+#' each resample. Uses R's RNG, so results match Python statistically, not bit-for-bit.
 #'
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @param w Optional numeric vector of per-period weights.
@@ -611,10 +519,8 @@ decision_breakdown <- function(L, w = NULL, a = NULL, return_ties = FALSE) {
 #' )
 #' ws <- winner_stability(L, seed = 1)
 #' ws$stability  # fraction of bootstrap resamples where ar1 is still the pooled winner
-#' # This number is NOT interpretable in isolation -- a mid-range value like this can be exactly
-#' # what pure chance produces with only 3 models and 10 periods. Compare it to
-#' # exchangeable_benchmark(K = 3, T = 10)'s p05: only below that is the win unusually fragile
-#' # relative to chance, not just "looks uncertain."
+#' # Not interpretable alone: with 3 models and 10 periods, chance alone produces mid-range values.
+#' # Compare against exchangeable_benchmark(K = 3, T = 10)$p05.
 winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0, circular = TRUE) {
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
   L <- .as_loss_dict(L)
@@ -623,11 +529,6 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
   if (is.null(block)) {
     block <- max(1, round(T ^ (1 / 3)))
   } else {
-    # Coerce/validate a user-supplied block the same way n_boot already is below -- the identical
-    # unguarded-int32/NA pattern already fixed 3+ times in mcs.R (guard condition AND its own
-    # display message), ported here after being found unfixed in this sibling. Without this,
-    # block=NA crashed inside the bare `if (block >= T)` and block="3" crashed inside this
-    # function's own sprintf("%d", ...) message -- both raw, unhelpful R-internal errors.
     block_in <- block
     block <- suppressWarnings(as.integer(block))
     if (length(block) != 1 || is.na(block)) {
@@ -645,32 +546,16 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
       ), block, T, T
     ), call. = FALSE)
   }
-  # as.integer() floor BEFORE the guard and the seq_len loop: a fractional 0 < n_boot < 1 would
-  # otherwise pass `n_boot <= 0` yet make seq_len(n_boot) empty, so the bootstrap loop never runs
-  # and stability silently returns 0 ("maximally fragile") with no error. %s not %d in the message
-  # so a non-integer/character n_boot prints its actual value instead of crashing sprintf.
+  # Floor before the check: 0 < n_boot < 1 would otherwise run zero resamples silently.
   n_boot_in <- n_boot
   n_boot <- suppressWarnings(as.integer(n_boot))
   if (length(n_boot) != 1 || is.na(n_boot) || n_boot <= 0) {
     stop(sprintf("n_boot must be a single positive integer; got %s.", paste(format(n_boot_in), collapse = ", ")), call. = FALSE)
   }
-  # STRICT-AUDIT FIX (2026-11-18): circular (like n_boot/block above) was passed straight into
-  # `if (!circular)` inside .block_resample_idx() with no guard at all -- circular=NA raised a raw
-  # "missing value where TRUE/FALSE needed", circular="x" raised a raw "invalid argument type",
-  # neither mentioning winner_stability() or `circular` by name. A prior review judged this
-  # "symmetric" because exchangeable_benchmark()'s circular= fails the exact same raw way (it just
-  # calls through to here) -- but "both siblings fail identically raw" is still a violation of
-  # this file's own worded-error discipline, not an exemption from it. Guarded here closes it for
-  # both call sites at once, since exchangeable_benchmark() passes its circular straight through.
   if (!is.logical(circular) || length(circular) != 1 || is.na(circular)) {
     stop(sprintf("winner_stability(): circular must be a single TRUE/FALSE; got %s.",
                   paste(format(circular), collapse = ", ")), call. = FALSE)
   }
-  # STRICT-AUDIT FIX (2026-11-18): seed was passed straight into set.seed() with no local guard,
-  # unlike block/n_boot/circular just above (same fix commit) and unlike mcs()/compare()/
-  # identified()'s own seed= (an identical fix already made there in this same commit) -- a bad
-  # seed (NA/non-scalar/out-of-range/character) reached a raw, unworded "supplied seed is not a
-  # valid integer" error from base R's set.seed() itself instead of this file's own worded style.
   seed_in <- seed; seed <- suppressWarnings(as.integer(seed))
   if (length(seed) != 1 || is.na(seed) || seed < 0) {
     stop(sprintf("winner_stability(): seed must be a single non-negative integer; got %s.",
@@ -682,14 +567,8 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
   la <- as.numeric(L[[obs]])
   lb <- if (!is.null(db$binding_opponent)) as.numeric(L[[db$binding_opponent]]) else la
   if (.is_degenerate_pair(db$k, la, lb, w, T)) {
-    # STRICT-AUDIT FIX (2026-11-18): `freq` here is NOT a computed bootstrap win frequency -- it
-    # is a hardcoded uniform placeholder, because no bootstrap is run on a degenerate (exact-tie
-    # or near-tie) pair. This used to ship with no warning at all: a caller treating `freq` as
-    # real data (e.g. a bar chart of "bootstrap win share per model") saw a plausible-looking but
-    # entirely fabricated uniform distribution across ALL models, including ones whose true means
-    # are nowhere near the champion's. `stability=NaN` alone does flag the degeneracy to a careful
-    # reader, but silently becomes NA under `ifelse(stability > 0.8, ...)` or "NaN%" under
-    # sprintf("%.1f%%", ...) -- both realistic downstream idioms -- with no diagnostic signal.
+    # No bootstrap runs on a degenerate pair; warn that freq is a placeholder, since stability=NaN
+    # alone quietly becomes NA in ifelse() or "NaN%" in sprintf().
     warning(sprintf(
       paste0(
         "winner_stability(): the champion-vs-binding-rival pair is degenerate (k*=%d, margin below ",
@@ -727,35 +606,13 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
 #'   loss differentials are autocorrelated; check their ACF, or build a null that matches your
 #'   panel's own serial-dependence structure.
 #'
-#' @section Runtime scales with T, not just with n_rep/n_boot: this function's cost is
-#'   `O(n_rep * n_boot * T)` -- an outer loop of `n_rep` simulated null panels, each paying a full
-#'   `winner_stability()` bootstrap of `n_boot` resamples, each of which is itself `O(T)`. The
-#'   defaults (`n_rep=200`, `n_boot=500`) are fine at the small-to-moderate `T` (tens to low
-#'   hundreds) typical of monthly/quarterly forecast comparisons, where this finishes in well
-#'   under a second. It does NOT stay interactive at the high-frequency intraday `T` that is
-#'   routine, not exceptional, in call-center/workforce-management (WFM) demand forecasting --
-#'   e.g. half-hourly staffing data over a 6-month comparison window is `T` ~ 8,700. Measured
-#'   directly at `K=5`, `T=8736` with the documented defaults: ~78 seconds for one call, on
-#'   ordinary single-core hardware. That is not a crash and the returned `median`/`p05`/`p95` are
-#'   correct, but a WFM analyst who follows this page's own "real usage should use the defaults...
-#'   or larger" advice at a realistic intraday `T` will wait more than a minute per call, and
-#'   substantially longer for a block-length sweep or a 12-month window. If your `T` is in the
-#'   thousands, pass a smaller `n_rep`/`n_boot` for exploration (a few hundred total `n_rep *
-#'   n_boot` is usually enough to read off `p05` to the precision a go/no-go decision needs) and
-#'   reserve the full defaults for a final, one-time check you are willing to let run. DO NOT use
-#'   the single `T=8736`/~78s figure above for precise linear extrapolation to a different `T`
-#'   (e.g. "my `T` is a sixth of that, so it should take ~13 seconds") -- re-measured at daily-
-#'   granularity airline-crew-scheduling scale (`T` ~ 1,460, four years of daily data) with the
-#'   documented defaults, repeated full-default calls varied by several-fold run to run and did
-#'   not track that naive proportional prediction, because (a) each of the `n_rep` replicates pays
-#'   a fixed per-replicate setup cost (seeding, drawing the `T`-length null panel, entering
-#'   `winner_stability()`) that is NOT part of the `O(T)` inner-loop term and is a proportionally
-#'   larger share of the total at smaller `T`, and (b) wall-clock time on a real, shared machine is
-#'   sensitive to whatever else is competing for the CPU at the time -- this is an ordinary
-#'   measurement-noise/overhead caveat, not a change to the `O(n_rep * n_boot * T)` complexity
-#'   itself (confirmed correct by inspection: there is no hidden higher-order term in the block-
-#'   resampling inner loop). Treat the ~78s figure as an order-of-magnitude anchor, not an
-#'   arithmetic one, and always re-time at your own `T` on your own machine before relying on it.
+#' @section Runtime: cost is `O(n_rep * n_boot * T)`. The defaults finish in well under a second
+#'   at the T typical of monthly or quarterly comparisons (tens to low hundreds). Intraday data is
+#'   much slower: half-hourly call-center staffing data over six months (T ~ 8,700, K=5) took ~78
+#'   seconds per call. For T in the thousands, explore with smaller `n_rep`/`n_boot` and keep the
+#'   defaults for a final check. Do not extrapolate the 78s linearly: at four years of daily
+#'   airline-crew data (T ~ 1,460) timings varied several-fold run to run because of fixed
+#'   per-replicate overhead and machine load. Re-time at your own T.
 #'
 #' @param K Number of models (all drawn from the same distribution, so no model is truly better).
 #' @param T Number of periods.
@@ -768,72 +625,35 @@ winner_stability <- function(L, w = NULL, n_boot = 2000, block = NULL, seed = 0,
 #' @seealso [winner_stability()] (the statistic this provides a null distribution for).
 #' @export
 #' @examples
-#' # n_rep/n_boot are tiny here purely to keep the example fast; real usage should use the
-#' # defaults (n_rep = 200, n_boot = 500) or larger for a stable null distribution.
+#' # n_rep/n_boot kept tiny for example speed; use the defaults or larger in real analyses.
 #' eb <- exchangeable_benchmark(K = 3, T = 20, n_rep = 20, n_boot = 50, seed = 1)
 #' eb$median  # typical winner_stability() under "no model is really better"
 exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL, seed = 0, circular = TRUE) {
-  # STRICT-AUDIT FIX (2026-11-18): K previously had only a bare `if (K < 2) stop(...)` -- no
-  # as.integer()/is.na()/length coercion at all, even though T (K's own declared "identical
-  # sibling... same signature" below) and n_rep both got the full coerce-and-check treatment in
-  # this exact round. Confirmed: K=NA crashed with a raw "missing value where TRUE/FALSE needed"
-  # (from `if (K < 2)`); K=c(3,4) crashed with a raw "the condition has length > 1"; K="3" (a
-  # string) did NOT error at all -- "3" < 2 compares lexicographically and silently passes, then
-  # seq_len("3") silently coerces and the whole call returns a plausible-looking but type-unsafe
-  # result. Mirroring T's guard here closes the gap.
   K_in <- K
   K <- suppressWarnings(as.integer(K))
   if (length(K) != 1 || is.na(K) || K < 2) {
     stop(sprintf("exchangeable_benchmark(): K must be a single integer >= 2 (need at least 2 models); got %s.",
                   paste(format(K_in), collapse = ", ")), call. = FALSE)
   }
-  # STRICT-AUDIT FIX (2026-11-18): T is K's identical sibling here -- same "how big is this
-  # problem" role, same signature -- but never got a guard, even after K and n_rep (above/below)
-  # both did. T=-5/NA/"abc" crashed inside base rep()/rnorm() with a raw "invalid 'times'
-  # argument" error; T=10.7 didn't error at all -- it silently truncated to T=10 (rnorm()
-  # truncates its n argument internally), changing the requested panel size with no warning,
-  # unlike n_rep/n_boot/block which are all explicitly coerced with a worded error.
   T_in <- T
   T <- suppressWarnings(as.integer(T))
   if (length(T) != 1 || is.na(T) || T < 1) {
     stop(sprintf("exchangeable_benchmark(): T must be a single positive integer; got %s.",
                   paste(format(T_in), collapse = ", ")), call. = FALSE)
   }
-  # n_rep never got the same as.integer()+is.na() coercion/guard n_boot (two lines below, and in
-  # winner_stability()) already has -- a sibling gap found by a strict full-history audit. Without
-  # it, n_rep=0 or a fractional 0<n_rep<1 silently returned list(median=NA, p05=NA, p95=NA) (empty
-  # loop, no error); n_rep=NA/negative/character crashed inside numeric(n_rep) with a raw,
-  # unworded R-internal error ("invalid 'length' argument" / "vector size cannot be NA/NaN").
   n_rep_in <- n_rep
   n_rep <- suppressWarnings(as.integer(n_rep))
   if (length(n_rep) != 1 || is.na(n_rep) || n_rep <= 0) {
     stop(sprintf("exchangeable_benchmark(): n_rep must be a single positive integer; got %s.",
                   paste(format(n_rep_in), collapse = ", ")), call. = FALSE)
   }
-  # STRICT-AUDIT FIX (2026-11-18): seed was passed straight into set.seed() (via `seed + r` below)
-  # with no local guard, unlike K/T/n_rep just above (same fix commit) and unlike mcs()/compare()/
-  # identified()'s own seed= (an identical fix already made there in this same commit) -- a bad
-  # seed (NA/non-scalar/out-of-range/character) reached a raw, unworded "supplied seed is not a
-  # valid integer" error from base R's set.seed() itself instead of this file's own worded style.
   seed_in <- seed; seed <- suppressWarnings(as.integer(seed))
   if (length(seed) != 1 || is.na(seed) || seed < 0) {
     stop(sprintf("exchangeable_benchmark(): seed must be a single non-negative integer; got %s.",
                   paste(format(seed_in), collapse = ", ")), call. = FALSE)
   }
-  # STRICT-AUDIT FIX (2026-11-18): the loop below uses seed ARITHMETIC to keep each replicate's
-  # outer panel-generation draw (`seed + r`) and its inner winner_stability() bootstrap draw
-  # (`seed + 1000003 + r`) on two disjoint integer streams, using 1000003 as a fixed separation
-  # constant. Re-deriving the exact collision condition: the outer stream over the loop is
-  # {seed+r : r=1..n_rep} and the inner stream is {seed+1000003+r' : r'=1..n_rep}; a collision
-  # needs seed+r == seed+1000003+r', i.e. r = 1000003+r' for some r,r' in [1,n_rep]. The smallest
-  # satisfying r is 1000004 (at r'=1), so the smallest n_rep that can ever reach a collision is
-  # 1000004, NOT 1000003 -- n_rep=1000003 is actually collision-free (max r=1000003 can only pair
-  # with r'=0, which the loop never visits). A prior pass of this guard rejected n_rep>=1000003,
-  # which is safe (never lets a real collision through) but off-by-one too strict, needlessly
-  # rejecting the legitimate n_rep=1000003. Corrected to the exact boundary (reject only
-  # n_rep>=1000004) and confirmed directly: n_rep=1000003 runs past this guard, n_rep=1000004 and
-  # 1000005 both stop here. 1000003/1000004 are already >> any realistic n_rep (default 200), so
-  # this is not a practical restriction, only a guard against the collision becoming reachable.
+  # Outer draws use seed + r and inner bootstraps seed + 1000003 + r; the two streams first
+  # collide at n_rep = 1000004.
   if (n_rep >= 1000004L) {
     stop(sprintf(
       paste0(
@@ -844,19 +664,7 @@ exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL
       ), n_rep
     ), call. = FALSE)
   }
-  # STRICT-AUDIT FIX (2026-11-18): the n_rep guard above only protects against the TWO-STREAMS
-  # colliding with EACH OTHER; it does not protect against either stream's own arithmetic
-  # overflowing R's 32-bit integer range. `r` here is produced by seq_len(), which is an integer
-  # vector, so `seed + r` and `seed + 1000003 + r` are integer-on-integer arithmetic (1000003 is a
-  # double literal, so only the first addition promotes to double and is safe; the raw
-  # `set.seed(seed + r)` line below stays pure integer arithmetic). A seed close to
-  # .Machine$integer.max (itself a VALID, non-negative value that passes the seed guard above)
-  # silently overflows to NA on `seed + r` with only a warning, not an error -- and set.seed(NA)
-  # then raises the exact raw, unworded "supplied seed is not a valid integer" error this whole
-  # fix round exists to eliminate. Confirmed directly: seed=.Machine$integer.max, n_rep=1 crashes
-  # with that raw error (the n_rep/collision guards above do not catch it, since seed itself is
-  # perfectly valid in isolation). Guarded here using double-precision arithmetic (no overflow risk
-  # in the check itself) against the largest offset actually used in the loop below.
+  # seed + r is integer arithmetic; keep it below .Machine$integer.max so set.seed() never gets NA.
   if (seed > .Machine$integer.max - 1000003L - n_rep) {
     stop(sprintf(
       paste0(
@@ -894,9 +702,7 @@ exchangeable_benchmark <- function(K, T, n_rep = 200, n_boot = 500, block = NULL
 #'   not always finite by construction: it is `1.0` when both the numerator and denominator are
 #'   exactly `0`, `Inf` when only the denominator is `0`, and `NaN` when the numerator and
 #'   denominator have opposite signs (the ratio's sign, and so its magnitude as a "how much worse"
-#'   multiplier, is undefined). This is a found-by-fuzzing clarification (2026-11-18), not new
-#'   behavior -- the three sentinel branches were already in the code, just undocumented and
-#'   untested for the NaN case.
+#'   multiplier, is undefined).
 #' @seealso [pivot_agreement()] (a related period-sensitivity diagnostic), [decision_breakdown()].
 #' @export
 #' @examples
@@ -944,20 +750,8 @@ surprise_concentration <- function(L, labels = NULL) {
 
 #' @keywords internal
 .resolve_benchmark_p05 <- function(benchmark) {
-  # STRICT-AUDIT FIX (2026-11-18): fragility()'s own doc promises benchmark accepts "the full
-  # exchangeable_benchmark() result (or its p05)" -- a list OR a bare scalar -- but the code that
-  # pulled p05 out of it (`if (is.list(benchmark)) benchmark$p05 else benchmark[1]`) never checked
-  # that either form actually produced a usable number. Two confirmed-reachable failure modes:
-  # (1) a named list that is missing the `p05` element (e.g. `list(median=.., p95=..)`, a plausible
-  # typo'd/partial exchangeable_benchmark()-like object) makes `benchmark$p05` silently NULL;
-  # `isTRUE(stability < NULL)` is `isTRUE(logical(0))`, which is FALSE -- so a malformed benchmark
-  # silently reports "not fragile" instead of erroring, the exact opposite of a loud failure for a
-  # safety-relevant calibration input. (2) a length>1 numeric vector (not a list, so the
-  # `benchmark[1]` branch fires) silently takes only its first element with zero indication which
-  # element was used -- a caller who passed e.g. `c(eb$p95, eb$p05)` by mistake gets a confidently
-  # wrong, silently-selected answer rather than an error naming the ambiguity. Both are fixed here
-  # by requiring the resolved p05 to be a single finite number, erroring with the actual value/
-  # shape otherwise rather than letting either case fall through into a fabricated comparison.
+  # Require a single finite p05: a list without $p05 would otherwise read as "not fragile", and a
+  # multi-element vector would silently use its first element.
   if (is.list(benchmark)) {
     if (!("p05" %in% names(benchmark))) {
       stop(sprintf(
@@ -997,10 +791,7 @@ surprise_concentration <- function(L, labels = NULL) {
 #' @param n_boot,seed Bootstrap settings for `winner_stability()`.
 #' @param stability_block Block length override for the stability bootstrap.
 #' @param benchmark Optional `exchangeable_benchmark()` result (or its p05) to calibrate `fragile`.
-#' @return A named list of 25 diagnostic fields (STRICT-AUDIT FIX, 2026-11-18: this used to point
-#'   to `vignette("selectionfragility")` for "field-by-field guidance" that does not exist there
-#'   -- the vignette itself points back to `?fragility`, a circular reference that left roughly
-#'   15 of the 25 fields never documented in prose anywhere):
+#' @return A named list of 25 diagnostic fields:
 #'   \describe{
 #'     \item{pooled_winner, per_period_winner, condorcet_winner, condorcet_status}{The four
 #'       winner-selection rules this package compares; see their own help pages.}
@@ -1031,18 +822,11 @@ surprise_concentration <- function(L, labels = NULL) {
 #'       note this differs from `decision_breakdown()$removed`, which is 1-based). Zero-length,
 #'       of the same type as the labels, when `k_star == 0`.}
 #'     \item{shock_coincidence}{`NULL` if `shock_periods` was not supplied; otherwise `TRUE` iff
-#'       `responsible` is non-empty AND every period in it is also in `shock_periods`. STRICT-
-#'       AUDIT FIX (2026-11-18): this is deliberately NOT vacuous truth -- when `k_star == 0`
-#'       (`responsible` is empty, e.g. the pooled winner's margin is already degenerate), this is
-#'       `FALSE`, not `TRUE`, even though "every period in an empty set satisfies any predicate"
-#'       would suggest otherwise. An empty `responsible` means there is no k*-period evidence to
-#'       check against `shock_periods` at all, not that the (vacuous) check trivially passed.}
+#'       `responsible` is non-empty AND every period in it is also in `shock_periods` (so `FALSE`,
+#'       not vacuously `TRUE`, when `k_star == 0`).}
 #'     \item{winner_stability, winner_freq}{`winner_stability()`'s bootstrap stability and
-#'       per-model win frequency. STRICT-AUDIT FIX (2026-11-18): when the champion-vs-binding-
-#'       opponent pair is degenerate, `fragility()` computes the same `NaN`/uniform-placeholder
-#'       result INLINE rather than calling `winner_stability()` itself, so -- unlike calling
-#'       [winner_stability()] directly on the same panel -- this degenerate branch raises NO
-#'       `warning()` here; the placeholder values are identical, only the warning is absent.}
+#'       per-model win frequency. On a degenerate pair these are `NaN` and a uniform placeholder,
+#'       as from [winner_stability()], but without its warning.}
 #'     \item{fragile}{`TRUE` if degenerate; `NA` if no `benchmark` was supplied to calibrate
 #'       against (see `?selectionfragility`'s "Sentinel conventions" section); otherwise `TRUE`
 #'       iff `winner_stability` falls below `benchmark`'s p05.}
@@ -1088,7 +872,7 @@ fragility <- function(L, w = NULL, shock_periods = NULL, labels = NULL, n_boot =
   la <- as.numeric(L[[a]])
   lb <- if (!is.null(b)) as.numeric(L[[b]]) else la
   c_ <- w * (lb - la)
-  M <- .fsum(c_)  # STRICT-AUDIT FIX (2026-11-18): see .is_degenerate_pair()'s comment
+  M <- .fsum(c_)
   pscale_ab <- .pair_scale(la, lb, w, T)
   concentration <- if (M > 0 && (M / T) > .MARGIN_REL_FLOOR * pscale_ab) max(c_) / M else NaN
 
@@ -1096,7 +880,7 @@ fragility <- function(L, w = NULL, shock_periods = NULL, labels = NULL, n_boot =
   for (m in binding_ties) {
     lm <- as.numeric(L[[m]])
     cm <- w * (lm - la)
-    Mm <- .fsum(cm)  # STRICT-AUDIT FIX (2026-11-18): see .is_degenerate_pair()'s comment
+    Mm <- .fsum(cm)
     pscale_am <- .pair_scale(la, lm, w, T)
     conc_by_opp[[m]] <- if (Mm > 0 && (Mm / T) > .MARGIN_REL_FLOOR * pscale_am) max(cm) / Mm else NaN
   }

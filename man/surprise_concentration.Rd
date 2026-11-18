@@ -19,9 +19,7 @@ or P&L-style figures, which this package does not restrict to be non-negative), 
 not always finite by construction: it is \code{1.0} when both the numerator and denominator are
 exactly \code{0}, \code{Inf} when only the denominator is \code{0}, and \code{NaN} when the numerator and
 denominator have opposite signs (the ratio's sign, and so its magnitude as a "how much worse"
-multiplier, is undefined). This is a found-by-fuzzing clarification (2026-11-18), not new
-behavior -- the three sentinel branches were already in the code, just undocumented and
-untested for the NaN case.
+multiplier, is undefined).
 }
 \description{
 Surprise concentration — how lopsided is irreducible task difficulty across periods?
