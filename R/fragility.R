@@ -1,8 +1,9 @@
 # fragility.R — the decision breakdown point (k*) and ranking-fragility diagnostics.
 #
-# Faithful port of fragility.py. Indexing convention: this port uses 1-based period indices
-# throughout (R idiom), where the Python original uses 0-based -- `removed`/`responsible`
-# period positions are shifted by +1 accordingly. All numeric results (margins, k*, ratios,
+# Faithful port of fragility.py. Indexing convention: `removed` (breakdown_number()/
+# decision_breakdown()) is a 1-based R position, shifted +1 from the Python original's 0-based
+# index. `responsible` (fragility()) is a period LABEL -- a panel's own label, or by default the
+# same 0-based positional label loss_panel() assigns, matching Python. All numeric results (margins, k*, ratios,
 # winner names) match the Python oracle exactly on deterministic inputs; `winner_stability()`
 # and `exchangeable_benchmark()` depend on a block-bootstrap RNG and are NOT bit-for-bit
 # reproducible against the Python package (different RNG streams across languages) -- they are
@@ -1027,7 +1028,8 @@ surprise_concentration <- function(L, labels = NULL) {
 #'     \item{condorcet_cycle, condorcet_undefined}{Whether `condorcet_status` is `"cycle"`, and
 #'       whether no Condorcet winner exists at all (a cycle is one way that can happen).}
 #'     \item{responsible}{The k* periods (by label if supplied, else 0-based positional index --
-#'       note this differs from `decision_breakdown()$removed`, which is 1-based).}
+#'       note this differs from `decision_breakdown()$removed`, which is 1-based). Zero-length,
+#'       of the same type as the labels, when `k_star == 0`.}
 #'     \item{shock_coincidence}{`NULL` if `shock_periods` was not supplied; otherwise `TRUE` iff
 #'       `responsible` is non-empty AND every period in it is also in `shock_periods`. STRICT-
 #'       AUDIT FIX (2026-11-18): this is deliberately NOT vacuous truth -- when `k_star == 0`
@@ -1106,7 +1108,7 @@ fragility <- function(L, w = NULL, shock_periods = NULL, labels = NULL, n_boot =
   cw <- condorcet_winner(L)
   cstat <- condorcet_status(L)
   lab <- if (!is.null(labels)) labels else (seq_len(T) - 1L)
-  resp <- if (length(removed) > 0) lab[removed] else list()
+  resp <- lab[removed]  # zero-length (same type as the labels) when k* == 0
   coincide <- NULL
   if (!is.null(shock_periods)) {
     sset <- shock_periods

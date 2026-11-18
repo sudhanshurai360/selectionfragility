@@ -17,25 +17,40 @@
 # one more axis of difference (bootstrap scheme) added by the cross-language port.
 
 #' @keywords internal
-.validate_alpha <- function(alpha) {
+.validate_alpha <- function(alpha, name = "alpha") {
   # Length/NA/numeric guard FIRST: `alpha > 0 && alpha < 1` evaluates && on the raw input, so a
   # NULL/NA/length>1/non-numeric alpha would otherwise detonate R internals ("missing value where
   # TRUE/FALSE needed", "'length = 2' in coercion to 'logical(1)'") before this package's own
-  # worded message runs. Every public function taking alpha routes through here.
+  # worded message runs. Every public function taking alpha routes through here; `name` lets a
+  # caller reuse this range check for a differently-named (0,1) parameter (power, mcs_alpha)
+  # without the error blaming `alpha`.
   if (length(alpha) != 1 || !is.numeric(alpha) || !is.finite(alpha)) {
     stop(sprintf(
-      "alpha must be a single finite number strictly between 0 and 1; got a %s of length %d.",
-      class(alpha)[1], length(alpha)
+      "%s must be a single finite number strictly between 0 and 1; got a %s of length %d.",
+      name, class(alpha)[1], length(alpha)
     ), call. = FALSE)
   }
   if (!(alpha > 0.0 && alpha < 1.0)) {
+    what <- if (name == "power") {
+      "it is a target probability, e.g. 0.80"
+    } else {
+      "it is a significance level, e.g. 0.05 or 0.10"
+    }
     stop(sprintf(
-      paste0(
-        "alpha must be strictly between 0 and 1 (it is a significance level, e.g. 0.05 or 0.10, ",
-        "not a percentage); got %s."
-      ), alpha
+      "%s must be strictly between 0 and 1 (%s, not a percentage); got %s.",
+      name, what, alpha
     ), call. = FALSE)
   }
+}
+
+#' @keywords internal
+.validate_seed <- function(seed, what) {
+  seed_int <- suppressWarnings(as.integer(seed))
+  if (length(seed_int) != 1 || is.na(seed_int) || seed_int < 0) {
+    stop(sprintf("%s must be a single non-negative integer; got %s.", what,
+                  paste(format(seed), collapse = ", ")), call. = FALSE)
+  }
+  invisible(seed_int)
 }
 
 #' @keywords internal
@@ -172,8 +187,8 @@
       paste0(
         "identified()/mcs_size(): T=%d periods for K=%d models (T/K=%.1f) is a small-sample ",
         "regime where this procedure's false-elimination rate runs well above the nominal ",
-        "alpha=%.2g -- measured at ~18%% (not ~10%%) at T=30/K=3, and ~41%% (not ~10%%) at T=12/K=4, ",
-        "under a TRUE null with no real difference among models. This is a blanket caveat tied to ",
+        "alpha=%.2g -- under a TRUE null with no real difference among models, at alpha=0.10 it was ",
+        "measured at ~18%% (not 10%%) at T=30/K=3 and ~41%% at T=12/K=4. This is a blanket caveat tied to ",
         "T alone, not a diagnosis of THIS panel -- a genuinely well-separated panel at this T can ",
         "still have a reliable VERDICT; but if the models are close, treat 'not identified' as ",
         "noisier than alpha=%.2g implies, and an 'identified' singleton with the same suspicion. ",
@@ -239,11 +254,15 @@
 
 #' Size of the Model Confidence Set at level alpha (independent engine)
 #'
-#' Delegates to `MCS::MCSprocedure()` (Hansen, Lunde & Nason 2011) -- see this file's header for
-#' how this engine relates to this package's own native `mcs()`/`model_confidence_set()`.
+#' Delegates to `MCS::MCSprocedure()` (Hansen, Lunde & Nason 2011; range statistic, moving-block
+#' bootstrap). This is a second, independently implemented engine kept separate from this
+#' package's own native [mcs()]/[model_confidence_set()] as a cross-check: the two agree closely
+#' when `reps`/`B` are matched, but are not required to agree on unmatched defaults.
 #'
 #' @param L A named list `{model: vector}` or a `loss_panel`.
-#' @param w Optional per-period weights; must be uniform (or `NULL`) -- see this file's header.
+#' @param w Optional per-period weights; must be uniform (or `NULL`). `MCS::MCSprocedure()` has no
+#'   support for period weights, so non-uniform weights raise an error rather than being silently
+#'   ignored.
 #' @param alpha Significance level (strictly between 0 and 1).
 #' @param reps Number of bootstrap replications (>= 2).
 #' @param block_size Block length for the moving-block bootstrap (0 = iid resampling).

@@ -1,6 +1,7 @@
 # Oracle values generated from the Python `selection_fragility` package (v1.0.4) on the same
-# inputs -- see release/selection-fragility/ (the Python package this ports). Indices here are
-# 1-based (R); the Python oracle's 0-based `removed`/`responsible` indices are shifted by +1.
+# inputs -- see release/selection-fragility/ (the Python package this ports). `removed` indices
+# here are 1-based (R), shifted +1 from the Python oracle; `responsible` holds period LABELS, which
+# default to the same 0-based positional labels Python uses.
 
 quickstart_L <- list(
   ar1    = c(1.00, 0.98, 1.02, 1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98),

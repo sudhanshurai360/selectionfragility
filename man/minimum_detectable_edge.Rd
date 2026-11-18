@@ -11,11 +11,7 @@ minimum_detectable_edge(L, w = NULL, power = 0.8, alpha = 0.05)
 
 \item{w}{Optional numeric vector of per-period weights.}
 
-\item{power}{Target power (> 0.5). NOTE: an invalid \code{power} that is \verb{<= 0} or \verb{>= 1} (or
-non-numeric/\code{NA}) raises an error worded "alpha must be ..." -- \code{.validate_one_sided()}
-reuses \code{.validate_alpha()}'s range check for \code{power} too, and that checker's message
-hardcodes "alpha"; see the comment above \code{.validate_one_sided()} in resolution.R. If you see
-that message after passing a bad \code{power}, the problem is \code{power}, not \code{alpha}.}
+\item{power}{Target power, strictly between 0.5 and 1.}
 
 \item{alpha}{One-sided significance level (< 0.5).}
 }

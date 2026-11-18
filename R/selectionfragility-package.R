@@ -7,8 +7,9 @@
 #' Start at [loss_panel()] and [report()], or read `vignette("selectionfragility")` for a guided tour.
 #'
 #' @section Running this package's bootstrap functions in parallel:
-#' [mcs()], [winner_stability()], and [exchangeable_benchmark()] all require an explicit `seed=`
-#' rather than drawing one implicitly, which makes them safe to call from
+#' [mcs()], [winner_stability()], and [exchangeable_benchmark()] all take a `seed=` argument
+#' (default `0`), reseed R's RNG from it, and restore the caller's `.Random.seed` on exit -- so
+#' their results neither depend on nor disturb the session's RNG state. That makes them safe to call from
 #' `parallel::mclapply()`/`future`/`foreach` workers -- but only if each worker is given a
 #' *different* seed. `parallel::mclapply()` on non-Windows forks the current process, and a fork
 #' gives every child an independent, non-interfering copy of both R's global options (confirmed:

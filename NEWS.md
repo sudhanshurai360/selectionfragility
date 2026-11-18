@@ -11,7 +11,7 @@ Initial release: a native R port of the Python package
   refusal rules), `prop22` (zero-simulation Proposition 2.2 certificate), `pivot` (concentration
   share, pivot agreement), `report` (one-screen summary), `compare` (run-over-run champion-change
   diagnostic).
-* 2947 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
+* 2971 tests (`testthat`, edition 3; grew from an initial 187 across several hardening rounds --
   this count will keep moving as hardening continues; check `devtools::test()`'s own output rather
   than treating this number as authoritative), including a dedicated cross-language
   oracle-comparison suite verified against the Python package's live behavior, not just its
@@ -409,3 +409,40 @@ Initial release: a native R port of the Python package
   dominate at smaller T) -- its roxygen docs now say so explicitly. 2947 tests, `R CMD check
   --as-cran`: 0 errors, 0 warnings, 2 NOTEs (re-confirmed after this round, independently, not
   just via agent self-report).
+* A line-by-line manual review of every R file, help page, the vignette, and the README
+  (2026-11-18, done directly rather than delegated) found and fixed these. None changes a numeric
+  result on valid input:
+  - `model_confidence_set()` on a `loss_panel` with non-uniform weights silently discarded the
+    weights and returned an unweighted Model Confidence Set, while `identified()`/`mcs_size()`/
+    `report()` on the same panel correctly refused. It now refuses too, and points to
+    `panel$losses` for anyone who deliberately wants an unweighted MCS. Python's
+    `model_confidence_set()` has the same silent drop; R now refuses where Python proceeds.
+  - `resolution_report()` swallowed an invalid `mcs_alpha`/`mcs_seed` (e.g. `mcs_alpha = 2`) into
+    `identified = NULL`, `fragility_read = "undetermined"`, which looks exactly like a genuine,
+    data-driven MCS refusal. Both are now validated up front and raise an error. `report()` got the
+    same up-front check on its own `alpha`/`seed`, which previously degraded into a half-filled
+    report. Python still swallows these.
+  - An invalid `power` (e.g. `power = 1`) raised "alpha must be ...", naming the wrong argument.
+    It now says "power must be ...". Python's message still says "alpha".
+  - `selection_regret()` with all positive weight on one period raised "weights are all zero"
+    about weights that were not all zero. It still errors on that input (as Python does), but now
+    names the real cause and the period.
+  - `report()`'s PIVOT line printed Date labels as `%Y-%m` regardless of the panel's cadence, so
+    on a daily panel a pivotal day was named only by its month ("2024-03"), and switched to full
+    dates only when two pivotal days happened to share a month. Labels now print at the panel's
+    own cadence: unchanged `%Y-%m` for monthly-or-coarser panels (identical to Python), the full
+    date for daily panels, and date plus time for sub-daily `POSIXct` labels. On non-monthly Date
+    labels R's printed PIVOT text therefore differs from Python's.
+  - The small-T warning's measured rates (~18%, ~41%) were taken at alpha = 0.10 but printed next
+    to the caller's own alpha, so `alpha = 0.05` read as "alpha=0.05 ... (not ~10%)". The warning
+    now states that the measurements are at alpha = 0.10.
+  - `fragility()$responsible` was `list()` when k* = 0 but a typed vector otherwise; it is now
+    always a vector of the labels' own type (zero-length when k* = 0).
+  - Help-page and doc fixes: three help pages pointed users to "this file's header" (source
+    comments a user never sees), now replaced with self-contained text; `?selectionfragility`
+    said the bootstrap functions "require" a seed when each defaults to `seed = 0`; the vignette
+    and README pointed to an accompanying paper that is not yet citable, now worded to match the
+    Python repository's own citation status; three unexported internal helpers no longer ship
+    their own help pages.
+  2971 tests, `R CMD check --as-cran`: 0 errors, 0 warnings, 2 NOTEs (new submission; local
+  HTML Tidy version).

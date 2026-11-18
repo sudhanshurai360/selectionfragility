@@ -14,8 +14,9 @@ Start at \code{\link[=loss_panel]{loss_panel()}} and \code{\link[=report]{report
 }
 \section{Running this package's bootstrap functions in parallel}{
 
-\code{\link[=mcs]{mcs()}}, \code{\link[=winner_stability]{winner_stability()}}, and \code{\link[=exchangeable_benchmark]{exchangeable_benchmark()}} all require an explicit \verb{seed=}
-rather than drawing one implicitly, which makes them safe to call from
+\code{\link[=mcs]{mcs()}}, \code{\link[=winner_stability]{winner_stability()}}, and \code{\link[=exchangeable_benchmark]{exchangeable_benchmark()}} all take a \verb{seed=} argument
+(default \code{0}), reseed R's RNG from it, and restore the caller's \code{.Random.seed} on exit -- so
+their results neither depend on nor disturb the session's RNG state. That makes them safe to call from
 \code{parallel::mclapply()}/\code{future}/\code{foreach} workers -- but only if each worker is given a
 \emph{different} seed. \code{parallel::mclapply()} on non-Windows forks the current process, and a fork
 gives every child an independent, non-interfering copy of both R's global options (confirmed:

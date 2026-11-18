@@ -18,7 +18,10 @@ A sorted character vector of model names in the certified tied subset.
 }
 \description{
 The champion plus every rival whose pairwise k* is certified non-significant by Proposition 2.2.
-NOT a confidence set and NOT nested in the Model Confidence Set -- see this file's header.
+A no-bootstrap lower bound on the tied set's size -- NOT a confidence set, and NOT nested in the
+Model Confidence Set: the two use different criteria (an i.i.d. population-sd certificate here
+vs. the MCS's block bootstrap), so on a real panel this subset can diverge from the MCS in either
+direction. Use it as a lower bound, never as an alternative MCS.
 }
 \examples{
 # ar1 and nbeats are a genuine near-tie; ets is clearly worse.

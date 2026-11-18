@@ -66,7 +66,8 @@ largest-contribution period (\code{NaN} if degenerate); see \code{\link[=concent
 \item{condorcet_cycle, condorcet_undefined}{Whether \code{condorcet_status} is \code{"cycle"}, and
 whether no Condorcet winner exists at all (a cycle is one way that can happen).}
 \item{responsible}{The k* periods (by label if supplied, else 0-based positional index --
-note this differs from \code{decision_breakdown()$removed}, which is 1-based).}
+note this differs from \code{decision_breakdown()$removed}, which is 1-based). Zero-length,
+of the same type as the labels, when \code{k_star == 0}.}
 \item{shock_coincidence}{\code{NULL} if \code{shock_periods} was not supplied; otherwise \code{TRUE} iff
 \code{responsible} is non-empty AND every period in it is also in \code{shock_periods}. STRICT-
 AUDIT FIX (2026-11-18): this is deliberately NOT vacuous truth -- when \code{k_star == 0}

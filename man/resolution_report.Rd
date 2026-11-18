@@ -60,39 +60,13 @@ for a quantified example). Previously silently pinned to \code{seed=0}; pass a f
 yourself near a borderline alpha if this matters for your use case.
 }
 
-\section{Limitation}{
- R1 (\code{resolved}) and R2 (\code{identified}/\code{fragility_read}) CAN refuse
-simultaneously for genuinely different reasons on the same panel (e.g. the edge isn't powered
-AND the weights are non-uniform, which makes the MCS call itself refuse) without producing an
-inconsistent signal -- \code{resolved} and \code{identified} are separate fields in the returned list,
-so a caller who inspects both (not just \code{fragility_read}) can always tell which gate(s)
-actually failed; confirmed directly on a constructed panel where both failed at once. The
-gap found instead is upstream of that: the \code{tryCatch(..., error = function(e) e)} around the
-internal \code{identified()} call below catches EVERY error it can raise, with no check on WHAT
-the error actually is, and silently discards the error's own message -- collapsing it into
-the exact same \code{identified = NULL}, \code{fragility_read = "undetermined"} result as a genuine,
-data-driven MCS refusal (e.g. non-uniform weights). This means a caller's own INVALID
-ARGUMENT -- e.g. \code{mcs_alpha} outside (0, 1), or a negative/non-integer \code{mcs_seed} -- is
-silently absorbed into what looks like an honest "undetermined" statistical read, with no
-way to tell from the returned list alone that the call never actually reached a real MCS
-computation at all. Confirmed reproducible: \code{resolution_report(L, mcs_alpha = 2)} and
-\code{resolution_report(L, mcs_seed = -5)} both silently return \code{identified = NULL},
-\code{fragility_read = "undetermined"} -- identical to a genuine non-identification -- instead of
-surfacing \code{identified()}'s own clear error ("alpha must be strictly between 0 and 1...",
-"seed must be a single non-negative integer..."). CONFIRMED SHARED, oracle-pinned behavior:
-the identical repro against the Python original (\code{resolution.py}'s own \verb{except ValueError:}
-around the same call -- \code{identified()}'s own alpha/seed validation also raises \code{ValueError}
-in Python, so it is caught by the exact same handler) reproduces the identical silent
-swallow, \verb{\{'identified': None, 'fragility_read': 'undetermined'\}}, on \code{mcs_alpha=2} in Python
-too -- this is a pre-existing property of the shared refusal-rule design (a blanket catch
-around the MCS call with no distinction between "the data forced a refusal" and "the caller's
-own argument was invalid"), not something introduced by the R port. Left undocumented-until-
-now rather than fixed; narrowing this in R alone (e.g. validating \code{mcs_alpha}/\code{mcs_seed}
-before the \code{tryCatch}, so a bad argument raises immediately instead of being swallowed) would
-diverge from the Python oracle's current behavior on this exact input -- left as a documented
-caveat for the same cross-language-parity reason as this function's other \verb{@section}s above.
-Double-check \code{mcs_alpha}/\code{mcs_seed} are in-range yourself before trusting an "undetermined"
-\code{fragility_read} as a genuine statistical read rather than your own typo.
+\section{Reading the two gates}{
+ R1 (\code{resolved}) and R2 (\code{identified}/\code{fragility_read}) can
+refuse at the same time for different reasons (e.g. the edge isn't powered AND non-uniform
+weights make the MCS call refuse). Inspect both fields, not just \code{fragility_read}, to see which
+gate failed. \code{identified = NULL} means the MCS could not be computed for this panel (a
+data-driven refusal, such as non-uniform weights); an invalid \code{mcs_alpha}/\code{mcs_seed} raises an
+error immediately rather than being reported as "undetermined".
 }
 
 \examples{

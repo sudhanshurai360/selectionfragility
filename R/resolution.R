@@ -3,30 +3,9 @@
 # in place of scipy.stats.t.ppf (same Student-t quantile function).
 
 #' @keywords internal
-# KNOWN LIMITATION, NOT FIXED HERE (7th-round exhaustive-adversarial pass, 2026-11-18, boundary-
-# value lens on `power`): `power` is range-checked by calling `.validate_alpha(power)` below --
-# reusing the SAME validator written for `alpha` -- but `.validate_alpha()`'s error text hardcodes
-# the literal word "alpha" in every branch (type/length/finiteness AND the (0,1)-range message).
-# So any `power` value that fails at THIS stage (power <= 0, power >= 1, power = NA, power =
-# "x"/a factor/a length>1 vector, power = Inf) raises an error that says "alpha must be ... "
-# instead of naming `power` -- misdirecting a caller who passed a perfectly valid `alpha` but an
-# invalid `power` into re-checking the wrong argument. The power-specific message just below
-# ("power must be > 0.5 ...") is ONLY reached for 0.5 < power is false in the ordinary 0 < power <
-# 1 range (e.g. power = 0.3); it is never reached for power <= 0 or power >= 1, because
-# `.validate_alpha(power)` throws its "alpha"-worded error first. Confirmed reproducible:
-# `minimum_detectable_edge(L, power = 1)`, `power = 0`, `power = 1.5`, `power = NA`, and
-# `power = "x"` all raise an "alpha must be ..." message (see test-resolution.R). CONFIRMED
-# SHARED, oracle-pinned behavior: the Python original's `_validate_one_sided()` (resolution.py)
-# does the identical `_validate_alpha(power)` reuse of the identical "alpha"-worded
-# `_validate_alpha()` (identify.py), so the identical misattributed message reproduces in Python
-# too on `power=1`/`power=0`/etc. -- this is a pre-existing property of the shared validation
-# design (one range-checker written for one named parameter, reused unmodified for a second,
-# differently-named parameter), not something introduced by the R port. Left documented rather
-# than fixed for the same cross-language-parity reason as this file's other known limitations:
-# giving `power` its own distinctly-worded range/type error in R alone would diverge from the
-# Python oracle's current error text on this exact input, a call this package's review discipline
-# leaves to a dedicated, deliberate pass on both sides rather than a unilateral one here. If a
-# `power` argument raises an "alpha must be ..." message, re-check `power`, not `alpha`.
+# `power` reuses .validate_alpha()'s (0,1) range check under its own name, so an invalid power
+# raises "power must be ...", not "alpha must be ...". (Python's _validate_one_sided() still
+# reuses the alpha-worded message here; error TEXT is not part of cross-language numeric parity.)
 .validate_one_sided <- function(alpha, power = NULL) {
   .validate_alpha(alpha)
   if (alpha >= 0.5) {
@@ -39,7 +18,7 @@
     ), call. = FALSE)
   }
   if (!is.null(power)) {
-    .validate_alpha(power)
+    .validate_alpha(power, name = "power")
     if (power <= 0.5) {
       stop(sprintf(
         paste0(
@@ -159,6 +138,7 @@
 #' function, its PIVOT paragraph reflects `decision_breakdown()`/`concentration_share()` -- see the
 #' inline comment at report.R's PIVOT call site.
 #' @keywords internal
+#' @noRd
 .binding_rival <- function(L, w, champ) {
   means <- sapply(names(L), function(m) stats::weighted.mean(as.numeric(L[[m]]), w))
   rivals <- setdiff(names(L), champ)
@@ -218,11 +198,7 @@
 #'
 #' @param L A named list `{model: vector}` or a `loss_panel`.
 #' @param w Optional numeric vector of per-period weights.
-#' @param power Target power (> 0.5). NOTE: an invalid `power` that is `<= 0` or `>= 1` (or
-#'   non-numeric/`NA`) raises an error worded "alpha must be ..." -- `.validate_one_sided()`
-#'   reuses `.validate_alpha()`'s range check for `power` too, and that checker's message
-#'   hardcodes "alpha"; see the comment above `.validate_one_sided()` in resolution.R. If you see
-#'   that message after passing a bad `power`, the problem is `power`, not `alpha`.
+#' @param power Target power, strictly between 0.5 and 1.
 #' @param alpha One-sided significance level (< 0.5).
 #' @return The minimum detectable edge, as a fraction of the champion's loss level.
 #' @section Assumption: assumes no autocorrelation in the per-period (rival - champion) loss
@@ -389,31 +365,9 @@ mcb_bound <- function(L, w = NULL, alpha = 0.05) {
 #' @param weights Optional numeric vector of per-period weights (primary name).
 #' @param w Optional alias for `weights` (keyword-only in the Python original; pass only one).
 #' @return The weighted-average realised regret of the picking rule.
-#' @section Limitation: if a single period carries ALL of the panel's positive weight (every
-#'   other period has weight exactly 0), this crashes with the message "weights are all zero; at
-#'   least one period must carry positive weight" -- even though the WEIGHTS YOU PASSED ARE NOT
-#'   ALL ZERO and pass this same package's own top-level weight validation fine (`loss_panel()`,
-#'   `pooled_winner()`, etc. all accept them without complaint). The message is misleading about
-#'   whose weights are the problem: the leave-one-period-out loop below re-derives a fold weight
-#'   vector (`wv[keep]`) for every held-out period `t`, and when `t` is the single period holding
-#'   all the weight, that fold's weight vector is all-zero, and it is THAT internal, derived
-#'   vector -- not your original `weights`/`w` argument -- that trips the all-zero check inside
-#'   `pooled_winner()`'s own call to `.validate_losses()`. A caller debugging this error by
-#'   re-checking their own weight vector will find nothing wrong with it, because nothing IS wrong
-#'   with it. Confirmed reproducible: `selection_regret(list(a=c(1,2,3,4,5), b=c(2,1,4,3,6)),
-#'   w=c(0,0,0,1,0))` raises this exact message, even via a `loss_panel()`-wrapped call (not just
-#'   the raw-list entry point). CONFIRMED SHARED, oracle-pinned behavior: the identical repro
-#'   against the installed Python original (`selection-fragility` 1.0.4) raises the identical
-#'   `ValueError` with the identical message -- this is a pre-existing property of the shared
-#'   leave-one-out design (re-deriving fold weights via plain subsetting with no degenerate-fold
-#'   guard), not something introduced by the R port. Left undocumented-until-now rather than fixed;
-#'   fixing it (e.g. skipping degenerate folds, or raising a clearer fold-specific message) in R
-#'   alone would diverge from the Python oracle's current behavior on this exact input -- a
-#'   genuine cross-language-parity call this package's review discipline leaves to a dedicated,
-#'   deliberate pass on both sides rather than a unilateral one here. Avoid concentrating 100% of
-#'   a panel's weight on a single period if you intend to call `selection_regret()` on it; spread
-#'   it across at least two periods, or pre-filter the zero-weight periods out of `L`/`w` entirely
-#'   before calling.
+#' @section Limitation: needs positive weight on at least two periods -- a leave-one-period-out
+#'   fold that holds out the only weighted period has nothing left to pick a champion from, so that
+#'   case raises an error naming the period.
 #' @seealso [resolution_report()], [decision_breakdown()].
 #' @examples
 #' L <- list(
@@ -443,6 +397,13 @@ selection_regret <- function(L, weights = NULL, w = NULL) {
   T <- .validate_losses(L, weights)
   wv <- if (is.null(weights)) rep(1, T) else as.numeric(weights)
   if (T < 3) stop(sprintf("need at least 3 periods for leave-one-period-out selection_regret; got T=%d.", T), call. = FALSE)
+  if (sum(wv > 0) == 1) {
+    stop(sprintf(paste0(
+      "selection_regret(): all of the positive weight is on a single period (position %d), so ",
+      "leaving that period out leaves a fold with no weight to pick a champion from. Spread the ",
+      "weight across at least two periods, or drop the zero-weight periods before calling."
+    ), which(wv > 0)), call. = FALSE)
+  }
   models <- names(L)
   M <- stats::setNames(lapply(models, function(m) as.numeric(L[[m]])), models)
   regrets <- numeric(T)
@@ -490,38 +451,12 @@ selection_regret <- function(L, weights = NULL, w = NULL) {
 #'   borderline panel the verdict can be seed-sensitive (see `?mcs`'s "Adversarial use" section
 #'   for a quantified example). Previously silently pinned to `seed=0`; pass a few different seeds
 #'   yourself near a borderline alpha if this matters for your use case.
-#' @section Limitation: R1 (`resolved`) and R2 (`identified`/`fragility_read`) CAN refuse
-#'   simultaneously for genuinely different reasons on the same panel (e.g. the edge isn't powered
-#'   AND the weights are non-uniform, which makes the MCS call itself refuse) without producing an
-#'   inconsistent signal -- `resolved` and `identified` are separate fields in the returned list,
-#'   so a caller who inspects both (not just `fragility_read`) can always tell which gate(s)
-#'   actually failed; confirmed directly on a constructed panel where both failed at once. The
-#'   gap found instead is upstream of that: the `tryCatch(..., error = function(e) e)` around the
-#'   internal `identified()` call below catches EVERY error it can raise, with no check on WHAT
-#'   the error actually is, and silently discards the error's own message -- collapsing it into
-#'   the exact same `identified = NULL`, `fragility_read = "undetermined"` result as a genuine,
-#'   data-driven MCS refusal (e.g. non-uniform weights). This means a caller's own INVALID
-#'   ARGUMENT -- e.g. `mcs_alpha` outside (0, 1), or a negative/non-integer `mcs_seed` -- is
-#'   silently absorbed into what looks like an honest "undetermined" statistical read, with no
-#'   way to tell from the returned list alone that the call never actually reached a real MCS
-#'   computation at all. Confirmed reproducible: `resolution_report(L, mcs_alpha = 2)` and
-#'   `resolution_report(L, mcs_seed = -5)` both silently return `identified = NULL`,
-#'   `fragility_read = "undetermined"` -- identical to a genuine non-identification -- instead of
-#'   surfacing `identified()`'s own clear error ("alpha must be strictly between 0 and 1...",
-#'   "seed must be a single non-negative integer..."). CONFIRMED SHARED, oracle-pinned behavior:
-#'   the identical repro against the Python original (`resolution.py`'s own `except ValueError:`
-#'   around the same call -- `identified()`'s own alpha/seed validation also raises `ValueError`
-#'   in Python, so it is caught by the exact same handler) reproduces the identical silent
-#'   swallow, `{'identified': None, 'fragility_read': 'undetermined'}`, on `mcs_alpha=2` in Python
-#'   too -- this is a pre-existing property of the shared refusal-rule design (a blanket catch
-#'   around the MCS call with no distinction between "the data forced a refusal" and "the caller's
-#'   own argument was invalid"), not something introduced by the R port. Left undocumented-until-
-#'   now rather than fixed; narrowing this in R alone (e.g. validating `mcs_alpha`/`mcs_seed`
-#'   before the `tryCatch`, so a bad argument raises immediately instead of being swallowed) would
-#'   diverge from the Python oracle's current behavior on this exact input -- left as a documented
-#'   caveat for the same cross-language-parity reason as this function's other `@section`s above.
-#'   Double-check `mcs_alpha`/`mcs_seed` are in-range yourself before trusting an "undetermined"
-#'   `fragility_read` as a genuine statistical read rather than your own typo.
+#' @section Reading the two gates: R1 (`resolved`) and R2 (`identified`/`fragility_read`) can
+#'   refuse at the same time for different reasons (e.g. the edge isn't powered AND non-uniform
+#'   weights make the MCS call refuse). Inspect both fields, not just `fragility_read`, to see which
+#'   gate failed. `identified = NULL` means the MCS could not be computed for this panel (a
+#'   data-driven refusal, such as non-uniform weights); an invalid `mcs_alpha`/`mcs_seed` raises an
+#'   error immediately rather than being reported as "undetermined".
 #' @examples
 #' # Only 4 periods, and nbeats narrowly beats ar1 on average -- but with this
 #' # little data, that edge is NOT resolved: it falls short of the significance
@@ -541,6 +476,12 @@ selection_regret <- function(L, weights = NULL, w = NULL) {
 #' r$fragility_read # "undetermined" -- too little data to certify this pick
 #' @export
 resolution_report <- function(L, w = NULL, alpha = 0.05, power = 0.80, mcs_alpha = 0.10, mcs_seed = 0) {
+  # Validate the R2 arguments BEFORE the tryCatch around identified() below: that catch exists to
+  # turn a data-driven MCS refusal (e.g. non-uniform weights) into fragility_read="undetermined",
+  # and would otherwise also swallow a caller's own typo (mcs_alpha=2, mcs_seed=-5) into the same
+  # honest-looking "undetermined" read. (Python's resolution_report() still swallows these.)
+  .validate_alpha(mcs_alpha, name = "mcs_alpha")
+  .validate_seed(mcs_seed, "resolution_report(): mcs_seed")
   up <- .unwrap_panel(L, w); L <- up$L; w <- up$w
   L <- .as_loss_dict(L)
   T <- .validate_losses(L, w)
@@ -610,7 +551,7 @@ resolution_report <- function(L, w = NULL, alpha = 0.05, power = 0.80, mcs_alpha
   # and fragility_read to "undetermined" regardless of this warning -- gating on fragility_read
   # here would make this guard unreachable dead code (the exact bug class already found and fixed
   # in report.R's Prop 2.2 branch). report()'s own RESOLUTION line prints "-- resolved" from
-  # `resolved` directly (R/report.R line 158), independent of fragility_read/VERDICT, which is
+  # `resolved` directly (see report()'s RESOLUTION block), independent of fragility_read/VERDICT, which is
   # exactly the risk this guard is meant to catch.
   # STRICT-AUDIT FIX (2026-11-18): the guard originally fired on abs(wv_cor) > 0.2 -- but a NEGATIVE
   # correlation (high weight on the CALM periods) makes .weighted_se() OVERSTATE the true SE, which

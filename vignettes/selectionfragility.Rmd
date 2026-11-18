@@ -144,7 +144,7 @@ side by side during a migration:
   `identified(L, w)`) does not do the same thing in the other — pass `w=` by name if you maintain
   code for both.
 
-`identified()`/`mcs_size()` can run on the CRAN [`MCS`](https://cran.r-project.org/package=MCS)
+`identified()`/`mcs_size()` run on the CRAN [`MCS`](https://cran.r-project.org/package=MCS)
 package's own `MCSprocedure()` engine, cross-checked against this package's independent native
 re-implementation (`mcs()`/`model_confidence_set()`) — MCS membership by itself is not new here,
 `MCS` already does that; what this package adds on top is k*, resolution/power diagnostics,
@@ -300,5 +300,5 @@ step should gate on.
   competition settings" section) for the gaming vectors to guard against before using an MCS
   "tie" claim in a competition or leaderboard context.
 
-See the companion paper for the full power/false-discovery tables and derivations behind these
-statistics.
+The derivations and power/false-discovery tables behind these statistics are in an accompanying
+paper; its citation will be added once it has a stable published reference.

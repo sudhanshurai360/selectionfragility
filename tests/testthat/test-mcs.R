@@ -140,3 +140,16 @@ test_that("model_confidence_set() propagates elimination=, mirroring mcs() (stri
   res2 <- model_confidence_set(L, B = 200, seed = 1, elimination = "raw")
   expect_equal(res2$elimination, "raw")
 })
+
+test_that("model_confidence_set() refuses a non-uniformly weighted loss_panel instead of dropping the weights", {
+  # REGRESSION: .unwrap_panel()'s weights were discarded, so a weighted panel silently got an
+  # unweighted MCS while identified()/report() on the same panel correctly refused.
+  set.seed(3)
+  L <- list(a = rnorm(40, 1, .3), b = rnorm(40, 1.05, .3), c = rnorm(40, 1.3, .3))
+  p_w <- loss_panel(L, weights = c(rep(10, 20), rep(1, 20)))
+  expect_error(model_confidence_set(p_w, B = 200, seed = 1), "non-uniform weights")
+  # the documented escape hatch, and uniform-weight panels, still work
+  expect_type(model_confidence_set(p_w$losses, B = 200, seed = 1)$surviving, "character")
+  expect_type(model_confidence_set(loss_panel(L, weights = rep(3, 40)), B = 200, seed = 1)$surviving, "character")
+  expect_type(model_confidence_set(loss_panel(L), B = 200, seed = 1)$surviving, "character")
+})

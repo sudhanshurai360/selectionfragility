@@ -9,7 +9,9 @@ mcs_size(L, w = NULL, alpha = 0.1, reps = 500, block_size = 3, seed = 0)
 \arguments{
 \item{L}{A named list \code{{model: vector}} or a \code{loss_panel}.}
 
-\item{w}{Optional per-period weights; must be uniform (or \code{NULL}) -- see this file's header.}
+\item{w}{Optional per-period weights; must be uniform (or \code{NULL}). \code{MCS::MCSprocedure()} has no
+support for period weights, so non-uniform weights raise an error rather than being silently
+ignored.}
 
 \item{alpha}{Significance level (strictly between 0 and 1).}
 
@@ -23,8 +25,10 @@ mcs_size(L, w = NULL, alpha = 0.1, reps = 500, block_size = 3, seed = 0)
 Integer size of the surviving Model Confidence Set.
 }
 \description{
-Delegates to \code{MCS::MCSprocedure()} (Hansen, Lunde & Nason 2011) -- see this file's header for
-how this engine relates to this package's own native \code{mcs()}/\code{model_confidence_set()}.
+Delegates to \code{MCS::MCSprocedure()} (Hansen, Lunde & Nason 2011; range statistic, moving-block
+bootstrap). This is a second, independently implemented engine kept separate from this
+package's own native \code{\link[=mcs]{mcs()}}/\code{\link[=model_confidence_set]{model_confidence_set()}} as a cross-check: the two agree closely
+when \code{reps}/\code{B} are matched, but are not required to agree on unmatched defaults.
 }
 \examples{
 # A 10-period, 3-model loss panel where ar1 and ets are tied and nbeats is clearly worse.

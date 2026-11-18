@@ -273,9 +273,9 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
     warning(sprintf(
       paste0(
         "mcs(): T=%d periods for K=%d models (T/K=%.1f) is a small-sample regime where this ",
-        "procedure's false-elimination rate runs well above the nominal alpha=%.2g -- measured at ",
-        "~18%% (not ~10%%) at T=30/K=3, and ~41%% (not ~10%%) at T=12/K=4, under a TRUE null with no ",
-        "real difference among models. This is a blanket caveat tied to T alone, not a diagnosis of ",
+        "procedure's false-elimination rate runs well above the nominal alpha=%.2g -- under a TRUE ",
+        "null with no real difference among models, at alpha=0.10 it was measured at ~18%% (not 10%%) ",
+        "at T=30/K=3 and ~41%% at T=12/K=4. This is a blanket caveat tied to T alone, not a diagnosis of ",
         "THIS panel -- a genuinely well-separated panel at this T can still have a reliable VERDICT; ",
         "but if the models are close, treat 'not identified' as noisier than alpha=%.2g implies, and ",
         "an 'identified' singleton with the same suspicion. Not an error -- small-T panels are ",
@@ -381,6 +381,18 @@ mcs <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NU
 #' @export
 model_confidence_set <- function(L, alpha = 0.10, B = 2000, block = 3, seed = 0, elimination = NULL) {
   up <- .unwrap_panel(L, NULL); L <- up$L
+  # A weighted loss_panel's pooled champion is computed WITH its weights, but this engine is
+  # unweighted -- refuse rather than silently return an MCS for a differently-weighted problem
+  # (the same rule identified()/mcs_size()/report() already enforce). Python's
+  # model_confidence_set() still drops a LossPanel's weights silently.
+  if (!is.null(up$w) && !.weights_are_uniform(as.numeric(up$w))) {
+    stop(paste0(
+      "model_confidence_set(): this loss_panel has non-uniform weights, but the Model Confidence ",
+      "Set engine is unweighted -- computing it here would silently ignore the weights the panel's ",
+      "pooled champion is computed with. Pass panel$losses instead if you deliberately want an ",
+      "unweighted MCS."
+    ), call. = FALSE)
+  }
   models <- names(L)
   if (length(models) < 2) {
     stop(sprintf("model_confidence_set needs >=2 models; got %d.", length(models)), call. = FALSE)

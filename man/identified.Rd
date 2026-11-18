@@ -9,7 +9,9 @@ identified(L, w = NULL, alpha = 0.1, reps = 500, block_size = 3, seed = 0)
 \arguments{
 \item{L}{A named list \code{{model: vector}} or a \code{loss_panel}.}
 
-\item{w}{Optional per-period weights; must be uniform (or \code{NULL}) -- see this file's header.}
+\item{w}{Optional per-period weights; must be uniform (or \code{NULL}). \code{MCS::MCSprocedure()} has no
+support for period weights, so non-uniform weights raise an error rather than being silently
+ignored.}
 
 \item{alpha}{Significance level (strictly between 0 and 1).}
 

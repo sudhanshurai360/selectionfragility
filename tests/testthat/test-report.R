@@ -353,3 +353,27 @@ test_that("report() explains a resolved + Prop-2.2-certifies-non-significance pa
   expect_match(out, "certifies non-significance")
   expect_match(out, "not a contradiction")
 })
+
+test_that("PIVOT prints Date labels at the panel's own cadence (daily -> full date, monthly -> %Y-%m)", {
+  # REGRESSION: .fmt_label() always used "%Y-%m", so on a DAILY panel PIVOT named a pivotal day by
+  # its month only ("2024-03") -- and switched to full dates only when two pivotal days happened to
+  # share a month.
+  pivot_line <- function(p) {
+    lines <- strsplit(suppressWarnings(report(p)), "\n")[[1]]
+    lines[grepl("k[*]=", lines)]
+  }
+  set.seed(1); T <- 60
+  a <- rnorm(T, 1, .1); b <- a - 0.02; b[c(17, 40)] <- b[c(17, 40)] + 3
+  L <- list(a = a, b = b, c = rnorm(T, 1.5, .1))
+  daily <- as.Date("2024-03-01") + 0:(T - 1)
+  expect_match(pivot_line(loss_panel(L, labels = daily)), "k[*]=2 of 60 periods \\(2024-03-17, 2024-04-09\\)")
+  monthly <- seq(as.Date("2019-01-01"), by = "month", length.out = T)
+  expect_match(pivot_line(loss_panel(L, labels = monthly)), "\\(2020-05, 2022-04\\)")
+  hourly <- as.POSIXct("2024-03-01 00:00", tz = "UTC") + 3600 * (0:(T - 1))
+  expect_match(pivot_line(loss_panel(L, labels = hourly)), "\\(2024-03-01 16:00, 2024-03-02 15:00\\)")
+  # k* > 5 branch ("largest single contributor") uses the same cadence rule
+  set.seed(4); a2 <- rnorm(T, 1, .05); b2 <- a2 - 0.01; b2[seq(5, 55, by = 5)] <- b2[seq(5, 55, by = 5)] + 0.2
+  p_big <- loss_panel(list(a = a2, b = b2, c = rnorm(T, 1.9, .05)), labels = daily)
+  expect_gt(decision_breakdown(p_big)$k, 5)
+  expect_match(pivot_line(p_big), "largest single contributor: 2024-0[3-4]-[0-9]{2}\\)")
+})

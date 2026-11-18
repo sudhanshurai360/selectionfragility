@@ -38,29 +38,16 @@ test_that("resolution functions validate alpha/power ranges and minimum T", {
   expect_error(selection_regret(list(a = c(1, 2), b = c(2, 3))), "at least 3 periods")
 })
 
-test_that(".validate_one_sided() misattributes out-of-(0,1) `power` errors to 'alpha' (known limitation, documented, not fixed)", {
-  # Found by a 7th-round exhaustive-adversarial pass, 2026-11-18, boundary-value lens on `power`:
-  # `.validate_one_sided()` range-checks `power` by calling `.validate_alpha(power)` -- the SAME
-  # validator written for `alpha` -- whose error text hardcodes the literal word "alpha" in every
-  # branch. `power` values that fail at THAT stage (<= 0, >= 1, NA, non-numeric) therefore raise an
-  # "alpha must be ..." message naming the WRONG parameter; only a `power` strictly inside (0, 1)
-  # but <= 0.5 (e.g. 0.3) reaches the power-specific "power must be > 0.5" message tested above.
-  # CONFIRMED SHARED, oracle-pinned behavior: the Python original's `_validate_one_sided()`
-  # (resolution.py) does the identical `_validate_alpha(power)` reuse of the identical
-  # "alpha"-worded `_validate_alpha()` (identify.py) -- the same misattributed message reproduces
-  # in Python on `power=1`/`power=0` too. Left documented rather than fixed for the same
-  # cross-language-parity reason as this file's other known limitations (see the comment above
-  # `.validate_one_sided()`'s body in resolution.R); this test pins the misattribution itself as a
-  # known, reviewed limitation, not something to be silently "fixed" by a future edit without
-  # re-reviewing the cross-language consequence first.
-  expect_error(minimum_detectable_edge(noisy_L, power = 1.0), "alpha must be")
-  expect_error(minimum_detectable_edge(noisy_L, power = 0), "alpha must be")
-  expect_error(minimum_detectable_edge(noisy_L, power = 1.5), "alpha must be")
-  expect_error(minimum_detectable_edge(noisy_L, power = NA), "alpha must be")
-  # The *valid-alpha-range, below-0.5-power* case still gets the correctly-worded message (not
-  # affected by this limitation) -- confirms the misattribution is specific to the `.validate_alpha`
-  # reuse at the (0,1)/type-guard stage, not a blanket mislabeling of every power error.
+test_that("an invalid `power` raises an error naming `power`, never `alpha`", {
+  # REGRESSION: `.validate_one_sided()` used to range-check `power` with the alpha validator, whose
+  # message hardcoded "alpha" -- so power = 1/0/1.5/NA/"x" all blamed the wrong argument.
+  for (bad in list(1.0, 0, 1.5, NA, "x", c(0.8, 0.9))) {
+    expect_error(minimum_detectable_edge(noisy_L, power = bad), "^power must be")
+  }
+  expect_error(minimum_detectable_edge(noisy_L, power = 1.0), "target probability")
   expect_error(minimum_detectable_edge(noisy_L, power = 0.3), "power must be > 0.5")
+  # alpha's own message is unchanged
+  expect_error(minimum_detectable_edge(noisy_L, alpha = 1.5), "^alpha must be strictly between 0 and 1 \\(it is a significance level")
 })
 
 test_that("selection_regret() rejects passing both weights and w", {
@@ -241,4 +228,34 @@ test_that("resolution_report() warns on a 'resolved' verdict driven by weight/vo
   r5 <- resolution_report(L5, w5)
   expect_true(r5$resolved)  # confirms this control genuinely exercises the gated branch
   expect_no_warning(resolution_report(L5, w5))
+})
+
+test_that("resolution_report() rejects a bad mcs_alpha/mcs_seed instead of reporting it as 'undetermined'", {
+  # REGRESSION: the tryCatch around the internal identified() call used to swallow a caller's own
+  # typo into identified=NULL / fragility_read="undetermined" -- indistinguishable from a genuine,
+  # data-driven MCS refusal.
+  expect_error(resolution_report(noisy_L, mcs_alpha = 2), "^mcs_alpha must be")
+  expect_error(resolution_report(noisy_L, mcs_alpha = NA), "^mcs_alpha must be")
+  expect_error(resolution_report(noisy_L, mcs_seed = -5), "mcs_seed must be a single non-negative integer")
+  expect_error(resolution_report(noisy_L, mcs_seed = "a"), "mcs_seed must be a single non-negative integer")
+  # A genuine data-driven refusal (non-uniform weights) is still reported, not raised:
+  T <- length(noisy_L[[1]])
+  r <- suppressWarnings(resolution_report(noisy_L, w = c(5, rep(1, T - 1))))
+  expect_null(r$identified)
+  expect_identical(r$fragility_read, "undetermined")
+})
+
+test_that("report() rejects a bad alpha/seed up front instead of printing a degraded report", {
+  p <- loss_panel(noisy_L)
+  expect_error(report(p, alpha = 2), "^alpha must be")
+  expect_error(report(p, seed = -1), "report\\(\\): seed must be a single non-negative integer")
+})
+
+test_that("selection_regret() names the real cause when all weight is on one period", {
+  # REGRESSION: used to raise "weights are all zero" about the caller's own (non-zero) weights --
+  # the all-zero vector was an internal leave-one-out fold, not the argument.
+  L <- list(a = c(1.1, 2.3, 2.9, 4.2, 5.0), b = c(2.2, 1.1, 4.3, 3.1, 6.4))
+  expect_error(selection_regret(L, w = c(0, 0, 0, 1, 0)), "single period \\(position 4\\)")
+  expect_error(selection_regret(loss_panel(L, weights = c(0, 0, 0, 1, 0))), "single period")
+  expect_true(is.finite(selection_regret(L, w = c(0, 0, 1, 1, 0))))
 })

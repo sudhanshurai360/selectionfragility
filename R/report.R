@@ -2,23 +2,37 @@
 # returned value (it returns a single formatted character string, matching the Python original's
 # "\n".join(lines) return type -- call cat() on it, or just print it, for display).
 
+# Date/time labels print at the panel's own cadence: "%Y-%m" when every label falls on the same
+# day of the month at midnight (a monthly-or-coarser panel -- identical to the Python original's
+# fixed "%Y-%m"), otherwise the full date (plus time of day if any label has one). A fixed "%Y-%m"
+# on a DAILY panel used to print a pivotal day as just its month ("2024-03"), and only fell back
+# to full dates when two pivotal days happened to share a month.
 #' @keywords internal
-.fmt_label <- function(lbl) {
+.label_format <- function(labels) {
+  if (!(inherits(labels, "Date") || inherits(labels, "POSIXt"))) return(NULL)
+  has_time <- inherits(labels, "POSIXt") && any(format(labels, "%H:%M:%S") != "00:00:00")
+  if (has_time) return("%Y-%m-%d %H:%M")
+  if (length(unique(format(labels, "%d"))) <= 1) "%Y-%m" else "%Y-%m-%d"
+}
+
+#' @keywords internal
+.fmt_label <- function(lbl, fmt = "%Y-%m") {
   if (inherits(lbl, "Date") || inherits(lbl, "POSIXt")) {
-    tryCatch(format(lbl, "%Y-%m"), error = function(e) as.character(lbl))
+    tryCatch(format(lbl, fmt), error = function(e) as.character(lbl))
   } else {
     as.character(lbl)
   }
 }
 
 #' @keywords internal
-.disambiguate_labels <- function(labels_subset) {
-  base <- vapply(labels_subset, .fmt_label, character(1))
+.disambiguate_labels <- function(labels_subset, fmt = "%Y-%m") {
+  base <- vapply(labels_subset, .fmt_label, character(1), fmt = fmt)
   if (length(unique(base)) == length(base)) return(base)
+  finer_fmt <- if (inherits(labels_subset, "POSIXt")) "%Y-%m-%d %H:%M:%S" else "%Y-%m-%d"
   finer <- vapply(seq_along(labels_subset), function(i) {
     lbl <- labels_subset[[i]]
     if (inherits(lbl, "Date") || inherits(lbl, "POSIXt")) {
-      out <- tryCatch(format(lbl, "%Y-%m-%d"), error = function(e) NA_character_)
+      out <- tryCatch(format(lbl, finer_fmt), error = function(e) NA_character_)
       if (!is.na(out)) return(out)
     }
     base[i]
@@ -113,6 +127,11 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
   if (!inherits(panel, "loss_panel")) {
     stop(sprintf("report() expects a loss_panel, got %s. Build one first with loss_panel(...).", class(panel)[1]), call. = FALSE)
   }
+  # Validate up front: both internal MCS calls below are wrapped in tryCatch (so a data-driven
+  # refusal degrades to "VERDICT: not available"), which would otherwise turn a caller's typo into
+  # a half-filled report instead of an error.
+  .validate_alpha(alpha)
+  .validate_seed(seed, "report(): seed")
   L <- panel$losses
   w <- panel$weights
   labels <- panel$labels
@@ -219,12 +238,6 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
   # into the printed report.
   has_control_char <- .has_control_char(ordered)
   needs_escape <- ordered %in% collisions | has_control_char
-  # Quoted + escaped (not a bare sprintf("'%s'", ...)) so a model name that itself contains a
-  # quote character does not render as an ambiguous run of unescaped quotes once wrapped --
-  # verified directly: two colliding names "ar1's" / "ar1's " used to print as `'ar1's'` /
-  # `'ar1's '`, i.e. exactly the kind of indistinguishable-looking duplicate this disambiguation
-  # branch exists to prevent. encodeString(..., quote="'") backslash-escapes the quote/backslash
-  # the same way R's own quoting of strings does, so the wrapped name is always unambiguous.
   disp <- stats::setNames(
     ifelse(needs_escape, encodeString(ordered, quote = "'"), ordered),
     ordered
@@ -279,6 +292,7 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
   # also documented there, also not unified with either of these.
   db <- decision_breakdown(L, w, a = champ)
   k <- db$k; opp <- db$binding_opponent; removed <- db$removed
+  label_fmt <- .label_format(labels) %||% "%Y-%m"
   if (k == 0 || is.null(opp)) {
     lines <- c(lines, "  k*=0 -- no strict pooled winner (an exact or effective tie); nothing is pivotal")
   } else {
@@ -293,7 +307,7 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
       # real section header -- the exact failure mode the LEADERBOARD fix was written to close,
       # just through the other printed identifier this function has. Escaped through the same
       # .escape_control_chars() helper (factored out of that fix) rather than a second copy.
-      resp <- paste(.escape_control_chars(.disambiguate_labels(labels[sort(removed)])), collapse = ", ")
+      resp <- paste(.escape_control_chars(.disambiguate_labels(labels[sort(removed)], fmt = label_fmt)), collapse = ", ")
       period_txt <- sprintf("k*=%d of %d periods (%s)", k, T, resp)
     } else {
       la <- as.numeric(L[[champ]]); lb <- as.numeric(L[[opp]])
@@ -304,7 +318,7 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
       # arguably the worse variant of the two, since cat()'ing the report to a real terminal lets
       # the escape sequence change color/cursor position rather than just printing a fake prose
       # line -- confirmed directly with a label containing "\x1b[31m...\x1b[0m".
-      period_txt <- sprintf("k*=%d of %d periods (largest single contributor: %s)", k, T, .escape_control_chars(.fmt_label(labels[[top_i]])))
+      period_txt <- sprintf("k*=%d of %d periods (largest single contributor: %s)", k, T, .escape_control_chars(.fmt_label(labels[[top_i]], fmt = label_fmt)))
     }
     if (identical(res$fragility_read, "undetermined")) {
       reason <- if (!is.null(mcs_error)) {
@@ -327,6 +341,7 @@ report <- function(panel, alpha = 0.10, full = FALSE, seed = 0) {
       # rejects non-uniform weights upstream in .run_mcs_arch) -- so `!.weights_are_uniform(w)` below
       # is provably always FALSE here today. It is kept as a defensive, currently-inert guard in case
       # a future change relaxes that upstream validation; it does not currently execute.
+      cert <- NA
       cert_txt <- if (!.weights_are_uniform(w)) {
         "no constraint from Proposition 2.2 (panel has non-uniform weights)"
       } else {

@@ -16,7 +16,8 @@
 This is the native R port of the Python package
 [`selection-fragility`](https://github.com/sudhanshurai360/selection-fragility) (PyPI:
 `pip install selection-fragility`) — same method, same validated numerics, independently verified
-against it. See that repo for the accompanying paper and the full evaluation card.
+against it. See that repo for the full evaluation card (`EVALUATION_CARD.md`), which covers what
+the diagnostics do and where they should not be trusted.
 
 ## Install
 
@@ -170,7 +171,7 @@ Cite either implementation; they compute the same quantities.
 
 ## Relationship to existing CRAN packages
 
-`identified()`/`mcs_size()` can run on the CRAN [`MCS`](https://cran.r-project.org/package=MCS)
+`identified()`/`mcs_size()` run on the CRAN [`MCS`](https://cran.r-project.org/package=MCS)
 package's own `MCSprocedure()` engine, cross-checked against this package's independent native
 re-implementation (`mcs()`/`model_confidence_set()`) — MCS membership by itself is not new here,
 `MCS` already does that; what this package adds on top is the decision breakdown point (k*),

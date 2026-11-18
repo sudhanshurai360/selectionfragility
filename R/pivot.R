@@ -57,6 +57,7 @@
 #' simultaneously near-exactly-cancelling magnitude tiers regardless of which end of the range
 #' they sit at.
 #' @keywords internal
+#' @noRd
 .fsum <- function(x) {
   x <- sort(x)
   s <- 0.0
@@ -104,6 +105,7 @@
 #' opponent unchanged (always the alphabetically-first of the two), across 5 repeated calls and two
 #' different insertion orders.
 #' @keywords internal
+#' @noRd
 .champ_opp_contributions <- function(L, w) {
   champ <- pooled_winner(L, w)
   db <- decision_breakdown(L, w, a = champ, return_ties = TRUE)

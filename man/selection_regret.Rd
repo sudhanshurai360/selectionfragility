@@ -20,30 +20,9 @@ The weighted-average realised regret of the picking rule.
 Leave-one-period-out cost of the picking rule
 }
 \section{Limitation}{
- if a single period carries ALL of the panel's positive weight (every
-other period has weight exactly 0), this crashes with the message "weights are all zero; at
-least one period must carry positive weight" -- even though the WEIGHTS YOU PASSED ARE NOT
-ALL ZERO and pass this same package's own top-level weight validation fine (\code{loss_panel()},
-\code{pooled_winner()}, etc. all accept them without complaint). The message is misleading about
-whose weights are the problem: the leave-one-period-out loop below re-derives a fold weight
-vector (\code{wv[keep]}) for every held-out period \code{t}, and when \code{t} is the single period holding
-all the weight, that fold's weight vector is all-zero, and it is THAT internal, derived
-vector -- not your original \code{weights}/\code{w} argument -- that trips the all-zero check inside
-\code{pooled_winner()}'s own call to \code{.validate_losses()}. A caller debugging this error by
-re-checking their own weight vector will find nothing wrong with it, because nothing IS wrong
-with it. Confirmed reproducible: \code{selection_regret(list(a=c(1,2,3,4,5), b=c(2,1,4,3,6)), w=c(0,0,0,1,0))} raises this exact message, even via a \code{loss_panel()}-wrapped call (not just
-the raw-list entry point). CONFIRMED SHARED, oracle-pinned behavior: the identical repro
-against the installed Python original (\code{selection-fragility} 1.0.4) raises the identical
-\code{ValueError} with the identical message -- this is a pre-existing property of the shared
-leave-one-out design (re-deriving fold weights via plain subsetting with no degenerate-fold
-guard), not something introduced by the R port. Left undocumented-until-now rather than fixed;
-fixing it (e.g. skipping degenerate folds, or raising a clearer fold-specific message) in R
-alone would diverge from the Python oracle's current behavior on this exact input -- a
-genuine cross-language-parity call this package's review discipline leaves to a dedicated,
-deliberate pass on both sides rather than a unilateral one here. Avoid concentrating 100\% of
-a panel's weight on a single period if you intend to call \code{selection_regret()} on it; spread
-it across at least two periods, or pre-filter the zero-weight periods out of \code{L}/\code{w} entirely
-before calling.
+ needs positive weight on at least two periods -- a leave-one-period-out
+fold that holds out the only weighted period has nothing left to pick a champion from, so that
+case raises an error naming the period.
 }
 
 \examples{
